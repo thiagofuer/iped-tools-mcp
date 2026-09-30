@@ -1,0 +1,33 @@
+schema: spec-driven
+
+context: |
+  IPED Tools MCP is a standalone forensic AI assistant for Windows that bridges digital forensic cases
+  processed by IPED (Indexador e Processador de Evidências Digitais) to Large Language Models (LLMs)
+  via the Model Context Protocol (MCP).
+
+  Tech Stack:
+  - Java 21 (LTS)
+  - Quarkus 3.x (JVM Mode)
+  - quarkus-mcp-server-stdio (Quarkiverse MCP SDK)
+  - Java Swing (GUI configurator and diagnostic console)
+  - Apache Lucene 9.2 (direct in-process index reading)
+  - IPED Core Engine (IPEDSource, IPEDSearcher, BitmapBookmarks, CategoryManager)
+  - jpackage (Windows native distribution with bundled JRE 21 Liberica)
+
+  Core Constraints & Forensic Conventions:
+  - 100% offline and air-gapped capability (no internet required).
+  - Strict read-only access to evidence indexes and SQLite databases; only bookmarks may be modified.
+  - Standard I/O (STDIO) stream isolation: stdout is strictly reserved for JSON-RPC 2.0 frames; all logs go to stderr.
+  - State sharing: active case path is persisted in ~/.iped-tools-mcp/active_case.txt, enabling 1-time LLM configuration
+    and live bidirectional synchronization between GUI and chat.
+
+rules:
+  proposal:
+    - Keep proposals concise and grounded in forensic examination workflows.
+    - Always specify the forensic value and target IPED components.
+  specs:
+    - Use strict Gherkin-style scenarios (WHEN / THEN) for all requirements.
+    - Reference specific IPED API classes and Lucene fields where applicable.
+  tasks:
+    - Group tasks into clear phases (Service layer, MCP tools, GUI/Sync, Packaging & Validation).
+    - Always include automated validation against sample IPED cases.

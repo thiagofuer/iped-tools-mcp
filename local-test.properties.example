@@ -1,0 +1,16 @@
+# ==============================================================================
+# IPED Tools MCP - Configuração Local de Casos para Testes e Validação
+# ==============================================================================
+# Copie este arquivo para 'local-test.properties' no diretório raiz do projeto:
+#   cp local-test.properties.example local-test.properties
+# 
+# ATENÇÃO: 'local-test.properties' está incluído no .gitignore e NUNCA deve ser commitado.
+# Use barras normais (/) ou barras invertidas duplicadas (\\) nos caminhos.
+# ==============================================================================
+
+# 1. Caminho absoluto do caso IPED primário de teste (deve conter a subpasta iped/index)
+iped.test.case.path=C:/casos_forenses/caso_operacao_01
+
+# 2. Caminho absoluto de um segundo caso IPED para testes de troca a quente (open_case)
+# (Opcional - se omitido, os testes utilizarão o caso primário)
+iped.test.secondary_case.path=C:/casos_forenses/caso_operacao_02

@@ -1,0 +1,68 @@
+# ==============================================================================
+# IPED Tools MCP - .gitignore
+# ==============================================================================
+
+# Maven Build Artifacts
+/target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+release.properties
+dependency-reduced-pom.xml
+
+# Application Packaging & Distributable Binaries (MSI, Portable ZIP, App-Image)
+/dist/
+*.exe
+*.msi
+*.zip
+*.tar.gz
+
+# External Toolset Binaries (WiX Toolset auto-downloaded on demand)
+/tools/
+
+# IDE and Editor Metadata
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+*.code-workspace
+.settings/
+.project
+.classpath
+nbproject/private/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
+
+# Operating System Files
+Thumbs.db
+Desktop.ini
+.DS_Store
+ehthumbs.db
+
+# Temporary Files and Logs
+*.tmp
+*.log
+*.bak
+*.swp
+*~
+mcp_in.tmp
+
+# Local Forensic Case States & Evidence Data (Security & Privacy Safeguard)
+*.iped
+active_case.txt
+*.mv.db
+*.trace.db
+*.lock
+bookmarks.iped
+
+# Local Developer Test Case Configuration
+local-test.properties
+test-case.properties
+
+# AI Assistants, Agent Skills & Local Tooling (OpenSpec client-side artifacts)
+.agents/
+.claude/
+.gemini/
