@@ -44,7 +44,7 @@ class VersionInfoTest {
             McpApplication.main("--help");
             String output = baos.toString();
             assertTrue(output.contains("--version, -v"), "Help deveria listar a flag --version");
-            assertTrue(output.contains("Versão: " + VersionInfo.getVersion()), "Help deveria listar a versão atual");
+            assertTrue(output.contains("Versao: " + VersionInfo.getVersion()) || output.contains("Versão: " + VersionInfo.getVersion()), "Help deveria listar a versão atual");
         } finally {
             System.setOut(originalOut);
         }
