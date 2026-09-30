@@ -147,7 +147,8 @@ $msiArgs = @(
     "--win-menu",
     "--win-menu-group", "IPED Tools",
     "--win-shortcut",
-    "--win-upgrade-uuid", "7b6b29f0-32df-4ad0-b217-ef996f424c55"
+    "--win-upgrade-uuid", "7b6b29f0-32df-4ad0-b217-ef996f424c55",
+    "--win-console"
 ) + $jvmOptions
 
 & $jpackageExe @msiArgs

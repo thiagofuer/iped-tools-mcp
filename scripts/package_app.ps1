@@ -93,9 +93,13 @@ Copy-Item $runnerJar -Destination (Join-Path $inputDir $runnerJarName)
 # 3. Executar jpackage para criar o app-image (binário .exe nativo com runtime embutido)
 Write-Host "[2/4] Executando jpackage para criar o pacote nativo Windows..." -ForegroundColor Yellow
 $distDir = Join-Path $projectRoot "dist"
-if (Test-Path (Join-Path $distDir "IPED-Tools-MCP")) {
-    Remove-Item -Recurse -Force (Join-Path $distDir "IPED-Tools-MCP")
-}
+$targetAppDir = Join-Path $distDir "IPED-Tools-MCP"
+if (-not (Test-Path $distDir)) { New-Item -ItemType Directory -Path $distDir | Out-Null }
+if (-not (Test-Path $targetAppDir)) { New-Item -ItemType Directory -Path $targetAppDir | Out-Null }
+
+$buildDestDir = Join-Path $projectRoot "target\dist-build"
+if (Test-Path $buildDestDir) { Remove-Item -Recurse -Force $buildDestDir }
+New-Item -ItemType Directory -Path $buildDestDir | Out-Null
 
 $jvmOptions = @(
     "--java-options", "--add-opens=java.base/java.lang=ALL-UNNAMED",
@@ -120,7 +124,8 @@ $jpackageArgs = @(
     "--main-jar", $runnerJarName,
     "--main-class", "br.com.ipedtools.mcp.McpApplication",
     "--runtime-image", $runtimeDir,
-    "--dest", $distDir
+    "--dest", $buildDestDir,
+    "--win-console"
 ) + $jvmOptions
 
 & $jpackageExe @jpackageArgs
@@ -128,7 +133,10 @@ $jpackageArgs = @(
 if ($LASTEXITCODE -ne 0) {
     throw "Falha na execução do jpackage (código: $LASTEXITCODE)"
 }
-Write-Host "  -> Pacote criado em: $(Join-Path $distDir 'IPED-Tools-MCP')" -ForegroundColor Green
+
+$builtAppDir = Join-Path $buildDestDir "IPED-Tools-MCP"
+Copy-Item -Path "$builtAppDir\*" -Destination $targetAppDir -Recurse -Force
+Write-Host "  -> Pacote criado em: $targetAppDir" -ForegroundColor Green
 
 # 4. Copiar bundle de localização para dentro do pacote
 Write-Host "[3/4] Copiando bundles de localização..." -ForegroundColor Yellow

@@ -35,9 +35,11 @@ public class McpApplication {
             } else if ("--case".equalsIgnoreCase(arg) && i + 1 < args.length) {
                 casePath = args[++i];
             } else if ("--version".equalsIgnoreCase(arg) || "-v".equalsIgnoreCase(arg)) {
+                attachConsoleOnWindows();
                 printVersion();
                 return;
             } else if ("--help".equalsIgnoreCase(arg) || "-h".equalsIgnoreCase(arg)) {
+                attachConsoleOnWindows();
                 printHelp();
                 return;
             }
@@ -70,6 +72,7 @@ public class McpApplication {
 
         } else {
             // Mode B: Interactive Swing GUI for examiners
+            detachConsoleIfPresent();
             LOGGER.info("Iniciando IPED Tools MCP em modo Gráfico (GUI)...");
             EventQueue.invokeLater(() -> {
                 try {
@@ -113,27 +116,55 @@ public class McpApplication {
         }
     }
 
+    private static void attachConsoleOnWindows() {
+        if (System.getProperty("os.name", "").toLowerCase().contains("win")) {
+            try {
+                com.sun.jna.platform.win32.WinNT.HANDLE hStdOut =
+                        com.sun.jna.platform.win32.Kernel32.INSTANCE.GetStdHandle(-11); // STD_OUTPUT_HANDLE
+                int fileType = (hStdOut != null) ? com.sun.jna.platform.win32.Kernel32.INSTANCE.GetFileType(hStdOut) : 0;
+                // If stdout is not already redirected to a file (1) or pipe (3), attach to parent console
+                if (fileType != 1 && fileType != 3) {
+                    com.sun.jna.platform.win32.Kernel32.INSTANCE.AttachConsole(-1); // ATTACH_PARENT_PROCESS
+                    java.io.FileOutputStream conout = new java.io.FileOutputStream("CONOUT$");
+                    java.io.PrintStream out = new java.io.PrintStream(conout, true, java.nio.charset.StandardCharsets.UTF_8);
+                    System.setOut(out);
+                    System.setErr(out);
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private static void detachConsoleIfPresent() {
+        if (System.getProperty("os.name", "").toLowerCase().contains("win")) {
+            try {
+                com.sun.jna.platform.win32.Kernel32.INSTANCE.FreeConsole();
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
     private static void printVersion() {
         System.out.println(VersionInfo.getFullVersionString());
         System.out.println("Website: " + VersionInfo.OFFICIAL_WEBSITE);
-        System.out.println("Código-fonte: " + VersionInfo.GITHUB_REPO);
-        System.out.println("Licença: " + VersionInfo.LICENSE);
+        System.out.println("Codigo-fonte: " + VersionInfo.GITHUB_REPO);
+        System.out.println("Licenca: " + VersionInfo.LICENSE);
     }
 
     private static void printHelp() {
-        System.out.println(VersionInfo.APP_NAME + " — " + VersionInfo.APP_DESCRIPTION);
-        System.out.println("Versão: " + VersionInfo.getVersion());
+        System.out.println(VersionInfo.APP_NAME + " - " + VersionInfo.APP_DESCRIPTION);
+        System.out.println("Versao: " + VersionInfo.getVersion());
         System.out.println("Website: " + VersionInfo.OFFICIAL_WEBSITE);
         System.out.println();
         System.out.println("Uso:");
-        System.out.println("  IPED-Tools-MCP.exe                                (Abre a interface gráfica)");
+        System.out.println("  IPED-Tools-MCP.exe                                (Abre a interface grafica)");
         System.out.println("  IPED-Tools-MCP.exe --stdio --case <dir>           (Inicia como servidor MCP STDIO)");
         System.out.println();
-        System.out.println("Opções:");
+        System.out.println("Opcoes:");
         System.out.println("  --stdio              Executa como servidor MCP via STDIO (chamado pela LLM)");
-        System.out.println("  --case <diretório>   Caminho para a pasta do caso processado pelo IPED");
-        System.out.println("  --gui                Força a abertura da interface gráfica");
-        System.out.println("  --version, -v        Exibe a versão e informações de build");
+        System.out.println("  --case <diretorio>   Caminho para a pasta do caso processado pelo IPED");
+        System.out.println("  --gui                Forca a abertura da interface grafica");
+        System.out.println("  --version, -v        Exibe a versao e informacoes de build");
         System.out.println("  --help, -h           Exibe esta mensagem de ajuda");
     }
 }
