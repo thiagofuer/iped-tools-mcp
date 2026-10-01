@@ -124,8 +124,7 @@ $jpackageArgs = @(
     "--main-jar", $runnerJarName,
     "--main-class", "br.com.ipedtools.mcp.McpApplication",
     "--runtime-image", $runtimeDir,
-    "--dest", $buildDestDir,
-    "--win-console"
+    "--dest", $buildDestDir
 ) + $jvmOptions
 
 & $jpackageExe @jpackageArgs
@@ -164,8 +163,22 @@ foreach ($pkg in $distPackages) {
     $fileHash = (Get-FileHash -Path $pkg.FullName -Algorithm SHA256).Hash
     $hashLines += "$fileHash  $($pkg.Name)"
 }
-$hashLines | Out-File -FilePath $sha256Manifest -Encoding utf8 -Force
-Write-Host "  -> Manifesto SHA-256 gerado em: $sha256Manifest" -ForegroundColor Green
+# 7. Higienizar atributos e remover pasta intermediária para compatibilidade com 'mvn clean'
+Write-Host "  -> Higienizando atributos e limpando arquivos intermediários..." -ForegroundColor Yellow
+$finalExe = Join-Path $targetAppDir "IPED-Tools-MCP.exe"
+if (Test-Path $finalExe) {
+    (Get-Item $finalExe).IsReadOnly = $false
+}
+Get-ChildItem -Path $targetAppDir -Recurse -Force | ForEach-Object {
+    if ($_.IsReadOnly) { $_.IsReadOnly = $false }
+}
+if (Test-Path $buildDestDir) {
+    Get-ChildItem -Path $buildDestDir -Recurse -Force | ForEach-Object {
+        if ($_.IsReadOnly) { $_.IsReadOnly = $false }
+    }
+    Remove-Item -Recurse -Force $buildDestDir
+    Write-Host "  -> Pasta temporária $buildDestDir removida com sucesso." -ForegroundColor Green
+}
 
 Write-Host ""
 Write-Host "==========================================================" -ForegroundColor Green
