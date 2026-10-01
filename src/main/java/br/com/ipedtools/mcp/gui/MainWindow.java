@@ -137,7 +137,7 @@ public class MainWindow extends JFrame {
         configTopPanel.add(clientLabel, BorderLayout.WEST);
         configTopPanel.add(comboAndCheck, BorderLayout.CENTER);
 
-        JLabel configHintLabel = new JLabel("💡 Dica: Configure seu aplicativo de IA apenas 1 VEZ. O servidor sincroniza os casos automaticamente!");
+        JLabel configHintLabel = new JLabel("💡 Dica: Configure seu aplicativo de IA apenas 1 VEZ (--stdio). No chat, utilize o prompt '/start_case' para carregar a metodologia forense!");
         configHintLabel.setFont(new Font("SansSerif", Font.BOLD, 11));
         configHintLabel.setForeground(new Color(41, 128, 185));
         configHintLabel.setBorder(new EmptyBorder(2, 4, 2, 4));
@@ -453,6 +453,9 @@ public class MainWindow extends JFrame {
      3º argumento: %s
 
 * ATENÇÃO: Digite os caminhos com barra normal (ex: %s), NUNCA use barras duplas (\\\\) nos campos de texto do formulário!
+
+💡 DICA FORENSE:
+No chat com o modelo, chame o prompt '/start_case' para carregar automaticamente a metodologia forense, instruções de busca e regras de custódia!
 """.formatted(execPath, casePath, casePath);
             } else {
                 configSnippet = """
@@ -469,6 +472,9 @@ public class MainWindow extends JFrame {
 
 ✨ PRONTO! COM APENAS O ARGUMENTO '--stdio', VOCÊ NUNCA MAIS PRECISA RECONFIGURAR O LM STUDIO!
 O servidor MCP sincronizará automaticamente com o caso que você carregar nesta janela ou com qualquer caso que você pedir para a IA abrir no chat (ex: 'abra o caso D:\\meu_caso').
+
+💡 DICA FORENSE:
+No chat com o modelo, chame o prompt '/start_case' para carregar automaticamente a metodologia forense, instruções de busca e regras de custódia!
 """.formatted(execPath);
             }
         } else if (selectedClient.contains("ng-mcp.json")) {
