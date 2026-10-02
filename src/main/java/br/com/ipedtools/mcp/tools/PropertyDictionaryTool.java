@@ -58,7 +58,7 @@ public class PropertyDictionaryTool {
             """
     )
     public Map<String, Object> listAvailableProperties(
-            @ToolArg(name = "category", description = "Category name (e.g. 'chat messages', 'browsers/history', 'audios', or '' for all items)", required = false, defaultValue = "")
+            @ToolArg(name = "category", description = "Category name (e.g. 'chat messages', 'browsers/history', 'audios', or '' for all items)", required = false)
             String category
     ) {
         IpedCoreService service = IpedCoreService.getInstance();

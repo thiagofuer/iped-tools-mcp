@@ -149,11 +149,11 @@ public class IpedCoreService {
     /**
      * Opens and validates an IPED case folder.
      */
-    public synchronized void openCase(File caseDir) throws Exception {
+    public synchronized void openCase(File caseDir) {
         openCaseInternal(caseDir, true);
     }
 
-    private synchronized void openCaseInternal(File caseDir, boolean persistState) throws Exception {
+    private synchronized void openCaseInternal(File caseDir, boolean persistState) {
         if (caseDir == null || !caseDir.exists()) {
             throw new IllegalArgumentException("O diretório do caso não existe: " + caseDir);
         }
@@ -1381,7 +1381,7 @@ public class IpedCoreService {
                 }
                 totalFiles = Math.max(totalFiles, totalIndexed);
             }
-        } else if (targetFolderId != null) {
+        } else {
             // Specific target folder
             int tFolderId = targetFolderId;
             IPEDSearcher searcher = new IPEDSearcher(ipedSource, "parentIds:" + tFolderId);
@@ -1489,7 +1489,8 @@ public class IpedCoreService {
         List<Map<String, Object>> events = new ArrayList<>();
 
         if (ids != null && totalDocsFound > 0) {
-            int candidatePoolSize = Math.min(totalDocsFound, Math.max(maxLimit * 4, 300));
+            int maxPool = Math.max(maxLimit * 4, 300);
+            int candidatePoolSize = Math.min(totalDocsFound, maxPool);
             for (int i = 0; i < candidatePoolSize; i++) {
                 int id = ids[i];
                 int luceneId = ipedSource.getLuceneId(id);
@@ -2566,38 +2567,39 @@ public class IpedCoreService {
     }
 
     private static Object sanitizeValue(Object val) {
-        if (val == null) {
-            return null;
-        }
-        if (val instanceof String str) {
-            String trimmed = str.trim();
-            if (trimmed.isEmpty()) {
-                return null;
-            }
-            if (trimmed.length() > 500) {
-                return trimmed.substring(0, 500) + "... [truncated]";
-            }
-            return trimmed;
-        } else if (val instanceof List<?> list) {
-            if (list.isEmpty()) {
-                return null;
-            }
-            List<Object> cleanList = new ArrayList<>();
-            int count = 0;
-            for (Object item : list) {
-                if (count >= 10) {
-                    cleanList.add("... [" + (list.size() - 10) + " more items truncated]");
-                    break;
+        return switch (val) {
+            case null -> null;
+            case String str -> {
+                String trimmed = str.trim();
+                if (trimmed.isEmpty()) {
+                    yield null;
                 }
-                Object cleanItem = sanitizeValue(item);
-                if (cleanItem != null) {
-                    cleanList.add(cleanItem);
-                    count++;
+                if (trimmed.length() > 500) {
+                    yield trimmed.substring(0, 500) + "... [truncated]";
                 }
+                yield trimmed;
             }
-            return cleanList.isEmpty() ? null : cleanList;
-        }
-        return val;
+            case List<?> list -> {
+                if (list.isEmpty()) {
+                    yield null;
+                }
+                List<Object> cleanList = new ArrayList<>();
+                int count = 0;
+                for (Object item : list) {
+                    if (count >= 10) {
+                        cleanList.add("... [" + (list.size() - 10) + " more items truncated]");
+                        break;
+                    }
+                    Object cleanItem = sanitizeValue(item);
+                    if (cleanItem != null) {
+                        cleanList.add(cleanItem);
+                        count++;
+                    }
+                }
+                yield cleanList.isEmpty() ? null : cleanList;
+            }
+            default -> val;
+        };
     }
 
     private static Map<String, Object> propDef(String field, String type, String desc, String example, boolean escape) {

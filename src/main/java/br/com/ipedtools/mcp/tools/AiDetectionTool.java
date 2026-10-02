@@ -57,7 +57,7 @@ public class AiDetectionTool {
             """
     )
     public Map<String, Object> queryAiDetections(
-            @ToolArg(name = "filter_type", description = "AI detection filter: 'weapons', 'drugs', 'nudity', 'nsfw', 'faces', 'age_estimation', 'audio_transcripts', 'csam', 'crypto_wallets', 'ocr'", required = true)
+            @ToolArg(name = "filter_type", description = "AI detection filter: 'weapons', 'drugs', 'nudity', 'nsfw', 'faces', 'age_estimation', 'audio_transcripts', 'csam', 'crypto_wallets', 'ocr'")
             String filterType,
             @ToolArg(name = "min_score", description = "Optional minimum confidence score threshold (e.g. 0.7 for nudity/csam, or min count for faces/children)", required = false)
             Float minScore,

@@ -22,7 +22,7 @@ See `proposal.md` for motivation. Currently, `IpedCoreService.getDocumentMetadat
 ### 1. Dual-Mode Metadata Pipeline in `IpedCoreService`
 - **Method Signature**: Update `getDocumentMetadata` and `getDocumentMetadataBatch`:
   ```java
-  public Map<String, Object> getDocumentMetadata(int itemId, boolean raw, List<String> keys)
+  public Map<String, Object> getDocumentMetadata(int itemId, boolean raw, List<String> keys);
   ```
 - **Wildcard Key Matching**: A helper method matches document fields against the requested `keys` patterns using case-insensitive glob matching (converting `*` to `.*`).
 - **Processing Flow**:

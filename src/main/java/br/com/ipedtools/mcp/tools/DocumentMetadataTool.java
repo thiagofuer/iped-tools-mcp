@@ -36,14 +36,14 @@ public class DocumentMetadataTool {
             """
     )
     public List<Map<String, Object>> getDocumentMetadata(
-            @ToolArg(name = "doc_ids", description = "List of integer document IDs to retrieve (e.g. [101, 102, 105])", required = true)
+            @ToolArg(name = "doc_ids", description = "List of integer document IDs to retrieve (e.g. [101, 102, 105])")
             List<Integer> docIds,
             @ToolArg(name = "raw", description = "When true, returns un-truncated properties without 500-char or 10-item limits and without semantic grouping. Default is false.", required = false, defaultValue = "false")
             boolean raw,
             @ToolArg(name = "keys", description = "Optional list of property keys or wildcard patterns (e.g. ['Hardware-Wallet-*', 'ai:*', 'Communication:From']). If specified, only matching keys are returned.", required = false)
             List<String> keys,
             @SuppressWarnings("unused")
-            @ToolArg(name = "source_id", description = "Optional ID of the evidence source", required = false, defaultValue = "")
+            @ToolArg(name = "source_id", description = "Optional ID of the evidence source", required = false)
             String sourceId
     ) {
         IpedCoreService service = IpedCoreService.getInstance();

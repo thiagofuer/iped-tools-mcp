@@ -32,7 +32,7 @@ public class DeviceOwnerTool {
     )
     public Map<String, Object> getDeviceAndOwnerInfo(
             @SuppressWarnings("unused")
-            @ToolArg(name = "source_id", description = "Optional ID of the evidence source (from list_sources)", required = false, defaultValue = "")
+            @ToolArg(name = "source_id", description = "Optional ID of the evidence source (from list_sources)", required = false)
             String sourceId
     ) {
         IpedCoreService service = IpedCoreService.getInstance();
