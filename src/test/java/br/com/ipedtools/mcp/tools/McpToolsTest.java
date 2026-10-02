@@ -84,6 +84,9 @@ public class McpToolsTest {
         assertNotNull(owner);
         assertFalse(owner.containsKey("error"));
         assertTrue(owner.containsKey("likely_owner_names"));
+        assertTrue(owner.containsKey("evidence_type"));
+        assertTrue(owner.containsKey("system_info"));
+        assertTrue(owner.containsKey("user_profile_dirs"));
     }
 
     @Test

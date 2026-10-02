@@ -127,4 +127,16 @@ class ForensicPromptsTest {
         assertTrue(text.contains(target));
         assertTrue(text.contains(casePath));
     }
+
+    @Test
+    void testStartCaseLanguageMirroringDirective() {
+        PromptResponse response = prompts.startCase(null, null);
+        assertNotNull(response);
+
+        String text = ((TextContent) response.firstMessage().content()).text();
+        assertTrue(text.contains("LANGUAGE MIRRORING"), "Deve conter seção de espelhamento de idioma");
+        assertTrue(text.contains("Acompanhe ativamente o idioma do examinador"), "Deve instruir a espelhar o idioma do usuário");
+        assertTrue(text.contains("Português do Brasil"), "Deve referenciar Português do Brasil para usuários em português");
+        assertTrue(text.contains("Inglês"), "Deve permitir resposta em inglês quando o examinador falar em inglês");
+    }
 }

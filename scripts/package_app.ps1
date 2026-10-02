@@ -141,8 +141,8 @@ Write-Host "  -> Pacote criado em: $targetAppDir" -ForegroundColor Green
 Write-Host "[3/4] Copiando bundles de localização..." -ForegroundColor Yellow
 $locSource = Join-Path $projectRoot "localization"
 if (Test-Path $locSource) {
-    Copy-Item -Recurse $locSource (Join-Path $distDir "IPED-Tools-MCP\app\localization")
-    Copy-Item -Recurse $locSource (Join-Path $distDir "IPED-Tools-MCP\localization")
+    Copy-Item -Recurse -Force $locSource (Join-Path $distDir "IPED-Tools-MCP\app\localization")
+    Copy-Item -Recurse -Force $locSource (Join-Path $distDir "IPED-Tools-MCP\localization")
     Write-Host "  -> Bundles de localização copiados com sucesso." -ForegroundColor Green
 }
 

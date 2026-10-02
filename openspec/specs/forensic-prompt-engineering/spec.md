@@ -28,7 +28,7 @@ Forensic tools accepting free-form or filtered inputs SHALL provide concrete que
 - **THEN** the tool descriptions specify how Lucene special characters (such as slashes, colons, and quotes) must be escaped.
 
 ### Requirement: Standardized start_case MCP Prompt for Investigation Initialization
-The MCP server SHALL expose a standardized prompt named `start_case` via the MCP Prompts protocol (`prompts/list` and `prompts/get`), providing the LLM with an authoritative forensic investigator persona, orientation on IPED tool usage, step-by-step investigation methodology, and strict negative constraints prohibiting direct shell, command-line, or out-of-band filesystem access to the case directory.
+The MCP server SHALL expose a standardized prompt named `start_case` via the MCP Prompts protocol (`prompts/list` and `prompts/get`), providing the LLM with an authoritative forensic investigator persona, orientation on IPED tool usage, step-by-step investigation methodology, strict negative constraints prohibiting direct shell, command-line, or out-of-band filesystem access to the case directory, and an explicit language mirroring directive.
 
 #### Scenario: MCP client retrieves available prompts
 - **WHEN** a client sends a `prompts/list` request
@@ -41,3 +41,7 @@ The MCP server SHALL expose a standardized prompt named `start_case` via the MCP
 #### Scenario: MCP client requests the start_case prompt with a case path or target subject
 - **WHEN** a client sends a `prompts/get` request for `start_case` with optional arguments such as `case_path` or `investigation_target`
 - **THEN** the server incorporates the provided case path or target subject into the generated prompt instructions, directing the model to focus on the specified target while maintaining all forensic boundaries and negative constraints.
+
+#### Scenario: Dynamic language mirroring based on examiner interaction
+- **WHEN** `start_case` is invoked
+- **THEN** the prompt explicitly instructs the LLM to detect and mirror the examiner's language (responding in Brazilian Portuguese when addressed in Portuguese, in English when addressed in English, etc.), using the prompt instructions' language as the anchor for initial case status greetings when invoked without examiner text.

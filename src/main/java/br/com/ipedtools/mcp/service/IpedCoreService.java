@@ -231,6 +231,65 @@ public class IpedCoreService {
         return this.ipedSource;
     }
 
+    /**
+     * Lists active forensic evidence sources/containers. If the case contains multiple
+     * root evidence images (isRoot:true, e.g. Mantooth.E01, E01Capture.E01), lists each container.
+     */
+    public synchronized List<Map<String, Object>> listSources() {
+        checkCaseOpen();
+        List<Map<String, Object>> sourcesList = new ArrayList<>();
+        try {
+            IPEDSearcher rootSearcher = new IPEDSearcher(ipedSource, "isRoot:true");
+            rootSearcher.setTreeQuery(true);
+            int[] rootIds = rootSearcher.search().getIds();
+            if (rootIds != null && rootIds.length > 0) {
+                for (int rId : rootIds) {
+                    int luceneId = ipedSource.getLuceneId(rId);
+                    if (luceneId >= 0) {
+                        Document doc = ipedSource.getReader().document(luceneId);
+                        String rName = doc.get("name");
+                        if (rName != null && !rName.isBlank()) {
+                            Map<String, Object> item = new LinkedHashMap<>();
+                            item.put("id", getSourceId());
+                            item.put("name", rName);
+                            item.put("container", rName);
+                            item.put("path", doc.get("path") != null ? doc.get("path") : "/" + rName);
+                            sourcesList.add(item);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Erro ao listar raízes de evidência em listSources: {}", e.getMessage());
+        }
+
+        if (sourcesList.isEmpty()) {
+            sourcesList.add(Map.of(
+                    "id", getSourceId(),
+                    "name", getSourceId(),
+                    "path", getCaseDirectory().getAbsolutePath()
+            ));
+        }
+        return sourcesList;
+    }
+
+    private Map<String, Object> resolveContainerForDoc(Document doc, Map<String, Map<String, Object>> evidenceContainers) {
+        if (evidenceContainers == null || evidenceContainers.isEmpty() || doc == null) {
+            return null;
+        }
+        String path = doc.get("path");
+        if (path != null) {
+            String normPath = "/" + path.replace('\\', '/').replaceAll("^/+", "").toLowerCase();
+            for (Map.Entry<String, Map<String, Object>> entry : evidenceContainers.entrySet()) {
+                String cName = entry.getKey();
+                if (normPath.startsWith("/" + cName + "/") || normPath.equals("/" + cName)) {
+                    return entry.getValue();
+                }
+            }
+        }
+        return null;
+    }
+
     // =========================================================================
     // SEARCH OPERATIONS
     // =========================================================================
@@ -517,12 +576,59 @@ public class IpedCoreService {
         checkCaseOpen();
         try {
             Map<String, String> deviceProperties = new LinkedHashMap<>();
+            Map<String, String> systemInfo = new LinkedHashMap<>();
             Set<String> likelyOwnerNames = new LinkedHashSet<>();
             Set<String> ownerPhoneNumbers = new LinkedHashSet<>();
             Set<String> ownerEmails = new LinkedHashSet<>();
             List<Map<String, Object>> primaryAccounts = new ArrayList<>();
+            List<Map<String, Object>> userAccounts = new ArrayList<>();
+            Set<String> userProfileDirs = new LinkedHashSet<>();
 
-            // 1. Device Information
+            final Set<String> SYSTEM_ACCOUNTS = Set.of(
+                    "defaultaccount", "guest", "wdagutilityaccount", "systemprofile",
+                    "localservice", "networkservice", "nobody", "daemon"
+            );
+
+            final Set<String> IGNORED_PROFILE_DIRS = Set.of(
+                    "all users", "default", "default user", "public", "público",
+                    "todos os usuários", "defaultapppool", "localappdata",
+                    "application data", "appdata"
+            );
+
+            // 0. Discover evidence containers (root items in the evidence tree, e.g. Mantooth.E01, E01Capture.E01)
+            Map<String, Map<String, Object>> evidenceContainers = new LinkedHashMap<>();
+            try {
+                IPEDSearcher rootSearcher = new IPEDSearcher(ipedSource, "isRoot:true");
+                rootSearcher.setTreeQuery(true);
+                int[] rootIds = rootSearcher.search().getIds();
+                if (rootIds != null && rootIds.length > 0) {
+                    for (int rId : rootIds) {
+                        int luceneId = ipedSource.getLuceneId(rId);
+                        if (luceneId >= 0) {
+                            Document doc = ipedSource.getReader().document(luceneId);
+                            String rName = doc.get("name");
+                            if (rName != null && !rName.isBlank()) {
+                                Map<String, Object> container = new LinkedHashMap<>();
+                                container.put("id", rId);
+                                container.put("name", rName);
+                                container.put("path", doc.get("path") != null ? doc.get("path") : "/" + rName);
+                                container.put("system_info", new LinkedHashMap<String, String>());
+                                container.put("device_properties", new LinkedHashMap<String, String>());
+                                container.put("likely_owners", new LinkedHashSet<String>());
+                                container.put("owner_phone_numbers", new LinkedHashSet<String>());
+                                container.put("owner_emails", new LinkedHashSet<String>());
+                                container.put("user_accounts", new ArrayList<Map<String, Object>>());
+                                container.put("primary_accounts", new ArrayList<Map<String, Object>>());
+                                evidenceContainers.put(rName.toLowerCase(), container);
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                LOGGER.debug("Erro ao identificar raízes de evidência: {}", e.getMessage());
+            }
+
+            // 1. Mobile Device Information (UFED / Cellebrite)
             SearchResult devRes = new IPEDSearcher(ipedSource, "category:\"device information\"").search();
             int[] devIds = devRes.getIds();
             if (devIds != null && devIds.length > 0) {
@@ -534,12 +640,113 @@ public class IpedCoreService {
                     String entryValue = doc.get("ufed:EntryValue");
                     if (entryName != null && entryValue != null && !entryValue.isBlank()) {
                         deviceProperties.put(entryName, entryValue);
+                        Map<String, Object> matchedContainer = resolveContainerForDoc(doc, evidenceContainers);
+                        if (matchedContainer != null) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, String> cDevProps = (Map<String, String>) matchedContainer.get("device_properties");
+                            cDevProps.put(entryName, entryValue);
+                        }
                     }
                 }
             }
 
-            // 2. User Accounts
-            SearchResult accRes = new IPEDSearcher(ipedSource, "category:\"user accounts\"").search();
+            // 2. Computer & OS Identification (Windows / Linux / macOS)
+            SearchResult osRes = new IPEDSearcher(ipedSource,
+                    "registeredOwner:* OR computerName:* OR hostName:* OR productName:* OR (name:SOFTWARE AND path:*system32*)").search();
+            int[] osIds = osRes.getIds();
+            if (osIds != null && osIds.length > 0) {
+                int count = Math.min(osIds.length, 20);
+                for (int i = 0; i < count; i++) {
+                    int luceneId = ipedSource.getLuceneId(osIds[i]);
+                    Document doc = ipedSource.getReader().document(luceneId);
+                    Map<String, Object> matchedContainer = resolveContainerForDoc(doc, evidenceContainers);
+                    @SuppressWarnings("unchecked")
+                    Map<String, String> cSysInfo = matchedContainer != null ? (Map<String, String>) matchedContainer.get("system_info") : null;
+                    @SuppressWarnings("unchecked")
+                    Set<String> cLikelyOwners = matchedContainer != null ? (Set<String>) matchedContainer.get("likely_owners") : null;
+
+                    String compName = doc.get("computerName");
+                    if (compName == null || compName.isBlank()) compName = doc.get("hostName");
+                    if (compName == null || compName.isBlank()) compName = doc.get("system:computer_name");
+                    if (compName != null && !compName.isBlank() && !systemInfo.containsKey("computer_name")) {
+                        systemInfo.put("computer_name", compName.trim());
+                    }
+                    if (compName != null && !compName.isBlank() && cSysInfo != null && !cSysInfo.containsKey("computer_name")) {
+                        cSysInfo.put("computer_name", compName.trim());
+                    }
+
+                    String regOwner = doc.get("registeredOwner");
+                    if (regOwner != null && !regOwner.isBlank() && !systemInfo.containsKey("registered_owner")) {
+                        systemInfo.put("registered_owner", regOwner.trim());
+                        if (!regOwner.equalsIgnoreCase("Microsoft") && !regOwner.equalsIgnoreCase("Windows User")) {
+                            likelyOwnerNames.add(regOwner.trim());
+                        }
+                    }
+                    if (regOwner != null && !regOwner.isBlank() && cSysInfo != null && !cSysInfo.containsKey("registered_owner")) {
+                        cSysInfo.put("registered_owner", regOwner.trim());
+                        if (!regOwner.equalsIgnoreCase("Microsoft") && !regOwner.equalsIgnoreCase("Windows User") && cLikelyOwners != null) {
+                            cLikelyOwners.add(regOwner.trim());
+                        }
+                    }
+
+                    String regOrg = doc.get("registeredOrganization");
+                    if (regOrg != null && !regOrg.isBlank() && !systemInfo.containsKey("registered_organization")) {
+                        systemInfo.put("registered_organization", regOrg.trim());
+                    }
+                    if (regOrg != null && !regOrg.isBlank() && cSysInfo != null && !cSysInfo.containsKey("registered_organization")) {
+                        cSysInfo.put("registered_organization", regOrg.trim());
+                    }
+
+                    String prodName = doc.get("productName");
+                    if (prodName == null || prodName.isBlank()) prodName = doc.get("operatingSystem");
+                    if (prodName != null && !prodName.isBlank() && !systemInfo.containsKey("operating_system")) {
+                        systemInfo.put("operating_system", prodName.trim());
+                    }
+                    if (prodName != null && !prodName.isBlank() && cSysInfo != null && !cSysInfo.containsKey("operating_system")) {
+                        cSysInfo.put("operating_system", prodName.trim());
+                    }
+
+                    String installDate = doc.get("installDate");
+                    if (installDate == null || installDate.isBlank()) installDate = doc.get("installationDate");
+                    if (installDate != null && !installDate.isBlank() && !systemInfo.containsKey("install_date")) {
+                        systemInfo.put("install_date", installDate.trim());
+                    }
+                    if (installDate != null && !installDate.isBlank() && cSysInfo != null && !cSysInfo.containsKey("install_date")) {
+                        cSysInfo.put("install_date", installDate.trim());
+                    }
+                }
+            }
+
+            // 3. User Profile Directories (e.g. Users/john or home/john)
+            SearchResult profRes = new IPEDSearcher(ipedSource, "isDir:true AND (path:*Users* OR path:*home*)").search();
+            int[] profIds = profRes.getIds();
+            if (profIds != null && profIds.length > 0) {
+                int count = Math.min(profIds.length, 60);
+                for (int i = 0; i < count; i++) {
+                    int luceneId = ipedSource.getLuceneId(profIds[i]);
+                    Document doc = ipedSource.getReader().document(luceneId);
+                    String dirName = doc.get("name");
+                    String dirPath = doc.get("path");
+                    if (dirName != null && !dirName.isBlank() && dirPath != null) {
+                        String normPath = dirPath.replace('\\', '/').toLowerCase();
+                        if ((normPath.endsWith("/users/" + dirName.toLowerCase()) || normPath.endsWith("/home/" + dirName.toLowerCase()))
+                                && !IGNORED_PROFILE_DIRS.contains(dirName.toLowerCase())) {
+                            userProfileDirs.add(dirName);
+                            likelyOwnerNames.add(dirName);
+                            Map<String, Object> matchedContainer = resolveContainerForDoc(doc, evidenceContainers);
+                            if (matchedContainer != null) {
+                                @SuppressWarnings("unchecked")
+                                Set<String> cLikelyOwners = (Set<String>) matchedContainer.get("likely_owners");
+                                cLikelyOwners.add(dirName);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4. User Accounts & Messenger Configurations (SAM, passwd, Android/iOS preferences)
+            SearchResult accRes = new IPEDSearcher(ipedSource,
+                    "category:\"user accounts\" OR (name:*preferences.xml AND (name:*whatsapp* OR name:*telegram* OR name:*signal*))").search();
             int[] accIds = accRes.getIds();
             if (accIds != null && accIds.length > 0) {
                 int count = Math.min(accIds.length, 60);
@@ -547,53 +754,260 @@ public class IpedCoreService {
                     int docId = accIds[i];
                     int luceneId = ipedSource.getLuceneId(docId);
                     Document doc = ipedSource.getReader().document(luceneId);
+                    Map<String, Object> matchedContainer = resolveContainerForDoc(doc, evidenceContainers);
 
                     String name = doc.get("name") != null ? doc.get("name") : "";
                     String user = doc.get("userName") != null ? doc.get("userName") : "";
-                    String phone = doc.get("phoneNumber") != null ? doc.get("phoneNumber") : "";
                     String acctType = doc.get("accountType") != null ? doc.get("accountType") : "";
 
-                    if (!user.isBlank()) {
-                        likelyOwnerNames.add(user);
+                    // Extract phone number from standard fields or IPED Regex fields
+                    String phone = doc.get("phoneNumber");
+                    if (phone == null || phone.isBlank()) phone = doc.get("Regex:PHONE");
+                    if (phone == null || phone.isBlank()) phone = doc.get("phone");
+                    if (phone == null || phone.isBlank()) phone = doc.get("cellPhone");
+                    if (phone == null || phone.isBlank()) phone = doc.get("telephone");
+                    if (phone == null || phone.isBlank()) phone = doc.get("contact:phone");
+                    if (phone == null) phone = "";
+                    phone = phone.trim();
+
+                    // Check all document fields for any Regex:PHONE match if phone is still empty
+                    if (phone.isBlank()) {
+                        for (IndexableField f : doc.getFields()) {
+                            String fName = f.name();
+                            if (fName.equalsIgnoreCase("Regex:PHONE") || fName.toLowerCase().endsWith(":phone")) {
+                                String val = f.stringValue();
+                                if (val != null && !val.isBlank()) {
+                                    phone = val.trim();
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    // Extract email from standard fields or IPED Regex fields
+                    String email = doc.get("email");
+                    if (email == null || email.isBlank()) email = doc.get("Regex:EMAIL");
+                    if (email != null && !email.isBlank()) {
+                        String em = email.trim();
+                        ownerEmails.add(em);
+                        if (matchedContainer != null) {
+                            @SuppressWarnings("unchecked")
+                            Set<String> cEmails = (Set<String>) matchedContainer.get("owner_emails");
+                            cEmails.add(em);
+                        }
+                    }
+
+                    String effectiveUser = user;
+                    if (effectiveUser.isBlank() && name.startsWith("UserAccount-")) {
+                        int bracketIdx = name.indexOf('[');
+                        if (bracketIdx > 0) {
+                            effectiveUser = name.substring("UserAccount-".length(), bracketIdx).trim();
+                        } else {
+                            effectiveUser = name.substring("UserAccount-".length()).trim();
+                        }
+                    }
+
+                    if (!effectiveUser.isBlank() && !SYSTEM_ACCOUNTS.contains(effectiveUser.toLowerCase())) {
+                        likelyOwnerNames.add(effectiveUser);
+                        if (matchedContainer != null) {
+                            @SuppressWarnings("unchecked")
+                            Set<String> cLikelyOwners = (Set<String>) matchedContainer.get("likely_owners");
+                            cLikelyOwners.add(effectiveUser);
+                        }
                     }
                     if (!phone.isBlank()) {
                         ownerPhoneNumbers.add(phone);
+                        if (matchedContainer != null) {
+                            @SuppressWarnings("unchecked")
+                            Set<String> cPhones = (Set<String>) matchedContainer.get("owner_phone_numbers");
+                            cPhones.add(phone);
+                        }
                     }
 
                     Matcher emailMatcher = EMAIL_PATTERN.matcher(name);
                     while (emailMatcher.find()) {
-                        ownerEmails.add(emailMatcher.group());
+                        String em = emailMatcher.group();
+                        ownerEmails.add(em);
+                        if (matchedContainer != null) {
+                            @SuppressWarnings("unchecked")
+                            Set<String> cEmails = (Set<String>) matchedContainer.get("owner_emails");
+                            cEmails.add(em);
+                        }
                     }
 
                     Matcher phoneMatcher = PHONE_PATTERN.matcher(name);
                     while (phoneMatcher.find()) {
-                        ownerPhoneNumbers.add(phoneMatcher.group());
+                        String ph = phoneMatcher.group();
+                        ownerPhoneNumbers.add(ph);
+                        if (matchedContainer != null) {
+                            @SuppressWarnings("unchecked")
+                            Set<String> cPhones = (Set<String>) matchedContainer.get("owner_phone_numbers");
+                            cPhones.add(ph);
+                        }
                     }
 
-                    if (name.contains("UserAccount-") || name.contains("Account:") || name.contains("Telegram") || name.contains("WhatsApp")) {
-                        String app = acctType;
-                        if (app.isBlank() && name.contains("-")) {
+                    String lowerName = name.toLowerCase();
+                    String detectedApp = acctType != null ? acctType.trim() : "";
+                    if (detectedApp.isBlank()) {
+                        if (lowerName.contains("whatsapp")) {
+                            detectedApp = "WhatsApp";
+                        } else if (lowerName.contains("telegram")) {
+                            detectedApp = "Telegram";
+                        } else if (lowerName.contains("signal")) {
+                            detectedApp = "Signal";
+                        } else if (name.contains("[SAM]")) {
+                            detectedApp = "Windows SAM";
+                        } else if (name.contains("-")) {
                             String[] parts = name.split("-");
-                            app = parts.length > 1 ? parts[1].replace("[", "").replace("]", "").trim() : "App";
+                            detectedApp = parts.length > 1 ? parts[1].replace("[", "").replace("]", "").trim() : "App";
+                        } else {
+                            detectedApp = "General";
                         }
-                        primaryAccounts.add(Map.of(
-                                "id", docId,
-                                "app", app.isBlank() ? "General" : app,
-                                "name", name,
-                                "user", user,
-                                "phone", phone
-                        ));
+                    }
+
+                    Map<String, Object> acctItem = new LinkedHashMap<>();
+                    acctItem.put("id", docId);
+                    acctItem.put("app", detectedApp);
+                    acctItem.put("name", name);
+                    acctItem.put("user", effectiveUser.isBlank() ? user : effectiveUser);
+                    if (!phone.isBlank()) {
+                        acctItem.put("phone", phone);
+                    }
+                    userAccounts.add(acctItem);
+                    if (matchedContainer != null) {
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> cUserAccts = (List<Map<String, Object>>) matchedContainer.get("user_accounts");
+                        cUserAccts.add(acctItem);
+                    }
+
+                    boolean isPrimary = name.contains("UserAccount-") || name.contains("Account:")
+                            || lowerName.contains("whatsapp") || lowerName.contains("telegram") || lowerName.contains("signal")
+                            || lowerName.endsWith("preferences.xml") || !phone.isBlank();
+                    if (isPrimary) {
+                        primaryAccounts.add(acctItem);
+                        if (matchedContainer != null) {
+                            @SuppressWarnings("unchecked")
+                            List<Map<String, Object>> cPrimAccts = (List<Map<String, Object>>) matchedContainer.get("primary_accounts");
+                            cPrimAccts.add(acctItem);
+                        }
                     }
                 }
             }
 
+            // 5. Evidence Container Classification & Packaging
+            List<Map<String, Object>> evidencesList = new ArrayList<>();
+            for (Map<String, Object> c : evidenceContainers.values()) {
+                @SuppressWarnings("unchecked")
+                Map<String, String> cDevProps = (Map<String, String>) c.get("device_properties");
+                @SuppressWarnings("unchecked")
+                Map<String, String> cSysInfo = (Map<String, String>) c.get("system_info");
+                @SuppressWarnings("unchecked")
+                Set<String> cPhones = (Set<String>) c.get("owner_phone_numbers");
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> cPrimAccts = (List<Map<String, Object>>) c.get("primary_accounts");
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> cUserAccts = (List<Map<String, Object>>) c.get("user_accounts");
+
+                boolean cMobile = !cDevProps.isEmpty() || !cPhones.isEmpty() || cPrimAccts.stream().anyMatch(a -> {
+                    String app = String.valueOf(a.get("app")).toLowerCase();
+                    return app.contains("whatsapp") || app.contains("telegram") || app.contains("signal") || app.contains("ufed");
+                });
+                boolean cComputer = !cSysInfo.isEmpty() || cUserAccts.stream().anyMatch(a -> {
+                    String app = String.valueOf(a.get("app")).toLowerCase();
+                    String aName = String.valueOf(a.get("name")).toLowerCase();
+                    return app.contains("sam") || aName.contains("[sam]") || aName.contains("windows");
+                });
+
+                String cType;
+                if (cMobile && cComputer) cType = "hybrid";
+                else if (cMobile) cType = "mobile";
+                else if (cComputer) cType = "computer";
+                else cType = "generic";
+
+                Map<String, Object> packaged = new LinkedHashMap<>();
+                packaged.put("id", c.get("id"));
+                packaged.put("name", c.get("name"));
+                packaged.put("path", c.get("path"));
+                packaged.put("type", cType);
+                packaged.put("system_info", cSysInfo);
+                packaged.put("device_properties", cDevProps);
+                @SuppressWarnings("unchecked")
+                Set<String> cLikelyOwners = (Set<String>) c.get("likely_owners");
+                packaged.put("likely_owners", new ArrayList<>(cLikelyOwners));
+                packaged.put("owner_phone_numbers", new ArrayList<>(cPhones));
+                @SuppressWarnings("unchecked")
+                Set<String> cEmails = (Set<String>) c.get("owner_emails");
+                packaged.put("owner_emails", new ArrayList<>(cEmails));
+                packaged.put("total_accounts_found", cUserAccts.size());
+                packaged.put("user_accounts", cUserAccts.stream().limit(20).collect(Collectors.toList()));
+                packaged.put("primary_accounts", cPrimAccts.stream().limit(12).collect(Collectors.toList()));
+                evidencesList.add(packaged);
+            }
+
+            // 6. Overall Evidence Type Classification
+            boolean hasMobile = !deviceProperties.isEmpty() || !ownerPhoneNumbers.isEmpty() || primaryAccounts.stream().anyMatch(a -> {
+                String app = String.valueOf(a.get("app")).toLowerCase();
+                return app.contains("whatsapp") || app.contains("telegram") || app.contains("signal") || app.contains("ufed");
+            });
+            boolean hasComputer = !systemInfo.isEmpty() || !userProfileDirs.isEmpty() || userAccounts.stream().anyMatch(a -> {
+                String app = String.valueOf(a.get("app")).toLowerCase();
+                String name = String.valueOf(a.get("name")).toLowerCase();
+                return app.contains("sam") || name.contains("[sam]") || name.contains("windows");
+            });
+
+            String evidenceType;
+            if ((hasMobile && hasComputer) || evidencesList.size() > 1) {
+                boolean anyMobile = evidencesList.stream().anyMatch(e -> "mobile".equals(e.get("type")) || "hybrid".equals(e.get("type")));
+                boolean anyComputer = evidencesList.stream().anyMatch(e -> "computer".equals(e.get("type")) || "hybrid".equals(e.get("type")));
+                if (anyMobile && anyComputer) {
+                    evidenceType = "hybrid";
+                } else if (hasMobile && hasComputer) {
+                    evidenceType = "hybrid";
+                } else if (hasMobile) {
+                    evidenceType = "mobile";
+                } else if (hasComputer) {
+                    evidenceType = "computer";
+                } else {
+                    evidenceType = "generic";
+                }
+            } else if (hasMobile) {
+                evidenceType = "mobile";
+            } else if (hasComputer) {
+                evidenceType = "computer";
+            } else {
+                evidenceType = "generic";
+            }
+
+            if (evidencesList.isEmpty()) {
+                Map<String, Object> defaultContainer = new LinkedHashMap<>();
+                defaultContainer.put("id", 0);
+                defaultContainer.put("name", sourceId);
+                defaultContainer.put("path", caseDirectory != null ? caseDirectory.getAbsolutePath() : "");
+                defaultContainer.put("type", evidenceType);
+                defaultContainer.put("system_info", systemInfo);
+                defaultContainer.put("device_properties", deviceProperties);
+                defaultContainer.put("likely_owners", new ArrayList<>(likelyOwnerNames));
+                defaultContainer.put("owner_phone_numbers", new ArrayList<>(ownerPhoneNumbers));
+                defaultContainer.put("owner_emails", new ArrayList<>(ownerEmails));
+                defaultContainer.put("total_accounts_found", userAccounts.size());
+                defaultContainer.put("user_accounts", userAccounts.stream().limit(20).collect(Collectors.toList()));
+                defaultContainer.put("primary_accounts", primaryAccounts.stream().limit(12).collect(Collectors.toList()));
+                evidencesList.add(defaultContainer);
+            }
+
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("source", sourceId);
+            result.put("evidence_type", evidenceType);
+            result.put("total_evidences", evidencesList.size());
+            result.put("evidences", evidencesList);
+            result.put("system_info", systemInfo);
             result.put("likely_owner_names", new ArrayList<>(likelyOwnerNames));
+            result.put("user_profile_dirs", new ArrayList<>(userProfileDirs));
             result.put("owner_phone_numbers", new ArrayList<>(ownerPhoneNumbers));
             result.put("owner_emails", new ArrayList<>(ownerEmails));
             result.put("device_properties", deviceProperties);
-            result.put("total_accounts_found", primaryAccounts.size());
+            result.put("total_accounts_found", userAccounts.size());
+            result.put("user_accounts", userAccounts.stream().limit(20).collect(Collectors.toList()));
             result.put("primary_accounts", primaryAccounts.stream().limit(12).collect(Collectors.toList()));
 
             return result;
@@ -603,6 +1017,7 @@ public class IpedCoreService {
             return Map.of("error", "Falha ao obter dados do proprietário do dispositivo: " + e.getMessage());
         }
     }
+
 
     /**
      * Returns an executive case summary.

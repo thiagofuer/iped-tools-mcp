@@ -50,11 +50,9 @@ public class ServerStatusTool {
         if (isOpen) {
             response.put("case_source_id", service.getSourceId());
             response.put("case_path", service.getCaseDirectory().getAbsolutePath());
-            response.put("sources_count", 1);
-            response.put("sources", List.of(Map.of(
-                    "id", service.getSourceId(),
-                    "path", service.getCaseDirectory().getAbsolutePath()
-            )));
+            List<Map<String, Object>> sourcesList = service.listSources();
+            response.put("sources_count", sourcesList.size());
+            response.put("sources", sourcesList);
         } else {
             response.put("sources_count", 0);
             response.put("sources", List.of());

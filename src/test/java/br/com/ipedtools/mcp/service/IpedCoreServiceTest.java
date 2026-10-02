@@ -291,6 +291,36 @@ public class IpedCoreServiceTest {
         assertFalse(ownerInfo.containsKey("error"), "Não deveria retornar erro");
         assertTrue(ownerInfo.containsKey("device_properties"));
         assertTrue(ownerInfo.containsKey("likely_owner_names"));
+        assertTrue(ownerInfo.containsKey("evidence_type"), "Deveria conter evidence_type");
+        assertTrue(ownerInfo.containsKey("system_info"), "Deveria conter system_info");
+        assertTrue(ownerInfo.containsKey("user_profile_dirs"), "Deveria conter user_profile_dirs");
+        assertTrue(ownerInfo.containsKey("user_accounts"), "Deveria conter user_accounts");
+        assertTrue(ownerInfo.containsKey("evidences"), "Deveria conter array de evidences");
+        assertTrue(ownerInfo.containsKey("total_evidences"), "Deveria conter contagem total_evidences");
+        assertNotNull(ownerInfo.get("evidence_type"));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> evidences = (List<Map<String, Object>>) ownerInfo.get("evidences");
+        assertNotNull(evidences);
+        assertFalse(evidences.isEmpty(), "Deveria retornar ao menos 1 container de evidência");
+        for (Map<String, Object> ev : evidences) {
+            assertTrue(ev.containsKey("name"), "Evidência deve ter name");
+            assertTrue(ev.containsKey("type"), "Evidência deve ter type");
+            assertTrue(ev.containsKey("likely_owners"), "Evidência deve ter likely_owners");
+        }
+    }
+
+    @Test
+    @EnabledIf("isCaseAvailable")
+    void testListSourcesMultiEvidence() {
+        IpedCoreService service = IpedCoreService.getInstance();
+        List<Map<String, Object>> sources = service.listSources();
+        assertNotNull(sources);
+        assertFalse(sources.isEmpty(), "listSources não deve retornar lista vazia quando caso aberto");
+        for (Map<String, Object> src : sources) {
+            assertTrue(src.containsKey("id"), "Fonte deve conter id");
+            assertTrue(src.containsKey("path"), "Fonte deve conter path");
+        }
     }
 
     @Test

@@ -29,9 +29,6 @@ public class SourcesTool {
         if (!service.isCaseOpen()) {
             return List.of(Map.of("error", "Nenhum caso do IPED aberto no momento."));
         }
-        return List.of(Map.of(
-                "id", service.getSourceId(),
-                "path", service.getCaseDirectory().getAbsolutePath()
-        ));
+        return service.listSources();
     }
 }
