@@ -42,6 +42,7 @@ public class DocumentMetadataTool {
             boolean raw,
             @ToolArg(name = "keys", description = "Optional list of property keys or wildcard patterns (e.g. ['Hardware-Wallet-*', 'ai:*', 'Communication:From']). If specified, only matching keys are returned.", required = false)
             List<String> keys,
+            @SuppressWarnings("unused")
             @ToolArg(name = "source_id", description = "Optional ID of the evidence source", required = false, defaultValue = "")
             String sourceId
     ) {

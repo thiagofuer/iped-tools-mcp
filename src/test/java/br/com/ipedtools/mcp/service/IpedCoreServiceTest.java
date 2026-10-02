@@ -1,12 +1,8 @@
 package br.com.ipedtools.mcp.service;
 
 import java.io.File;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import org.apache.lucene.document.Document;
-import iped.engine.search.IPEDSearcher;
-import iped.search.SearchResult;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -186,7 +182,7 @@ public class IpedCoreServiceTest {
         List<Map<String, Object>> batch = service.getDocumentMetadataBatch(List.of(1), true, List.of("name"));
         assertNotNull(batch);
         assertEquals(1, batch.size());
-        assertEquals(Boolean.TRUE, batch.get(0).get("raw"));
+        assertEquals(Boolean.TRUE, batch.getFirst().get("raw"));
     }
 
     @Test
@@ -434,7 +430,7 @@ public class IpedCoreServiceTest {
         List<Map<String, Object>> contacts = (List<Map<String, Object>>) top.get("contacts");
         assertNotNull(contacts);
         if (!contacts.isEmpty()) {
-            Map<String, Object> first = contacts.get(0);
+            Map<String, Object> first = contacts.getFirst();
             assertEquals(1, first.get("rank"));
             assertNotNull(first.get("identifier"));
             assertNotNull(first.get("name"));
@@ -466,7 +462,7 @@ public class IpedCoreServiceTest {
         assertNotNull(edges);
 
         if (!edges.isEmpty()) {
-            Map<String, Object> firstEdge = edges.get(0);
+            Map<String, Object> firstEdge = edges.getFirst();
             assertNotNull(firstEdge.get("source"));
             assertNotNull(firstEdge.get("target"));
             assertTrue((int) firstEdge.get("weight") >= 1);
@@ -558,5 +554,33 @@ public class IpedCoreServiceTest {
         assertTrue(queryRes.containsKey("total_found"));
         assertTrue(queryRes.containsKey("items"));
     }
+
+    @Test
+    @EnabledIf("isCaseAvailable")
+    void testListFolderContentsNonExistentNumericId() throws Exception {
+        IpedCoreService service = IpedCoreService.getInstance();
+        Map<String, Object> result = service.listFolderContents("999999999", false, 10);
+        assertNotNull(result);
+        assertTrue(result.containsKey("error"), "Deveria retornar erro para ID numérico inexistente");
+        assertEquals("999999999", result.get("folder_path"));
+        assertEquals(0, result.get("total_subdirectories"));
+        assertEquals(0, result.get("total_files"));
+    }
+
+    @Test
+    void testContactIdentityMatchesFocalNullSafety() {
+        IpedCoreService.ContactIdentity unnamed = new IpedCoreService.ContactIdentity("raw", "+5511999998888", null, false);
+        assertTrue(IpedCoreService.ContactIdentity.matchesFocal(unnamed, "999998888"), "Deveria encontrar por id numérico quando nome for nulo");
+        assertFalse(IpedCoreService.ContactIdentity.matchesFocal(unnamed, "silva"), "Não deveria lançar NullPointerException com nome nulo");
+
+        IpedCoreService.ContactIdentity named = new IpedCoreService.ContactIdentity("raw", "+5511999998888", "Carlos Silva", false);
+        assertTrue(IpedCoreService.ContactIdentity.matchesFocal(named, "silva"), "Deveria encontrar por nome");
+        assertTrue(IpedCoreService.ContactIdentity.matchesFocal(named, "999998888"), "Deveria encontrar por id");
+        assertFalse(IpedCoreService.ContactIdentity.matchesFocal(named, "souza"), "Não deveria encontrar contato inexistente");
+
+        assertFalse(IpedCoreService.ContactIdentity.matchesFocal(null, "silva"));
+        assertFalse(IpedCoreService.ContactIdentity.matchesFocal(named, null));
+    }
 }
+
 

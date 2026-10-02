@@ -73,7 +73,7 @@ public class McpToolsTest {
         List<Map<String, Object>> sources = tool.listSources();
         assertNotNull(sources);
         assertEquals(1, sources.size());
-        assertEquals(IpedCoreService.getInstance().getSourceId(), sources.get(0).get("id"));
+        assertEquals(IpedCoreService.getInstance().getSourceId(), sources.getFirst().get("id"));
     }
 
     @Test
@@ -108,15 +108,15 @@ public class McpToolsTest {
         List<Map<String, Object>> meta = tool.getDocumentMetadata(List.of(1, 2), false, null, "");
         assertNotNull(meta);
         assertEquals(2, meta.size());
-        assertFalse(meta.get(0).containsKey("raw"));
+        assertFalse(meta.getFirst().containsKey("raw"));
 
         // 2. Raw mode with key filtering
         List<Map<String, Object>> rawMeta = tool.getDocumentMetadata(List.of(1), true, List.of("name"), "");
         assertNotNull(rawMeta);
         assertEquals(1, rawMeta.size());
-        assertEquals(Boolean.TRUE, rawMeta.get(0).get("raw"));
+        assertEquals(Boolean.TRUE, rawMeta.getFirst().get("raw"));
         @SuppressWarnings("unchecked")
-        Map<String, Object> props = (Map<String, Object>) rawMeta.get(0).get("properties");
+        Map<String, Object> props = (Map<String, Object>) rawMeta.getFirst().get("properties");
         assertNotNull(props);
         assertTrue(props.containsKey("name"));
     }
@@ -283,9 +283,9 @@ public class McpToolsTest {
         List<Content> contents = tool.getItemThumbnail(25830, 256);
         assertNotNull(contents);
         assertEquals(2, contents.size());
-        assertTrue(contents.get(0) instanceof TextContent);
-        assertTrue(contents.get(1) instanceof ImageContent);
-        TextContent text = (TextContent) contents.get(0);
+        assertInstanceOf(TextContent.class, contents.getFirst());
+        assertInstanceOf(ImageContent.class, contents.get(1));
+        TextContent text = (TextContent) contents.getFirst();
         ImageContent image = (ImageContent) contents.get(1);
         assertTrue(text.text().contains("25830"));
         assertEquals("image/jpeg", image.mimeType());

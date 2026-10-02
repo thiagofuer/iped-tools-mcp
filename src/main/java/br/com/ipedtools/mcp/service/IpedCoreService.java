@@ -87,7 +87,7 @@ public class IpedCoreService {
 
     private static final Map<String, List<Map<String, Object>>> FORENSIC_DOMAINS = initForensicDomains();
 
-    private static final Pattern EMAIL_PATTERN = Pattern.compile("[\\w\\.-]+@[\\w\\.-]+\\.\\w+");
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("[\\w.-]+@[\\w.-]+\\.\\w+");
     private static final Pattern PHONE_PATTERN = Pattern.compile("\\+?\\d{10,13}");
 
     public static final File ACTIVE_CASE_FILE = new File(
@@ -184,8 +184,8 @@ public class IpedCoreService {
 
         if (persistState) {
             try {
-                if (!ACTIVE_CASE_FILE.getParentFile().exists()) {
-                    ACTIVE_CASE_FILE.getParentFile().mkdirs();
+                if (ACTIVE_CASE_FILE.getParentFile() != null) {
+                    java.nio.file.Files.createDirectories(ACTIVE_CASE_FILE.getParentFile().toPath());
                 }
                 java.nio.file.Files.writeString(ACTIVE_CASE_FILE.toPath(), caseDir.getAbsolutePath(), java.nio.charset.StandardCharsets.UTF_8);
                 lastActiveCaseFileModTime = ACTIVE_CASE_FILE.lastModified();
@@ -243,7 +243,7 @@ public class IpedCoreService {
             IPEDSearcher rootSearcher = new IPEDSearcher(ipedSource, "isRoot:true");
             rootSearcher.setTreeQuery(true);
             int[] rootIds = rootSearcher.search().getIds();
-            if (rootIds != null && rootIds.length > 0) {
+            if (rootIds != null) {
                 for (int rId : rootIds) {
                     int luceneId = ipedSource.getLuceneId(rId);
                     if (luceneId >= 0) {
@@ -301,7 +301,7 @@ public class IpedCoreService {
     public Map<String, Object> executeSearch(String queryText, int limit) throws IOException {
         checkCaseOpen();
 
-        int maxLimit = Math.max(1, Math.min(limit, 100));
+        int maxLimit = Math.clamp(limit, 1, 100);
         String sanitizedQuery = (queryText == null || queryText.isBlank()) ? "*:*" : queryText.replaceAll("/", "\\\\/");
 
         IPEDSearcher searcher = new IPEDSearcher(ipedSource, sanitizedQuery);
@@ -474,7 +474,7 @@ public class IpedCoreService {
         checkCaseOpen();
 
         int safeOffset = Math.max(0, offset);
-        int safeMaxChars = Math.max(100, Math.min(maxChars, 6000));
+        int safeMaxChars = Math.clamp(maxChars, 100, 6000);
 
         try {
             IItem item = ipedSource.getItemByID(itemId);
@@ -645,7 +645,7 @@ public class IpedCoreService {
                 IPEDSearcher rootSearcher = new IPEDSearcher(ipedSource, "isRoot:true");
                 rootSearcher.setTreeQuery(true);
                 int[] rootIds = rootSearcher.search().getIds();
-                if (rootIds != null && rootIds.length > 0) {
+                if (rootIds != null) {
                     for (int rId : rootIds) {
                         int luceneId = ipedSource.getLuceneId(rId);
                         if (luceneId >= 0) {
@@ -1148,7 +1148,7 @@ public class IpedCoreService {
             IPEDSearcher childSearcher = new IPEDSearcher(ipedSource, "parentIds:" + itemId);
             SearchResult childRes = childSearcher.search();
             int[] childIds = childRes.getIds();
-            if (childIds != null && childIds.length > 0) {
+            if (childIds != null) {
                 for (int cId : childIds) {
                     if (cId == itemId) {
                         continue;
@@ -1185,7 +1185,7 @@ public class IpedCoreService {
                 IPEDSearcher dupSearcher = new IPEDSearcher(ipedSource, "hash:\"" + hash + "\"");
                 SearchResult dupRes = dupSearcher.search();
                 int[] dupIds = dupRes.getIds();
-                if (dupIds != null && dupIds.length > 0) {
+                if (dupIds != null) {
                     for (int dId : dupIds) {
                         if (dId == itemId) {
                             continue;
@@ -1240,7 +1240,7 @@ public class IpedCoreService {
     public Map<String, Object> listFolderContents(String folderPath, boolean recursive, int limit) throws IOException {
         checkCaseOpen();
 
-        int maxLimit = Math.max(1, Math.min(limit > 0 ? limit : 100, 1000));
+        int maxLimit = Math.clamp(limit > 0 ? limit : 100, 1, 1000);
         String rawPath = folderPath != null ? folderPath.trim() : "";
         boolean isRoot = rawPath.isEmpty() || rawPath.equals("/") || rawPath.equals(".") || rawPath.equalsIgnoreCase("root");
 
@@ -1254,7 +1254,7 @@ public class IpedCoreService {
                 isRoot = true;
             } else if (cleanPath.matches("\\d+")) {
                 int candId = Integer.parseInt(cleanPath);
-                int candLuceneId = ipedSource.getLuceneId(candId);
+                int candLuceneId = safeGetLuceneId(candId);
                 if (candLuceneId >= 0) {
                     targetFolderId = candId;
                     Document candDoc = ipedSource.getReader().document(candLuceneId);
@@ -1276,7 +1276,7 @@ public class IpedCoreService {
                     candIds = searcher.search().getIds();
                 }
 
-                if (candIds != null && candIds.length > 0) {
+                if (candIds != null) {
                     for (int cId : candIds) {
                         String itemPath = ipedSource.getItemProperty(cId, "path");
                         if (itemPath != null) {
@@ -1296,20 +1296,20 @@ public class IpedCoreService {
                         }
                     }
                 }
+            }
 
-                if (targetFolderId == null) {
-                    Map<String, Object> errResult = new LinkedHashMap<>();
-                    errResult.put("folder_path", folderPath);
-                    errResult.put("error", "Diretório não encontrado na árvore de evidências: " + folderPath);
-                    errResult.put("recursive", recursive);
-                    errResult.put("total_subdirectories", 0);
-                    errResult.put("total_files", 0);
-                    errResult.put("returned_subdirectories_count", 0);
-                    errResult.put("returned_files_count", 0);
-                    errResult.put("subdirectories", List.of());
-                    errResult.put("files", List.of());
-                    return errResult;
-                }
+            if (!isRoot && targetFolderId == null) {
+                Map<String, Object> errResult = new LinkedHashMap<>();
+                errResult.put("folder_path", folderPath);
+                errResult.put("error", "Diretório não encontrado na árvore de evidências: " + folderPath);
+                errResult.put("recursive", recursive);
+                errResult.put("total_subdirectories", 0);
+                errResult.put("total_files", 0);
+                errResult.put("returned_subdirectories_count", 0);
+                errResult.put("returned_files_count", 0);
+                errResult.put("subdirectories", List.of());
+                errResult.put("files", List.of());
+                return errResult;
             }
         }
 
@@ -1381,7 +1381,7 @@ public class IpedCoreService {
                 }
                 totalFiles = Math.max(totalFiles, totalIndexed);
             }
-        } else {
+        } else if (targetFolderId != null) {
             // Specific target folder
             int tFolderId = targetFolderId;
             IPEDSearcher searcher = new IPEDSearcher(ipedSource, "parentIds:" + tFolderId);
@@ -1389,7 +1389,7 @@ public class IpedCoreService {
             SearchResult result = searcher.search();
             int[] allDescendantIds = result.getIds();
 
-            if (allDescendantIds != null && allDescendantIds.length > 0) {
+            if (allDescendantIds != null) {
                 for (int cId : allDescendantIds) {
                     if (cId == tFolderId) continue;
 
@@ -1469,7 +1469,7 @@ public class IpedCoreService {
     public Map<String, Object> getTimeline(String start, String end, String category, int limit) throws IOException {
         checkCaseOpen();
 
-        int maxLimit = Math.max(1, Math.min(limit <= 0 ? 50 : limit, 200));
+        int maxLimit = Math.clamp(limit <= 0 ? 50 : limit, 1, 200);
         String startNorm = normalizeIsoDate(start, false);
         String endNorm = normalizeIsoDate(end, true);
 
@@ -1499,7 +1499,7 @@ public class IpedCoreService {
                 String docCat = doc.get("category") != null ? doc.get("category") : "";
                 String docName = doc.get("name") != null ? doc.get("name") : "";
                 String docPath = doc.get("path") != null ? doc.get("path") : "";
-                String summary = extractEventSummary(doc, docCat);
+                String summary = extractEventSummary(doc);
 
                 String[] timeStamps = doc.getValues("timeStamp");
                 String[] timeEvents = doc.getValues("timeEvent");
@@ -1688,7 +1688,7 @@ public class IpedCoreService {
                 : "EVENT";
     }
 
-    private String extractEventSummary(Document doc, String category) {
+    private String extractEventSummary(Document doc) {
         String from = doc.get("from");
         String to = doc.get("to");
         String subject = doc.get("subject");
@@ -1725,11 +1725,22 @@ public class IpedCoreService {
         }
     }
 
+    private int safeGetLuceneId(int id) {
+        if (ipedSource == null || id < 0) {
+            return -1;
+        }
+        try {
+            return ipedSource.getLuceneId(id);
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
     // =========================================================================
     // COMMUNICATIONS GRAPH & CONTACT ANALYTICS
     // =========================================================================
 
-    private static class ContactIdentity {
+    static class ContactIdentity {
         final String raw;
         final String id;
         final String name;
@@ -1741,6 +1752,13 @@ public class IpedCoreService {
             this.name = name;
             this.isGroup = isGroup;
         }
+
+    static boolean matchesFocal(ContactIdentity ci, String focalClean) {
+        if (ci == null || focalClean == null) return false;
+        boolean idMatches = ci.id != null && ci.id.toLowerCase().contains(focalClean);
+        boolean nameMatches = ci.name != null && ci.name.toLowerCase().contains(focalClean);
+        return idMatches || nameMatches;
+    }
 
         @Override
         public boolean equals(Object o) {
@@ -1843,7 +1861,7 @@ public class IpedCoreService {
 
         // Phone digits check
         String digitsOnly = clean.replaceAll("[^0-9]", "");
-        if (digitsOnly.length() >= 7 && (clean.startsWith("+") || clean.matches("^[0-9\\+\\-\\(\\)\\s]+$"))) {
+        if (digitsOnly.length() >= 7 && (clean.startsWith("+") || clean.matches("^[0-9+\\-()\\s]+$"))) {
             String phoneId = clean.startsWith("+") ? ("+" + digitsOnly) : digitsOnly;
             String name = (convName != null && !convName.isBlank()) ? convName.trim() : (contactBook != null ? contactBook.getOrDefault(phoneId, phoneId) : phoneId);
             return new ContactIdentity(clean, phoneId, name, false);
@@ -1944,7 +1962,7 @@ public class IpedCoreService {
             // Recipients
             List<ContactIdentity> recipients = new ArrayList<>();
             String[] toValues = doc.getValues("Communication:To");
-            if (toValues != null && toValues.length > 0) {
+            if (toValues != null) {
                 for (String tVal : toValues) {
                     ContactIdentity ci = parseContact(tVal, convName, contactBook);
                     if (ci != null) recipients.add(ci);
@@ -1952,7 +1970,7 @@ public class IpedCoreService {
             }
             if (recipients.isEmpty()) {
                 String[] toSimple = doc.getValues("to");
-                if (toSimple != null && toSimple.length > 0) {
+                if (toSimple != null) {
                     for (String tVal : toSimple) {
                         ContactIdentity ci = parseContact(tVal, convName, contactBook);
                         if (ci != null) recipients.add(ci);
@@ -1985,7 +2003,7 @@ public class IpedCoreService {
      */
     public Map<String, Object> getTopContacts(int limit) throws IOException {
         checkCaseOpen();
-        int maxLimit = Math.max(1, Math.min(limit <= 0 ? 20 : limit, 200));
+        int maxLimit = Math.clamp(limit <= 0 ? 20 : limit, 1, 200);
 
         List<CommunicationEvent> events = collectCommunicationEvents();
 
@@ -2012,9 +2030,9 @@ public class IpedCoreService {
         }
 
         class ContactStats {
-            String id;
+            final String id;
             String name;
-            boolean isGroup;
+            final boolean isGroup;
             int totalInteractions = 0;
             int messagesCount = 0;
             int callsCount = 0;
@@ -2096,7 +2114,7 @@ public class IpedCoreService {
         // Sort descending by total interactions
         List<ContactStats> sorted = statsMap.values().stream()
                 .sorted((a, b) -> Integer.compare(b.totalInteractions, a.totalInteractions))
-                .collect(Collectors.toList());
+                .toList();
 
         List<Map<String, Object>> topList = new ArrayList<>();
         int rank = 1;
@@ -2138,8 +2156,8 @@ public class IpedCoreService {
      */
     public Map<String, Object> getCommunicationsGraph(String focalContact, int minInteractions, int limitEdges) throws IOException {
         checkCaseOpen();
-        int safeMinInteractions = Math.max(1, minInteractions <= 0 ? 5 : minInteractions);
-        int maxLimitEdges = Math.max(1, Math.min(limitEdges <= 0 ? 50 : limitEdges, 200));
+        int safeMinInteractions = Math.clamp(minInteractions <= 0 ? 5 : minInteractions, 1, Integer.MAX_VALUE);
+        int maxLimitEdges = Math.clamp(limitEdges <= 0 ? 50 : limitEdges, 1, 200);
 
         List<CommunicationEvent> events = collectCommunicationEvents();
 
@@ -2161,8 +2179,8 @@ public class IpedCoreService {
         ContactIdentity ownerNode = new ContactIdentity(defaultOwnerId, defaultOwnerId, defaultOwnerName, false);
 
         class EdgeAggregator {
-            ContactIdentity source;
-            ContactIdentity target;
+            final ContactIdentity source;
+            final ContactIdentity target;
             int weight = 0;
             int messagesCount = 0;
             int callsCount = 0;
@@ -2239,14 +2257,12 @@ public class IpedCoreService {
         List<EdgeAggregator> eligibleEdges = edgesMap.values().stream()
                 .filter(e -> {
                     if (focalClean == null) return true;
-                    boolean srcMatches = e.source.id.toLowerCase().contains(focalClean) || e.source.name.toLowerCase().contains(focalClean);
-                    boolean tgtMatches = e.target.id.toLowerCase().contains(focalClean) || e.target.name.toLowerCase().contains(focalClean);
-                    return srcMatches || tgtMatches;
+                    return ContactIdentity.matchesFocal(e.source, focalClean) || ContactIdentity.matchesFocal(e.target, focalClean);
                 })
                 .filter(e -> e.weight >= safeMinInteractions)
                 .sorted((a, b) -> Integer.compare(b.weight, a.weight))
                 .limit(maxLimitEdges)
-                .collect(Collectors.toList());
+                .toList();
 
         // Extract nodes connected by retained edges
         Map<String, Map<String, Object>> connectedNodes = new LinkedHashMap<>();
@@ -2259,7 +2275,7 @@ public class IpedCoreService {
                     node.put("name", ci.name);
                     node.put("phone_or_account", ci.id);
                     node.put("total_interactions", 0);
-                    node.put("is_focal", focalClean != null && (ci.id.toLowerCase().contains(focalClean) || ci.name.toLowerCase().contains(focalClean)));
+                    node.put("is_focal", focalClean != null && ContactIdentity.matchesFocal(ci, focalClean));
                     if (ci.isGroup) node.put("is_group", true);
                     return node;
                 });
@@ -2271,7 +2287,7 @@ public class IpedCoreService {
         // If focal contact was specified and matched a known node, ensure it is in connectedNodes even if 0 edges met threshold
         if (focalClean != null && connectedNodes.isEmpty()) {
             for (ContactIdentity ci : allKnownNodes.values()) {
-                if (ci.id.toLowerCase().contains(focalClean) || ci.name.toLowerCase().contains(focalClean)) {
+                if (ContactIdentity.matchesFocal(ci, focalClean)) {
                     Map<String, Object> node = new LinkedHashMap<>();
                     node.put("id", ci.id);
                     node.put("label", ci.name != null && !ci.name.isBlank() ? ci.name : ci.id);

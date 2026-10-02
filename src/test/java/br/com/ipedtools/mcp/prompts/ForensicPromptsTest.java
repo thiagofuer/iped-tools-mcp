@@ -64,7 +64,7 @@ class ForensicPromptsTest {
         assertEquals(Role.USER, message.role());
 
         Content content = message.content();
-        assertTrue(content instanceof TextContent, "Conteúdo deve ser TextContent");
+        assertInstanceOf(TextContent.class, content, "Conteúdo deve ser TextContent");
         String text = ((TextContent) content).text();
 
         // 1. Persona & standards
