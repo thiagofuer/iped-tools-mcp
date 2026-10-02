@@ -7,6 +7,45 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [Unreleased]
+
+### Adicionado
+- **Prompt Forense MCP `start_case` (`ForensicPrompts`):**
+  - Implementação do prompt pericial `start_case` estabelecendo o protocolo de engajamento entre o LLM e o caso IPED ativo.
+  - Diretiva de *Dynamic Language Mirroring*: saudação inicial padronizada em português brasileiro, adaptando-se fluidamente ao idioma de comunicação do perito.
+  - Salvaguardas periciais de conformidade forense: restrição estrita de leitura (read-only no filesystem), preservação de cadeia de custódia e orientação ativa para registro de evidências em marcadores (`add_to_bookmark`) e triagem (`set_item_checked`).
+- **Extração de Metadados Brutos e Filtragem Cirúrgica (`DocumentMetadataTool`):**
+  - Parâmetro `raw: true` em `get_document_metadata` para extração fidedigna de propriedades Lucene sem truncamento de strings (500 caracteres) ou de listas (10 itens).
+  - Parâmetro `keys` com suporte a padrões glob/wildcards case-insensitive (ex: `Hardware-Wallet-*`, `ai:*`, `Communication:*`) para inspeção de campos críticos com economia de tokens de contexto.
+- **Integração com Tarefas Python e JavaScript do IPED:**
+  - Preservação e roteamento semântico de propriedades geradas por tarefas auxiliares do IPED (`SearchHardwareWallets.py`, `CSAMDetectorTask.py`, `AgeEstimationTask.py`, `NSFWNudityDetectTask.py`).
+  - Novo domínio pericial `crypto` catalogando artefatos de hardware wallets (`Hardware-Wallet-Found`, `Hardware-Wallet-VendorName`, `Hardware-Wallet-DeviceName`, etc.).
+  - Domínio pericial `ai` enriquecido com modelos de deep learning e redes neurais (`ai:csamDetector:csam`, `faceAge:count:Child`, `nsfw_nudity_score`).
+  - Novos filtros em `query_ai_detections` e `list_ai_filters`: `crypto_wallets`, `age_estimation`, `nsfw` e busca híbrida de `csam` (hashes conhecidos + rede neural).
+- **Descoberta Centralizada de Fontes de Evidência:**
+  - Nova ferramenta MCP `list_sources` expondo as raízes do caso pericial e contêineres analisados.
+
+### Modificado
+- **Identificação Generalizada de Dispositivos (`get_device_and_owner_info`):**
+  - Suporte híbrido transparente para extrações móveis (UFED/GrayKey) e imagens de computadores (.E01/raw/vmdk).
+  - Descoberta e estruturação de múltiplos contêineres forenses sob a chave `evidences`, com classificação automática do caso (`mobile`, `computer` ou `hybrid`).
+  - Extração profunda de números de telefone e e-mails utilizando padrões regex nativos do IPED (`Regex:PHONE`, `Regex:EMAIL`, `phone`, `cellPhone`).
+- **Atualização do Ecossistema Quarkus:**
+  - Atualização do Quarkus para a versão `3.39.3`.
+- **Expansão da Cobertura de Testes Automatizados:**
+  - Suíte de testes unitários expandida para 52 testes com 100% de aprovação em `IpedCoreServiceTest`, `McpToolsTest` e `VersionInfoTest`.
+
+### Corrigido
+- **Subsistema GUI no Executável Nativo Windows:**
+  - Remoção da flag `--win-console` no `package_app.ps1` e `package_msi.ps1`, restaurando o subsistema `IMAGE_SUBSYSTEM_WINDOWS_GUI` e prevenindo a abertura de janela fantasma de terminal ao executar o aplicativo por duplo-clique.
+  - Preservação dos descritores de stream `stdin`/`stdout` para comunicação JSON-RPC quando executado via clientes MCP.
+- **Empacotamento e Permissões no Windows:**
+  - Encerramento preventivo de instâncias ativas do `IPED-Tools-MCP.exe` antes da substituição de arquivos no `package_app.ps1`, evitando travamento de arquivos por bloqueio de DLLs no Windows.
+  - Higienização pós-build desmarcando o atributo `ReadOnly` dos binários em `dist/` e purga da pasta temporária `target/dist-build`.
+  - Correção na configuração do plugin Maven Surefire (`@{argLine}`) no `pom.xml`.
+
+---
+
 ## [1.0.0] - 2026-09-29
 
 ### Adicionado

@@ -2,7 +2,7 @@
 
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](pom.xml)
 [![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/projects/jdk/21/)
-[![Quarkus](https://img.shields.io/badge/Quarkus-3.17.8-red.svg)](https://quarkus.io/)
+[![Quarkus](https://img.shields.io/badge/Quarkus-3.39.3-red.svg)](https://quarkus.io/)
 [![MCP](https://img.shields.io/badge/MCP-2024--11--05-green.svg)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Distribution](https://img.shields.io/badge/Download-ipedtools.com.br-brightgreen.svg)](https://www.ipedtools.com.br)
@@ -126,7 +126,7 @@ sequenceDiagram
     alt args contém "--stdio"
         Note over Main: Modo Servidor MCP Headless
         Main->>Main: Redireciona System.out para stderr (stream isolation)
-        opt Informado "--case <caminho>"
+        alt Informado "--case [caminho]"
             Main->>Service: IpedCoreService.openCase(caminho)
         else Sem "--case" (Configuração Recomendada)
             Main->>State: Lê caso ativo salvo em disco
@@ -177,19 +177,19 @@ sequenceDiagram
 - `open_case`: Carrega ou alterna dinamicamente o caso pericial ativo em tempo de execução sem reiniciar o processo.
 
 ### 2. Dicionário e Descoberta de Metadados
-- `get_property_dictionary`: Dicionário semântico e catálogo estruturado de propriedades forenses por domínio (chats, emails, chamadas, web, mídias, etc.).
+- `get_property_dictionary`: Dicionário semântico e catálogo estruturado de propriedades forenses por domínio (`chats`, `browsers`, `emails`, `media`, `system`, `gps`, `ufed`, `ai` com redes neurais, e `crypto` para carteiras de hardware).
 - `list_available_properties`: Descobre dinamicamente os nomes exatos de campos e propriedades indexadas no caso para uma categoria específica.
 
 ### 3. Busca e Extração de Conteúdo
 - `search_documents`: Executa consultas estruturadas em sintaxe Lucene no índice pericial (`category:"chat messages" AND content:propina`).
-- `get_document_metadata`: Recupera metadados técnicos forenses completos de um ou múltiplos itens (hashes MD5/SHA256, EXIF, permissões, caminhos, etc.).
+- `get_document_metadata`: Recupera metadados técnicos forenses de itens, suportando modo sumarizado padrão particionado em blocos semânticos (`basic`, `communication`, `geo`, `forensic`, `extra`), extração fidedigna sem truncamento (`raw: true`) e filtragem cirúrgica de campos (`keys` com suporte a wildcards, ex: `["Hardware-Wallet-*", "ai:*"]`).
 - `get_document_text`: Extrai texto completo processado pelo OCR ou parsers nativos do IPED com suporte a paginação.
 - `list_categories`: Lista todas as categorias de evidências presentes no caso e seus quantitativos.
 - `list_bookmarks`: Lista os marcadores periciais do caso e total de documentos marcados.
 - `add_to_bookmark`: Adiciona um ou mais itens a um marcador pericial existente ou cria um novo marcador.
 
 ### 4. Inteligência de Comunicações e Dispositivos
-- `get_device_and_owner_info`: Identifica dados do proprietário do dispositivo, contas vinculadas, IMEI, números de telefone e contas de nuvem.
+- `get_device_and_owner_info`: Identifica dados do proprietário do dispositivo, contas vinculadas, IMEI, números de telefone e e-mails (via regex profundas `Regex:PHONE` e `Regex:EMAIL`), agrupando múltiplos contêineres de evidências (.E01, UFED, GrayKey) sob `evidences` e classificando casos mistos como `hybrid`.
 - `get_top_contacts`: Ranking de contatos mais frequentes em mensagens, chamadas e aplicativos de comunicação.
 - `get_communications_graph`: Extrai o grafo relacional de comunicações (nós e arestas de interlocutores, volume de mensagens e chamadas trocadas).
 
@@ -211,8 +211,16 @@ sequenceDiagram
 - `search_similar_documents`: Busca por documentos textualmente semelhantes via vetores semânticos / Lucene MoreLikeThis.
 
 ### 9. Filtros de Inteligência Artificial e Reconhecimento
-- `list_ai_filters`: Lista as categorias de detecções por IA disponíveis no caso (faces, nudez/conteúdo sensível, documentos de identidade, armas, placas, veículos, drogas, etc.).
-- `query_ai_detections`: Consulta itens classificados por filtros específicos de Inteligência Artificial com limiar de confiança configurável.
+- `list_ai_filters`: Lista as categorias de detecções por IA disponíveis no caso (faces, nudez/NSFW, armas, drogas, transcrições de áudio, CSAM híbrido, carteiras cripto, estimativa de idade de crianças, OCR).
+- `query_ai_detections`: Consulta itens classificados por filtros específicos de Inteligência Artificial (`weapons`, `drugs`, `nudity`, `nsfw`, `faces`, `age_estimation`, `audio_transcripts`, `csam`, `crypto_wallets`, `ocr`) com limiares de confiança e pontuações calculadas por redes neurais.
+
+---
+
+## 📜 Prompts Forenses MCP (MCP Prompts)
+
+O servidor implementa o recurso de **Prompts MCP** (`prompts/list` e `prompts/get`), provendo orientações operacionais padronizadas que preparam o modelo de linguagem para atuar com rigor metodológico pericial:
+
+- **`start_case`**: Inicializa a sessão pericial injetando o contexto do caso aberto, regras estritas de não-destrutividade (leitura exclusiva), metodologia de triagem probatória e a diretiva de **Dynamic Language Mirroring** (saudação inicial em português brasileiro, adaptando-se fluentemente ao idioma utilizado pelo perito).
 
 ---
 
@@ -271,11 +279,11 @@ O executável suporta os seguintes parâmetros de linha de comando:
 ```powershell
 mvn clean package -DskipTests
 ```
-O artefato compilado é gerado em `target/iped-tools-mcp-1.0.0-runner.jar`.
+O artefato compilado é gerado em `target/iped-tools-mcp-*-runner.jar`.
 
 ### 2. Execução dos Testes Automatizados
 ```powershell
-# Execução dos testes unitários Maven (com resolução dinâmica via TestCaseResolver)
+# Execução dos testes unitários Maven (52 testes com resolução dinâmica via TestCaseResolver)
 mvn test
 
 # Testes de integração ponta a ponta do protocolo STDIO MCP

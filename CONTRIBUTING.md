@@ -82,12 +82,12 @@ Antes de submeter um Pull Request, certifique-se de que todos os passos a seguir
    ```powershell
    mvn clean test
    ```
-   Todos os testes devem passar (atualmente 41/41 testes com 0 falhas).
+   Todos os testes devem passar (atualmente 52/52 testes com 0 falhas).
 
 2. **Verificação da Flag `--version`:**
    ```powershell
    mvn package -DskipTests
-   java -jar target/iped-tools-mcp-1.0.0-runner.jar --version
+   java -jar target/iped-tools-mcp-*-runner.jar --version
    ```
    Deve exibir a versão correta e sair com código de retorno 0.
 
