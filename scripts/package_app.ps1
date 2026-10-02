@@ -134,6 +134,14 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $builtAppDir = Join-Path $buildDestDir "IPED-Tools-MCP"
+
+$activeProcesses = Get-Process -Name "IPED-Tools-MCP" -ErrorAction SilentlyContinue
+if ($activeProcesses) {
+    Write-Host "  -> Encerrando processos IPED-Tools-MCP em execucao para permitir substituicao dos arquivos..." -ForegroundColor Yellow
+    $activeProcesses | Stop-Process -Force
+    Start-Sleep -Seconds 2
+}
+
 Copy-Item -Path "$builtAppDir\*" -Destination $targetAppDir -Recurse -Force
 Write-Host "  -> Pacote criado em: $targetAppDir" -ForegroundColor Green
 

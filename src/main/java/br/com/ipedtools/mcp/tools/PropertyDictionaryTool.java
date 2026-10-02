@@ -24,7 +24,8 @@ public class PropertyDictionaryTool {
             - 'system': File system attributes (name, path, category, type, size, created, modified, deleted, carved).
             - 'gps': Coordinates and geographic location data (common:geo:locations, latitude, longitude, ufed:coordinate_id).
             - 'ufed': Cellebrite UFED device extraction properties (ufed:EntryName, ufed:EntryValue, ufed:id, ufed:file_id).
-            - 'ai': Computer vision, transcription, and hash database matches (faceAge:labels, childPornHashHits, hashDb:status).
+            - 'ai': Computer vision, transcription, neural CSAM (ai:csamDetector:csam), age estimation (faceAge:count:Child), NSFW scores (nsfw_nudity_score), and hash matches.
+            - 'crypto': Cryptocurrency hardware wallet artifacts (Hardware-Wallet-Found, Hardware-Wallet-VendorName, Hardware-Wallet-DeviceName).
             - 'all': Complete catalog encompassing all forensic domains.
             
             IMPORTANT LUCENE QUERY ESCAPING:
@@ -33,10 +34,12 @@ public class PropertyDictionaryTool {
             Example: Communication\\:Direction:INCOMING
             Example: Communication\\:From:*11988887777*
             Example: common\\:geo\\:locations:*
+            Example: ai\\:csamDetector\\:csam:>0.6
+            Example: Hardware-Wallet-Found:true
             """
     )
     public Map<String, Object> getPropertyDictionary(
-            @ToolArg(name = "domain", description = "Forensic domain to inspect: 'chats', 'browsers', 'emails', 'media', 'system', 'gps', 'ufed', 'ai', or 'all' (default)", required = false, defaultValue = "all")
+            @ToolArg(name = "domain", description = "Forensic domain to inspect: 'chats', 'browsers', 'emails', 'media', 'system', 'gps', 'ufed', 'ai', 'crypto', or 'all' (default)", required = false, defaultValue = "all")
             String domain
     ) {
         return IpedCoreService.getInstance().getPropertyDictionary(domain);

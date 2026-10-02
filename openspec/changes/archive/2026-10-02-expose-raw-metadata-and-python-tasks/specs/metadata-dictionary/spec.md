@@ -1,9 +1,6 @@
-# Metadata Dictionary Specification
+# Spec Delta
 
-## Purpose
-Provides structured field discovery and schema inspection tools for IPED indexed evidence, enabling LLMs to understand domain-specific properties and formulate high-precision Lucene queries.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Forensic Property Dictionary
 The server SHALL expose `get_property_dictionary` returning searchable field names, descriptions, data types, and query syntax examples grouped by forensic domain (`chats`, `browsers`, `emails`, `media`, `system`, `gps`, `ufed`, `ai`, `crypto`).
@@ -23,10 +20,3 @@ The server SHALL expose `get_property_dictionary` returning searchable field nam
 #### Scenario: LLM requests property dictionary for cryptocurrency and hardware wallets
 - **WHEN** the LLM calls `get_property_dictionary` with domain "crypto"
 - **THEN** the server returns field definitions and query syntax for hardware wallet artifacts (`Hardware-Wallet-Found`, `Hardware-Wallet-VendorName`, `Hardware-Wallet-DeviceName`).
-
-### Requirement: Available Properties by Category
-The server SHALL expose `list_available_properties` returning the distinct metadata property keys actually populated in the active case for a specified evidence category.
-
-#### Scenario: LLM checks which fields exist in browsers history
-- **WHEN** the LLM calls `list_available_properties` for category "browsers/history"
-- **THEN** the server returns a list of distinct populated field names (e.g. `url`, `visitDate`, `Search`) present in the active case.

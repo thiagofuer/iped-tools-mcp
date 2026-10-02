@@ -156,6 +156,104 @@ public class IpedCoreServiceTest {
 
     @Test
     @EnabledIf("isCaseAvailable")
+    void testGetDocumentMetadataRawAndKeyFiltering() throws Exception {
+        IpedCoreService service = IpedCoreService.getInstance();
+
+        // 1. Raw mode without key filtering
+        Map<String, Object> rawMeta = service.getDocumentMetadata(1, true, null);
+        assertNotNull(rawMeta);
+        assertEquals(1, rawMeta.get("id"));
+        assertEquals(Boolean.TRUE, rawMeta.get("raw"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> rawProps = (Map<String, Object>) rawMeta.get("properties");
+        assertNotNull(rawProps);
+        // In raw mode, properties map is flat (not partitioned into basic/forensic/etc.)
+        assertFalse(rawProps.containsKey("basic"), "Modo raw não deve conter blocos semânticos arbitrários");
+        assertTrue(rawProps.containsKey("name") || rawProps.containsKey("path"), "Modo raw deve conter atributos diretos");
+
+        // 2. Filtered mode with wildcard
+        Map<String, Object> filteredMeta = service.getDocumentMetadata(1, true, List.of("name", "path*"));
+        assertNotNull(filteredMeta);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> filteredProps = (Map<String, Object>) filteredMeta.get("properties");
+        assertNotNull(filteredProps);
+        for (String k : filteredProps.keySet()) {
+            assertTrue(k.equalsIgnoreCase("name") || k.toLowerCase().startsWith("path"),
+                    "Chave retornada deve coincidir com o filtro: " + k);
+        }
+
+        // 3. Batch with raw and keys
+        List<Map<String, Object>> batch = service.getDocumentMetadataBatch(List.of(1), true, List.of("name"));
+        assertNotNull(batch);
+        assertEquals(1, batch.size());
+        assertEquals(Boolean.TRUE, batch.get(0).get("raw"));
+    }
+
+    @Test
+    void testMatchesAnyKeyPattern() {
+        // Exact match
+        assertTrue(IpedCoreService.matchesAnyKeyPattern("name", List.of("name")));
+        assertTrue(IpedCoreService.matchesAnyKeyPattern("NAME", List.of("name")));
+
+        // Wildcard match
+        assertTrue(IpedCoreService.matchesAnyKeyPattern("Hardware-Wallet-VendorName", List.of("Hardware-Wallet-*")));
+        assertTrue(IpedCoreService.matchesAnyKeyPattern("ai:csamDetector:csam", List.of("ai:*")));
+        assertTrue(IpedCoreService.matchesAnyKeyPattern("faceAge:count:Child", List.of("*child*")));
+
+        // Negative match
+        assertFalse(IpedCoreService.matchesAnyKeyPattern("other_field", List.of("Hardware-Wallet-*", "ai:*")));
+    }
+
+    @Test
+    void testForensicDomainsCryptoAndAi() {
+        IpedCoreService service = IpedCoreService.getInstance();
+
+        // Crypto domain
+        Map<String, Object> cryptoDict = service.getPropertyDictionary("crypto");
+        assertNotNull(cryptoDict);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> cryptoProps = (List<Map<String, Object>>) cryptoDict.get("properties");
+        assertNotNull(cryptoProps);
+        boolean hasHwFound = cryptoProps.stream().anyMatch(p -> "Hardware-Wallet-Found".equals(p.get("field")));
+        assertTrue(hasHwFound, "Deveria conter Hardware-Wallet-Found no domínio crypto");
+
+        // AI domain
+        Map<String, Object> aiDict = service.getPropertyDictionary("ai");
+        assertNotNull(aiDict);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> aiProps = (List<Map<String, Object>>) aiDict.get("properties");
+        assertNotNull(aiProps);
+        boolean hasCsam = aiProps.stream().anyMatch(p -> "ai:csamDetector:csam".equals(p.get("field")));
+        boolean hasAge = aiProps.stream().anyMatch(p -> "faceAge:count:Child".equals(p.get("field")));
+        boolean hasNsfw = aiProps.stream().anyMatch(p -> "nsfw_nudity_score".equals(p.get("field")));
+        assertTrue(hasCsam, "Deveria conter ai:csamDetector:csam");
+        assertTrue(hasAge, "Deveria conter faceAge:count:Child");
+        assertTrue(hasNsfw, "Deveria conter nsfw_nudity_score");
+    }
+
+    @Test
+    @EnabledIf("isCaseAvailable")
+    void testAiFiltersExpanded() {
+        IpedCoreService service = IpedCoreService.getInstance();
+        Map<String, Object> filters = service.listAiFilters();
+        assertNotNull(filters);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> list = (List<Map<String, Object>>) filters.get("filters");
+        assertNotNull(list);
+
+        boolean hasCrypto = list.stream().anyMatch(f -> "crypto_wallets".equals(f.get("filter_type")));
+        boolean hasAge = list.stream().anyMatch(f -> "age_estimation".equals(f.get("filter_type")));
+        boolean hasNsfw = list.stream().anyMatch(f -> "nsfw".equals(f.get("filter_type")));
+        boolean hasCsam = list.stream().anyMatch(f -> "csam".equals(f.get("filter_type")));
+
+        assertTrue(hasCrypto, "Deveria conter filtro crypto_wallets");
+        assertTrue(hasAge, "Deveria conter filtro age_estimation");
+        assertTrue(hasNsfw, "Deveria conter filtro nsfw");
+        assertTrue(hasCsam, "Deveria conter filtro csam");
+    }
+
+    @Test
+    @EnabledIf("isCaseAvailable")
     void testGetItemRelations() throws Exception {
         IpedCoreService service = IpedCoreService.getInstance();
 

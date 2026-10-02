@@ -103,9 +103,22 @@ public class McpToolsTest {
     @EnabledIf("isCaseAvailable")
     void testDocumentMetadataTool() {
         DocumentMetadataTool tool = new DocumentMetadataTool();
-        List<Map<String, Object>> meta = tool.getDocumentMetadata(List.of(1, 2), "");
+
+        // 1. Standard mode
+        List<Map<String, Object>> meta = tool.getDocumentMetadata(List.of(1, 2), false, null, "");
         assertNotNull(meta);
         assertEquals(2, meta.size());
+        assertFalse(meta.get(0).containsKey("raw"));
+
+        // 2. Raw mode with key filtering
+        List<Map<String, Object>> rawMeta = tool.getDocumentMetadata(List.of(1), true, List.of("name"), "");
+        assertNotNull(rawMeta);
+        assertEquals(1, rawMeta.size());
+        assertEquals(Boolean.TRUE, rawMeta.get(0).get("raw"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> props = (Map<String, Object>) rawMeta.get(0).get("properties");
+        assertNotNull(props);
+        assertTrue(props.containsKey("name"));
     }
 
     @Test
@@ -146,6 +159,11 @@ public class McpToolsTest {
         assertNotNull(chats);
         assertEquals("chats", chats.get("domain"));
         assertTrue(chats.containsKey("properties"));
+
+        Map<String, Object> crypto = tool.getPropertyDictionary("crypto");
+        assertNotNull(crypto);
+        assertEquals("crypto", crypto.get("domain"));
+        assertTrue(crypto.containsKey("properties"));
     }
 
     @Test
@@ -306,13 +324,34 @@ public class McpToolsTest {
         Map<String, Object> filters = tool.listAiFilters();
         assertNotNull(filters);
         assertFalse(filters.containsKey("error"));
-        assertTrue((int) filters.get("total_filters") >= 7);
+        assertTrue((int) filters.get("total_filters") >= 10);
 
         // 2. Query detections
         Map<String, Object> detections = tool.queryAiDetections("faces", null, 10, 0);
         assertNotNull(detections);
         assertFalse(detections.containsKey("error"));
         assertEquals("faces", detections.get("filter_type"));
+
+        // 3. Query new python task filters
+        Map<String, Object> crypto = tool.queryAiDetections("crypto_wallets", null, 10, 0);
+        assertNotNull(crypto);
+        assertFalse(crypto.containsKey("error"));
+        assertEquals("crypto_wallets", crypto.get("filter_type"));
+
+        Map<String, Object> age = tool.queryAiDetections("age_estimation", null, 10, 0);
+        assertNotNull(age);
+        assertFalse(age.containsKey("error"));
+        assertEquals("age_estimation", age.get("filter_type"));
+
+        Map<String, Object> nsfw = tool.queryAiDetections("nsfw", null, 10, 0);
+        assertNotNull(nsfw);
+        assertFalse(nsfw.containsKey("error"));
+        assertEquals("nsfw", nsfw.get("filter_type"));
+
+        Map<String, Object> csam = tool.queryAiDetections("csam", null, 10, 0);
+        assertNotNull(csam);
+        assertFalse(csam.containsKey("error"));
+        assertEquals("csam", csam.get("filter_type"));
     }
 }
 

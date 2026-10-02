@@ -64,7 +64,8 @@ public class IpedCoreService {
 
     private static final Set<String> WHITELIST_PREFIXES = Set.of(
             "communication:", "conversation:", "common:", "image:", "video:", "audio:",
-            "ufed:", "p2p:", "hashdb:", "meta:", "message-", "face"
+            "ufed:", "p2p:", "hashdb:", "meta:", "message-", "face",
+            "ai:", "nsfw", "hardware-wallet", "faceage"
     );
 
     private static final Set<String> EXPLICIT_ALLOWED_KEYS = Set.of(
@@ -355,6 +356,14 @@ public class IpedCoreService {
      * Retrieves token-efficient sanitized metadata for a single item ID.
      */
     public Map<String, Object> getDocumentMetadata(int itemId) throws IOException {
+        return getDocumentMetadata(itemId, false, null);
+    }
+
+    /**
+     * Retrieves metadata for a single item ID, supporting full-fidelity raw extraction
+     * and surgical key filtering.
+     */
+    public Map<String, Object> getDocumentMetadata(int itemId, boolean raw, List<String> keys) throws IOException {
         checkCaseOpen();
 
         int luceneId = ipedSource.getLuceneId(itemId);
@@ -384,7 +393,32 @@ public class IpedCoreService {
             }
         }
 
-        Map<String, Object> cleanProps = sanitizeProperties(rawProps);
+        Map<String, Object> finalProps;
+        if (raw) {
+            Map<String, Object> rawFiltered = new LinkedHashMap<>();
+            for (Map.Entry<String, Object> entry : rawProps.entrySet()) {
+                String k = entry.getKey();
+                if (isBlacklistedKey(k)) {
+                    continue;
+                }
+                if (keys != null && !keys.isEmpty() && !matchesAnyKeyPattern(k, keys)) {
+                    continue;
+                }
+                rawFiltered.put(k, entry.getValue());
+            }
+            finalProps = rawFiltered;
+        } else {
+            Map<String, Object> candidateProps = rawProps;
+            if (keys != null && !keys.isEmpty()) {
+                candidateProps = new LinkedHashMap<>();
+                for (Map.Entry<String, Object> entry : rawProps.entrySet()) {
+                    if (matchesAnyKeyPattern(entry.getKey(), keys)) {
+                        candidateProps.put(entry.getKey(), entry.getValue());
+                    }
+                }
+            }
+            finalProps = sanitizeProperties(candidateProps);
+        }
 
         List<String> bookmarks = ipedSource.getBookmarks().getBookmarkList(itemId);
         boolean selected = ipedSource.getBookmarks().isChecked(itemId);
@@ -394,7 +428,10 @@ public class IpedCoreService {
         result.put("source", sourceId);
         result.put("selected", selected);
         result.put("bookmarks", bookmarks != null ? bookmarks : List.of());
-        result.put("properties", cleanProps);
+        if (raw) {
+            result.put("raw", true);
+        }
+        result.put("properties", finalProps);
 
         return result;
     }
@@ -403,6 +440,13 @@ public class IpedCoreService {
      * Retrieves sanitized metadata in batch for a list of document IDs.
      */
     public List<Map<String, Object>> getDocumentMetadataBatch(List<Integer> itemIds) {
+        return getDocumentMetadataBatch(itemIds, false, null);
+    }
+
+    /**
+     * Retrieves metadata in batch for a list of document IDs with raw and key filtering options.
+     */
+    public List<Map<String, Object>> getDocumentMetadataBatch(List<Integer> itemIds, boolean raw, List<String> keys) {
         checkCaseOpen();
         List<Map<String, Object>> list = new ArrayList<>();
         if (itemIds == null || itemIds.isEmpty()) {
@@ -411,7 +455,7 @@ public class IpedCoreService {
 
         for (Integer id : itemIds) {
             try {
-                list.add(getDocumentMetadata(id));
+                list.add(getDocumentMetadata(id, raw, keys));
             } catch (Exception e) {
                 list.add(Map.of("id", id, "source", sourceId, "error", "Falha ao ler metadados: " + e.getMessage()));
             }
@@ -2421,7 +2465,8 @@ public class IpedCoreService {
             // 3. Forensic
             else if (lower.equals("hash") || lower.equals("md5") || lower.equals("sha-256") || lower.equals("sha-1")
                     || lower.equals("deleted") || lower.equals("carved") || lower.equals("childpornhashhits")
-                    || lower.startsWith("hashdb:") || lower.startsWith("p2p:")) {
+                    || lower.startsWith("hashdb:") || lower.startsWith("p2p:")
+                    || lower.startsWith("ai:") || lower.startsWith("nsfw")) {
                 forensicBlock.put(key, sanitizedVal);
             }
             // 4. Basic
@@ -2458,6 +2503,25 @@ public class IpedCoreService {
         }
 
         return partitioned;
+    }
+
+    public static boolean matchesAnyKeyPattern(String key, List<String> patterns) {
+        if (patterns == null || patterns.isEmpty()) {
+            return true;
+        }
+        if (key == null) {
+            return false;
+        }
+        for (String pattern : patterns) {
+            if (pattern == null || pattern.isBlank()) {
+                continue;
+            }
+            String regex = "^" + Pattern.quote(pattern.trim()).replace("*", "\\E.*\\Q") + "$";
+            if (Pattern.compile(regex, Pattern.CASE_INSENSITIVE).matcher(key).matches()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isBlacklistedKey(String key) {
@@ -2621,9 +2685,23 @@ public class IpedCoreService {
                 propDef("audio:transcriptConfidence", "number", "Nível de confiança da transcrição de áudio por IA", "audio\\:transcriptConfidence:>0.8", true),
                 propDef("face_count", "integer", "Quantidade de faces detectadas na imagem por visão computacional", "face_count:>0", false),
                 propDef("faceAge:labels", "string", "Predição de faixa etária das faces detectadas (ex: child, teen, adult)", "faceAge\\:labels:*child*", true),
+                propDef("faceAge:count:Child", "integer", "Contagem de faces classificadas na faixa etária de crianças (0-12 anos)", "faceAge\\:count\\:Child:>0", true),
+                propDef("ai:csamDetector:csam", "number", "Score de probabilidade de CSAM calculado por rede neural (0.0 a 1.0)", "ai\\:csamDetector\\:csam:>0.6", true),
+                propDef("ai:csamDetector:label", "string", "Rótulo atribuído pelo detector CSAM (csam, porn, other)", "ai\\:csamDetector\\:label:csam", true),
+                propDef("ai:csamDetector:triggerFrame", "integer", "Índice do quadro de vídeo que disparou o alerta de CSAM", "ai\\:csamDetector\\:triggerFrame:*", true),
+                propDef("nsfw_nudity_score", "number", "Pontuação percentual de nudez/conteúdo explícito via NSFWNudityDetect (0 a 100)", "nsfw_nudity_score:>50", false),
                 propDef("childPornHashHits", "integer", "Contagem de correspondências com bancos de hashes de exploração sexual infantil", "childPornHashHits:>0", false),
                 propDef("hashDb:status", "string", "Status forense no banco de hashes conhecido (ex: alert, ignore)", "hashDb\\:status:alert", true),
                 propDef("hashDb:set", "string", "Nome da base forense de hashes onde houve match", "hashDb\\:set:*", true)
+        ));
+
+        // 9. Crypto & Hardware Wallets
+        domains.put("crypto", List.of(
+                propDef("Hardware-Wallet-Found", "string", "Sinalizador booleano indicando detecção de indícios de carteira de hardware", "Hardware-Wallet-Found:true", false),
+                propDef("Hardware-Wallet-VendorID", "string", "USB Vendor ID (VID) da carteira de hardware (ex: Trezor, Ledger)", "Hardware-Wallet-VendorID:*", false),
+                propDef("Hardware-Wallet-ProductID", "string", "USB Product ID (PID) do modelo da carteira de hardware", "Hardware-Wallet-ProductID:*", false),
+                propDef("Hardware-Wallet-VendorName", "string", "Nome do fabricante da carteira de hardware de criptomoedas", "Hardware-Wallet-VendorName:*Ledger*", false),
+                propDef("Hardware-Wallet-DeviceName", "string", "Nome comercial ou modelo da carteira de hardware", "Hardware-Wallet-DeviceName:*Nano*", false)
         ));
 
         return Collections.unmodifiableMap(domains);
@@ -3019,9 +3097,30 @@ public class IpedCoreService {
         AI_FILTERS.put("csam", new AiFilterDef(
                 "csam",
                 "Exploração Sexual Infantil (CSAM)",
-                "Arquivos com correspondência em bases de hashes forenses conhecidas de exploração infantil.",
-                "childPornHashHits:[1 TO *] OR hashDb\\:status:alert",
-                "childPornHashHits"
+                "Arquivos com correspondência em bases de hashes forenses conhecidas de exploração infantil ou detecção por rede neural (CSAMDetector).",
+                "childPornHashHits:[1 TO *] OR hashDb\\:status:alert OR ai\\:csamDetector\\:csam:[0.6 TO 1.0] OR ai\\:csamDetector\\:label:csam",
+                "ai:csamDetector:csam"
+        ));
+        AI_FILTERS.put("crypto_wallets", new AiFilterDef(
+                "crypto_wallets",
+                "Carteiras de Hardware Cripto",
+                "Dispositivos e registros de carteiras de hardware cripto (Ledger, Trezor, KeepKey) detectados pelo SearchHardwareWallets.",
+                "Hardware-Wallet-Found:true OR bookmark:\"Possible Hardware Wallets\"",
+                null
+        ));
+        AI_FILTERS.put("age_estimation", new AiFilterDef(
+                "age_estimation",
+                "Estimativa de Faixa Etária (Crianças/Menores)",
+                "Imagens e vídeos contendo faces classificadas como crianças ou adolescentes pelo AgeEstimationTask.",
+                "faceAge\\:count\\:Child:[1 TO *] OR faceAge\\:labels:*child*",
+                "faceAge:count:Child"
+        ));
+        AI_FILTERS.put("nsfw", new AiFilterDef(
+                "nsfw",
+                "Conteúdo Explícito / Nudez (NSFW)",
+                "Imagens e vídeos detectados com conteúdo adulto pelos modelos DIE e NSFWNudityDetectTask.",
+                "isNudity:true OR category:\"nudity\" OR nudityScore:[0.5 TO 1.0] OR nsfw_nudity_score:[50 TO 100]",
+                "nsfw_nudity_score"
         ));
         AI_FILTERS.put("ocr", new AiFilterDef(
                 "ocr",
@@ -3079,12 +3178,18 @@ public class IpedCoreService {
         if (minScore != null && minScore > 0 && def.scoreField != null) {
             if ("nudityScore".equalsIgnoreCase(def.scoreField)) {
                 effectiveQuery = "nudityScore:[" + minScore + " TO 1.0]";
+            } else if ("nsfw_nudity_score".equalsIgnoreCase(def.scoreField)) {
+                float val = minScore <= 1.0f ? minScore * 100f : minScore;
+                effectiveQuery = "nsfw_nudity_score:[" + val + " TO 100] OR nudityScore:[" + (val / 100f) + " TO 1.0]";
             } else if ("audio:transcriptConfidence".equalsIgnoreCase(def.scoreField)) {
                 effectiveQuery = "audio\\:transcriptConfidence:[" + minScore + " TO 1.0]";
             } else if ("face_count".equalsIgnoreCase(def.scoreField)) {
                 effectiveQuery = "face_count:[" + (int) minScore.floatValue() + " TO *]";
-            } else if ("childPornHashHits".equalsIgnoreCase(def.scoreField)) {
-                effectiveQuery = "childPornHashHits:[" + (int) minScore.floatValue() + " TO *]";
+            } else if ("childPornHashHits".equalsIgnoreCase(def.scoreField) || "ai:csamDetector:csam".equalsIgnoreCase(def.scoreField)) {
+                float scoreVal = minScore > 1.0f ? minScore / 100f : minScore;
+                effectiveQuery = "childPornHashHits:[1 TO *] OR hashDb\\:status:alert OR ai\\:csamDetector\\:csam:[" + scoreVal + " TO 1.0]";
+            } else if ("faceAge:count:Child".equalsIgnoreCase(def.scoreField)) {
+                effectiveQuery = "faceAge\\:count\\:Child:[" + (int) minScore.floatValue() + " TO *]";
             }
         }
 
