@@ -29,7 +29,7 @@ public class McpToolsTest {
     }
 
     @BeforeAll
-    static void setUp() throws Exception {
+    static void setUp() {
         if (isCaseAvailable()) {
             IpedCoreService.getInstance().openCase(getCaseDir());
         }
