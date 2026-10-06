@@ -53,6 +53,8 @@ public class MainWindow extends JFrame {
         setMinimumSize(new Dimension(750, 600));
         setLocationRelativeTo(null);
 
+        initAppIcons();
+
         JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
         mainPanel.setBorder(new EmptyBorder(12, 12, 12, 12));
 
@@ -229,9 +231,16 @@ public class MainWindow extends JFrame {
     }
 
     private JPanel createHeaderPanel() {
-        JPanel header = new JPanel(new BorderLayout(10, 0));
+        JPanel header = new JPanel(new BorderLayout(14, 0));
         header.setBackground(new Color(25, 42, 86));
         header.setBorder(new EmptyBorder(10, 14, 10, 14));
+
+        ImageIcon logoIcon = getAppLogo(48, 48);
+        if (logoIcon != null) {
+            JLabel logoLabel = new JLabel(logoIcon);
+            logoLabel.setBorder(new EmptyBorder(0, 0, 0, 4));
+            header.add(logoLabel, BorderLayout.WEST);
+        }
 
         JPanel textPanel = new JPanel(new GridLayout(2, 1, 2, 2));
         textPanel.setOpaque(false);
@@ -266,6 +275,8 @@ public class MainWindow extends JFrame {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(new EmptyBorder(10, 10, 10, 10));
+
+        ImageIcon aboutLogo = getAppLogo(64, 64);
 
         JLabel nameLabel = new JLabel("IPED Tools MCP v" + VersionInfo.getVersion());
         nameLabel.setFont(new Font("SansSerif", Font.BOLD, 16));
@@ -315,7 +326,42 @@ public class MainWindow extends JFrame {
         panel.add(Box.createVerticalStrut(4));
         panel.add(licLabel);
 
-        JOptionPane.showMessageDialog(this, panel, "Sobre o IPED Tools MCP", JOptionPane.INFORMATION_MESSAGE);
+        JOptionPane.showMessageDialog(this, panel, "Sobre o IPED Tools MCP",
+                aboutLogo != null ? JOptionPane.PLAIN_MESSAGE : JOptionPane.INFORMATION_MESSAGE,
+                aboutLogo);
+    }
+
+    private void initAppIcons() {
+        try {
+            java.net.URL imgUrl = getClass().getResource("/images/icon.jpg");
+            if (imgUrl != null) {
+                Image master = javax.imageio.ImageIO.read(imgUrl);
+                if (master != null) {
+                    java.util.List<Image> icons = new java.util.ArrayList<>();
+                    for (int size : new int[]{16, 24, 32, 48, 64, 128, 256}) {
+                        icons.add(master.getScaledInstance(size, size, Image.SCALE_SMOOTH));
+                    }
+                    setIconImages(icons);
+                }
+            }
+        } catch (Exception ex) {
+            log("Aviso ao carregar ícone da aplicação: " + ex.getMessage());
+        }
+    }
+
+    private ImageIcon getAppLogo(int width, int height) {
+        try {
+            java.net.URL imgUrl = getClass().getResource("/images/icon.jpg");
+            if (imgUrl != null) {
+                Image img = javax.imageio.ImageIO.read(imgUrl);
+                if (img != null) {
+                    Image scaled = img.getScaledInstance(width, height, Image.SCALE_SMOOTH);
+                    return new ImageIcon(scaled);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     private void setupListeners() {

@@ -127,6 +127,12 @@ $jpackageArgs = @(
     "--dest", $buildDestDir
 ) + $jvmOptions
 
+$iconPath = Join-Path $projectRoot "src\main\resources\images\app.ico"
+if (Test-Path $iconPath) {
+    Write-Host "  -> Aplicando ícone da aplicação: $iconPath" -ForegroundColor Cyan
+    $jpackageArgs += @("--icon", $iconPath)
+}
+
 & $jpackageExe @jpackageArgs
 
 if ($LASTEXITCODE -ne 0) {

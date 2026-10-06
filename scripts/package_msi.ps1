@@ -150,6 +150,12 @@ $msiArgs = @(
     "--win-upgrade-uuid", "7b6b29f0-32df-4ad0-b217-ef996f424c55"
 ) + $jvmOptions
 
+$iconPath = Join-Path $projectRoot "src\main\resources\images\app.ico"
+if (Test-Path $iconPath) {
+    Write-Host "  -> Aplicando ícone da aplicação no instalador MSI: $iconPath" -ForegroundColor Cyan
+    $msiArgs += @("--icon", $iconPath)
+}
+
 & $jpackageExe @msiArgs
 
 if ($LASTEXITCODE -ne 0) {

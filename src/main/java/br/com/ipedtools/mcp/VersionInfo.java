@@ -11,7 +11,7 @@ public final class VersionInfo {
 
     public static final String APP_NAME = "IPED Tools MCP";
     public static final String APP_DESCRIPTION = "Assistente de IA Forense para casos do IPED via Model Context Protocol";
-    public static final String OFFICIAL_WEBSITE = "https://www.ipedtools.com.br";
+    public static final String OFFICIAL_WEBSITE = "https://www.mcp.ipedtools.com.br";
     public static final String GITHUB_REPO = "https://github.com/thiagofuer/iped-tools-mcp";
     public static final String LICENSE = "GPLv3 / Open Source";
 
