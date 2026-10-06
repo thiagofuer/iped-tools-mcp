@@ -5,7 +5,7 @@
 [![Quarkus](https://img.shields.io/badge/Quarkus-3.39.3-red.svg)](https://quarkus.io/)
 [![MCP](https://img.shields.io/badge/MCP-2024--11--05-green.svg)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Distribution](https://img.shields.io/badge/Download-ipedtools.com.br-brightgreen.svg)](https://www.ipedtools.com.br)
+[![Distribution](https://img.shields.io/badge/Download-mcp.ipedtools.com.br-brightgreen.svg)](https://www.mcp.ipedtools.com.br)
 
 **IPED Tools MCP** é um servidor nativo baseado na especificação **Model Context Protocol (MCP)** que conecta Modelos de Linguagem e Inteligências Artificiais (como Claude Desktop, Claude Code, Cursor, Goose, LM Studio, Ollama e agentes autônomos) diretamente a casos processados pelo **IPED (Indexador e Processador de Evidências Digitais)**.
 
@@ -15,20 +15,22 @@ Elimina intermediários de rede e servidores HTTP legados, permitindo que a IA i
 
 ## 🌐 Distribuição Oficial e Código-Fonte
 
-- **Download Oficial de Executáveis e Instaladores:** [https://www.ipedtools.com.br](https://www.ipedtools.com.br)
+- **Download Oficial de Executáveis e Instaladores:** [https://www.mcp.ipedtools.com.br](https://www.mcp.ipedtools.com.br)
 - **Repositório de Código-Fonte:** [https://github.com/thiagofuer/iped-tools-mcp](https://github.com/thiagofuer/iped-tools-mcp)
 
-Os binários compilados para Windows (pacote portátil `.zip` e instalador `.msi` com runtime Java 21 embutido) e os manifestos criptográficos `SHA256SUMS.txt` são distribuídos através do portal oficial [www.ipedtools.com.br](https://www.ipedtools.com.br).
+Os binários compilados para Windows (pacote portátil `.zip` e instalador `.msi` com runtime Java 21 embutido) e os manifestos criptográficos `SHA256SUMS.txt` são distribuídos através do portal oficial [www.mcp.ipedtools.com.br](https://www.mcp.ipedtools.com.br).
 
 ---
 
 ## 🎯 Personas e Perfis de Uso
 
-O IPED Tools MCP foi projetado para atender aos diferentes atores do ecossistema de persecução penal e investigação digital:
+O IPED Tools MCP foi projetado para atender aos diferentes atores do ecossistema pericial, persecução penal, perícia judicial e contencioso digital:
 
 | Perfil | Foco de Atuação | Como o IPED Tools MCP Potencializa o Trabalho |
 |---|---|---|
-| **Perito Criminal / Perito Oficial** | Rigor técnico, preservação de cadeia de custódia, fundamentação do laudo pericial e auditoria de evidências. | Consultas precisas em metadados estructurados (EXIF, chats, geolocalização), extração de texto paginada, marcação de triagem para o laudo (`set_item_checked`) e inclusão em marcadores periciais (`add_to_bookmark`). |
+| **Perito Criminal / Perito Oficial** | Rigor técnico, preservação de cadeia de custódia, fundamentação do laudo pericial e auditoria de evidências. | Consultas precisas em metadados estruturados (EXIF, chats, geolocalização), extração de texto paginada, marcação de triagem para o laudo (`set_item_checked`) e inclusão em marcadores periciais (`add_to_bookmark`). |
+| **Perito Judicial** | Imparcialidade, equidistância das partes e rigor metodológico em demandas cíveis, trabalhistas ou criminais. Elaboração do laudo e resposta aos quesitos do juiz e das partes. | Resposta célere e fundamentada a quesitos complexos com suporte de IA consultando evidências indexadas, checagem de hashes e integridade, garantindo rastreabilidade das conclusões apresentadas ao juízo. |
+| **Assistente Técnico** | Análise crítica, formulação de quesitos estratégicos, acompanhamento das diligências e elaboração de parecer técnico para a parte representada. | Varredura ágil e profunda de grandes volumes probatórios, conferência da integridade e metodologia adotada nos laudos oficiais/judiciais, localização rápida de evidências favoráveis à tese da parte e subsídios para impugnações técnicas. |
 | **Analista de Inteligência Policial** | Identificação de padrões, vínculo entre suspeitos, fluxos financeiros e cronologia dos fatos. | Análise de grafos de comunicação (`get_communications_graph`), ranking de interlocutores mais frequentes (`get_top_contacts`), reconstrução de eventos ao redor de um marco temporal (`get_events_around_time`) e cruzamento de duplicatas por hash (`get_item_relations`). |
 | **Autoridade Policial / Delegado / Promotor** | Visão executiva da investigação, respostas a quesitos formulados e tomada rápida de decisões. | Resumos executivos de casos (`get_case_summary`), identificação rápida de alvos/dispositivos (`get_device_and_owner_info`), filtros automáticos de IA para detecção de armas/drogas/faces e busca multimodal por similares. |
 
