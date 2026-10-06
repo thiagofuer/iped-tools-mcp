@@ -68,8 +68,8 @@ O projeto adota a convenção de **Versionamento Semântico** no formato `MAJOR.
 
 Por se tratar de uma ferramenta voltada para perícia digital e investigação forense:
 
-1. **Jamais cometa evidências periciais:** Nunca adicione arquivos de casos reais, bancos SQLite locais (`*.mv.db`), arquivos de estado (`active_case.txt`, `*.iped`, `bookmarks.iped`) ao controle de versão.
-2. **Jamais cometa binários compilados:** Diretórios como `target/`, `dist/` e ferramentas externas como `tools/wix311` (104 MB) estão devidamente ignorados no `.gitignore` e não devem ser incluídos em commits.
+1. **Jamais versione evidências periciais:** Nunca adicione arquivos de casos reais, bancos SQLite locais (`*.mv.db`), arquivos de estado (`active_case.txt`, `*.iped`, `bookmarks.iped`) ao controle de versão.
+2. **Jamais versione binários compilados:** Diretórios como `target/`, `dist/` e ferramentas externas como `tools/wix311` (104 MB) estão devidamente ignorados no `.gitignore` e não devem ser incluídos em commits.
 3. **WiX Toolset:** O script `scripts/package_msi.ps1` é auto-suficiente e realiza o download sob demanda caso o ambiente não possua o binário localmente.
 
 ---
@@ -112,10 +112,25 @@ Utilizamos o padrão de **Conventional Commits**:
 
 ---
 
-## 🤝 Processo de Pull Request
+## 🤝 Processo de Contribuição e Pull Request
 
-1. Crie uma branch a partir de `develop` com nome descritivo (`feature/sua-feature` ou `fix/seu-fix`).
-2. Implemente suas alterações mantendo o código limpo e documentado.
-3. Execute a bateria completa de testes.
-4. Abra um Pull Request com destino à branch `develop`.
-5. Forneça uma descrição detalhada do que foi alterado, motivação e evidência de testes.
+Adotamos o fluxo padrão **Fork & Pull Request** do GitHub para contribuições da comunidade:
+
+1. **Faça um Fork:** Crie um fork do repositório [IPEDToolsMCP](https://github.com/thiagofuer/iped-tools-mcp) para sua conta pessoal no GitHub.
+2. **Clone localmente:** Clone o seu fork para a sua máquina:
+   ```bash
+   git clone https://github.com/SEU-USUARIO/iped-tools-mcp.git
+   cd iped-tools-mcp
+   ```
+3. **Crie uma branch:** A partir da branch `develop`, crie uma branch com nome descritivo:
+   ```bash
+   git checkout -b feature/sua-feature develop
+   # ou
+   git checkout -b fix/seu-fix develop
+   ```
+4. **Implemente e Teste:** Escreva o código mantendo o estilo do projeto e valide a suíte de testes (`mvn clean test`).
+5. **Faça o Push:** Envie a sua branch para o seu fork no GitHub:
+   ```bash
+   git push origin feature/sua-feature
+   ```
+6. **Abra o Pull Request:** Abra um Pull Request no GitHub tendo como destino (**base branch**) a branch `develop` do repositório oficial (`upstream`). Descreva com clareza a motivação, o que foi alterado e as evidências de teste.
