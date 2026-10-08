@@ -86,51 +86,34 @@ if (-not $wixFound) {
 # Adicionar WiX ao PATH para que o jpackage encontre candle.exe e light.exe
 $env:PATH = "$wixDir;" + $env:PATH
 
-$runtimeDir = Join-Path $projectRoot "target\runtime"
-if (-not (Test-Path $runtimeDir)) {
-    throw "Runtime em target\runtime nao encontrado. Execute scripts\package_app.ps1 primeiro."
-}
-
-# Preparar pasta de input para jpackage
-$inputDir = Join-Path $projectRoot "target\package-input"
-if (-not (Test-Path $inputDir)) {
-    New-Item -ItemType Directory -Path $inputDir | Out-Null
-}
-
-$expectedJar = Join-Path $projectRoot "target\iped-tools-mcp-$Version-runner.jar"
-if (Test-Path $expectedJar) {
-    $runnerJar = $expectedJar
-    $runnerJarName = "iped-tools-mcp-$Version-runner.jar"
-} else {
-    $candidates = Get-ChildItem -Path (Join-Path $projectRoot "target") -Filter "iped-tools-mcp-*-runner.jar" -File
-    if ($candidates -and $candidates.Count -gt 0) {
-        $runnerJar = $candidates[0].FullName
-        $runnerJarName = $candidates[0].Name
-    } else {
-        throw "Runner JAR nao encontrado em target\. Execute 'mvn package -DskipTests' primeiro."
-    }
-}
-Copy-Item $runnerJar -Destination (Join-Path $inputDir $runnerJarName) -Force
-
 $distDir = Join-Path $projectRoot "dist"
 if (-not (Test-Path $distDir)) {
     New-Item -ItemType Directory -Path $distDir | Out-Null
 }
 
-$jvmOptions = @(
-    "--java-options", "--add-opens=java.base/java.lang=ALL-UNNAMED",
-    "--java-options", "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
-    "--java-options", "--add-opens=java.base/java.math=ALL-UNNAMED",
-    "--java-options", "--add-opens=java.base/java.util=ALL-UNNAMED",
-    "--java-options", "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
-    "--java-options", "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
-    "--java-options", "--add-opens=java.base/java.net=ALL-UNNAMED",
-    "--java-options", "--add-opens=java.base/java.text=ALL-UNNAMED",
-    "--java-options", "--add-opens=java.base/java.nio=ALL-UNNAMED",
-    "--java-options", "--add-opens=java.base/java.io=ALL-UNNAMED"
-)
+$appImageDir = Join-Path $distDir "IPED-Tools-MCP"
+$appExe = Join-Path $appImageDir "IPED-Tools-MCP.exe"
 
-Write-Host "Executando jpackage para criar o instalador MSI..." -ForegroundColor Yellow
+# 2. Verificar integridade da imagem da aplicacao (app-image)
+if (-not (Test-Path $appExe)) {
+    Write-Host "[1/2] Imagem da aplicação não encontrada em $appImageDir. Executando scripts\package_app.ps1..." -ForegroundColor Yellow
+    & (Join-Path $PSScriptRoot "package_app.ps1") -JdkPath $JdkPath -Version $Version
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $appExe)) {
+        throw "Falha ao gerar imagem da aplicação via package_app.ps1."
+    }
+}
+
+# 3. Garantir que os bundles de localização estejam presentes na imagem da aplicacao
+$appLocDir = Join-Path $appImageDir "localization"
+if (-not (Test-Path $appLocDir)) {
+    Write-Host "  -> Sincronizando pasta de localização para $appLocDir..." -ForegroundColor Yellow
+    $locSource = Join-Path $projectRoot "localization"
+    if (Test-Path $locSource) {
+        Copy-Item -Recurse -Force $locSource $appLocDir
+    }
+}
+
+Write-Host "Executando jpackage para criar o instalador MSI a partir da imagem da aplicação..." -ForegroundColor Yellow
 
 $msiArgs = @(
     "--type", "msi",
@@ -138,17 +121,14 @@ $msiArgs = @(
     "--app-version", $numericVersion,
     "--vendor", "IPED Open Source Project",
     "--description", "IPED Tools MCP - Conector LLM e Servidor Forense",
-    "--input", $inputDir,
-    "--main-jar", $runnerJarName,
-    "--main-class", "br.com.ipedtools.mcp.McpApplication",
-    "--runtime-image", $runtimeDir,
+    "--app-image", $appImageDir,
     "--dest", $distDir,
     "--win-dir-chooser",
     "--win-menu",
     "--win-menu-group", "IPED Tools",
     "--win-shortcut",
     "--win-upgrade-uuid", "7b6b29f0-32df-4ad0-b217-ef996f424c55"
-) + $jvmOptions
+)
 
 $iconPath = Join-Path $projectRoot "src\main\resources\images\app.ico"
 if (Test-Path $iconPath) {
@@ -162,7 +142,11 @@ if ($LASTEXITCODE -ne 0) {
     throw "Falha ao gerar MSI (codigo: $LASTEXITCODE)"
 }
 
-$msiFile = Join-Path $distDir "IPED-Tools-MCP-$Version.msi"
+$msiCandidate = Join-Path $distDir "IPED-Tools-MCP-$numericVersion.msi"
+if (-not (Test-Path $msiCandidate)) {
+    $msiCandidate = Join-Path $distDir "IPED-Tools-MCP-$Version.msi"
+}
+$msiFile = $msiCandidate
 if (Test-Path $msiFile) {
     $msiSizeMb = [math]::Round((Get-Item $msiFile).Length / 1MB, 2)
     Write-Host ""

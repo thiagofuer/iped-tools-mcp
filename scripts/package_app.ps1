@@ -151,14 +151,22 @@ if ($activeProcesses) {
 Copy-Item -Path "$builtAppDir\*" -Destination $targetAppDir -Recurse -Force
 Write-Host "  -> Pacote criado em: $targetAppDir" -ForegroundColor Green
 
-# 4. Copiar bundle de localização para dentro do pacote
+# 4. Copiar bundle de localização para dentro do pacote (raiz da aplicação)
 Write-Host "[3/4] Copiando bundles de localização..." -ForegroundColor Yellow
 $locSource = Join-Path $projectRoot "localization"
 if (Test-Path $locSource) {
-    Copy-Item -Recurse -Force $locSource (Join-Path $distDir "IPED-Tools-MCP\app\localization")
-    Copy-Item -Recurse -Force $locSource (Join-Path $distDir "IPED-Tools-MCP\localization")
-    Write-Host "  -> Bundles de localização copiados com sucesso." -ForegroundColor Green
+    $targetLoc = Join-Path $distDir "IPED-Tools-MCP\localization"
+    if (Test-Path $targetLoc) { Remove-Item -Recurse -Force $targetLoc }
+    Copy-Item -Recurse -Force $locSource $targetLoc
+
+    # Limpar subpasta app/localization caso tenha sobrado de builds legados
+    $appLoc = Join-Path $distDir "IPED-Tools-MCP\app\localization"
+    if (Test-Path $appLoc) { Remove-Item -Recurse -Force $appLoc }
+
+    Write-Host "  -> Bundles de localização copiados com sucesso para a raiz da aplicação." -ForegroundColor Green
 }
+
+
 
 # 5. Criar ZIP portatil para distribuicao rapida
 Write-Host "[4/4] Gerando arquivo ZIP portatil para distribuicao..." -ForegroundColor Yellow

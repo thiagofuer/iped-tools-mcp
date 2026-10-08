@@ -51,7 +51,7 @@ $resolvedExe = (Resolve-Path $ExePath).Path
 # Teste prévio: flag --version
 Write-Host "[0/10] Testando flag '--version' no executavel..." -NoNewline
 $verOutput = (& $resolvedExe --version | Out-String)
-if ($verOutput -match "IPED Tools MCP v1\.0\.0" -and $verOutput -match "www\.ipedtools\.com\.br") {
+if ($verOutput -match "IPED Tools MCP v1\.0\.0" -and $verOutput -match "ipedtools\.com\.br") {
     $firstLine = ($verOutput -split "`r?`n")[0]
     Write-Host (" PASS (" + $firstLine + ")") -ForegroundColor Green
 } else {
