@@ -148,6 +148,15 @@ if ($activeProcesses) {
     Start-Sleep -Seconds 2
 }
 
+# Limpar o diretório de destino para evitar acumular JARs ou binários de versões anteriores
+if (Test-Path $targetAppDir) {
+    Get-ChildItem -Path $targetAppDir -Recurse -Force | ForEach-Object {
+        if ($_.IsReadOnly) { $_.IsReadOnly = $false }
+    }
+    Remove-Item -Recurse -Force $targetAppDir
+}
+New-Item -ItemType Directory -Path $targetAppDir | Out-Null
+
 Copy-Item -Path "$builtAppDir\*" -Destination $targetAppDir -Recurse -Force
 Write-Host "  -> Pacote criado em: $targetAppDir" -ForegroundColor Green
 
