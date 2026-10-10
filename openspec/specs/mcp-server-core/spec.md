@@ -20,11 +20,19 @@ The server SHALL guarantee that `stdout` is strictly reserved for JSON-RPC frame
 - **THEN** those messages are emitted to `stderr` and never written to `stdout`.
 
 ### Requirement: Headless Dispatch Mode
-The application entrypoint (`McpApplication`) SHALL detect command-line flags and route execution directly to the headless Quarkus MCP runtime when `--stdio` is present.
+The application entrypoint (`McpApplication`) SHALL detect command-line flags and route execution directly to the headless Quarkus MCP runtime when `--stdio` is present, safeguarding working directory resolution against restricted system paths (such as `System32`) and performing case index synchronization asynchronously to ensure JSON-RPC handshake readiness in under 1 second.
 
 #### Scenario: Application started by client LLM
 - **WHEN** the process is spawned with `--stdio`
 - **THEN** the graphical interface is suppressed and the server enters the blocking STDIO event loop immediately.
+
+#### Scenario: Subprocess inherits restricted working directory
+- **WHEN** the process is spawned by a Windows store or MSIX client with `user.dir` pointing to `C:\Windows\System32` or a non-writable directory
+- **THEN** the server overrides `user.dir` to a safe user directory before Quarkus configuration initialization, preventing `AccessDeniedException` on `System32\config`.
+
+#### Scenario: Pre-synchronizing active case index
+- **WHEN** the server starts in `--stdio` mode without explicit `--case` while an active case is registered
+- **THEN** case index preloading runs in a background daemon thread so that initial protocol handshake (`initialize`, `tools/list`) completes without delay or timeout.
 
 ### Requirement: Read-Only Evidence Chain of Custody
 The server SHALL access all raw evidence, Lucene indexes, and parsed SQLite databases strictly in read-only mode to preserve evidentiary integrity and forensic chain of custody. The only write operations permitted on the filesystem SHALL be user-directed bookmarks (`bookmarks.iped`), triage selection state, and the user-level configuration file (`~/.iped-tools-mcp/active_case.txt`).

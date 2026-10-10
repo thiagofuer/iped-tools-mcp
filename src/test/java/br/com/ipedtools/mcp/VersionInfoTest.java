@@ -14,7 +14,7 @@ class VersionInfoTest {
     @Test
     void testVersionPropertiesLoaded() {
         assertNotNull(VersionInfo.getVersion());
-        assertTrue(VersionInfo.getVersion().startsWith("1.0.0"));
+        assertTrue(VersionInfo.getVersion().startsWith("1.0.1"));
         assertNotNull(VersionInfo.getBuildTimestamp());
         assertNotNull(VersionInfo.getIpedCoreVersion());
         assertTrue(VersionInfo.getFullVersionString().contains("IPED Tools MCP v" + VersionInfo.getVersion()));

@@ -14,7 +14,7 @@ powershell -ExecutionPolicy Bypass -File scripts\package_app.ps1
 
 ### Artefatos Gerados:
 * `dist/IPED-Tools-MCP/` — Diretório com o executável e bibliotecas descompactadas.
-* `dist/IPED-Tools-MCP-1.0.0-windows-x64-portable.zip` — Pacote portátil compactado.
+* `dist/IPED-Tools-MCP-1.0.1-windows-x64-portable.zip` — Pacote portátil compactado.
 * `dist/SHA256SUMS.txt` — Manifesto de hashes criptográficos SHA-256 gerado automaticamente.
 
 ---
@@ -29,7 +29,7 @@ powershell -ExecutionPolicy Bypass -File scripts\package_msi.ps1
 
 ### Pré-requisitos do Instalador:
 * **WiX Toolset v3.11:** O script verifica e utiliza automaticamente o WiX Toolset localizado em `tools/wix311/` no próprio repositório.
-* **Artefato Gerado:** `dist/IPED-Tools-MCP-1.0.0.msi` e atualização do `dist/SHA256SUMS.txt`.
+* **Artefato Gerado:** `dist/IPED-Tools-MCP-1.0.1.msi` e atualização do `dist/SHA256SUMS.txt`.
 
 ---
 

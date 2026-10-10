@@ -28,7 +28,7 @@ if (-not $JarPath -or -not (Test-Path $JarPath)) {
     if ($candidates -and $candidates.Count -gt 0) {
         $JarPath = $candidates[0].FullName
     } else {
-        $JarPath = "target\iped-tools-mcp-1.0.0-runner.jar"
+        $JarPath = "target\iped-tools-mcp-1.0.1-runner.jar"
     }
 }
 
@@ -117,10 +117,10 @@ try {
         capabilities = @{}
         clientInfo = @{ name = "mcp-test-suite"; version = "1.0" }
     }
-    if ($init.result.serverInfo.name -eq "iped-tools-mcp" -and $init.result.serverInfo.version -like "1.0.0*") {
+    if ($init.result.serverInfo.name -eq "iped-tools-mcp" -and $init.result.serverInfo.version -like "1.0.1*") {
         Write-Host (" PASS (versao: " + $init.result.serverInfo.version + ")") -ForegroundColor Green
     } else {
-        Write-Host (" FAIL (esperava v1.0.0*, obteve " + $init.result.serverInfo.version + ")") -ForegroundColor Red; exit 1
+        Write-Host (" FAIL (esperava v1.0.1*, obteve " + $init.result.serverInfo.version + ")") -ForegroundColor Red; exit 1
     }
 
     # 2. Handshake Initialized Notification
@@ -164,7 +164,7 @@ try {
     Write-Host "[5/15] Testando call get_server_status..." -NoNewline
     $statusCall = Send-RpcRequest "tools/call" @{ name = "get_server_status"; arguments = @{} }
     $statusData = $statusCall.result.content[0].text | ConvertFrom-Json
-    if ($statusData.connected -and $statusData.case_open -and $statusData.server_version -like "1.0.0*") {
+    if ($statusData.connected -and $statusData.case_open -and $statusData.server_version -like "1.0.1*") {
         Write-Host (" PASS (Versao: " + $statusData.server_version + " | Fonte: " + $statusData.case_source_id + ")") -ForegroundColor Green
     } else {
         Write-Host " FAIL" -ForegroundColor Red; exit 1

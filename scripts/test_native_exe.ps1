@@ -108,7 +108,7 @@ try {
         capabilities = @{}
         clientInfo = @{ name = "exe-test"; version = "1.0" }
     }
-    if ($init.result.serverInfo.name -eq "iped-tools-mcp" -and $init.result.serverInfo.version -like "1.0.0*") {
+    if ($init.result.serverInfo.name -eq "iped-tools-mcp" -and $init.result.serverInfo.version -like "1.0.1*") {
         Write-Host (" PASS (versao: " + $init.result.serverInfo.version + ")") -ForegroundColor Green
     } else {
         Write-Host " FAIL" -ForegroundColor Red; exit 1
@@ -128,7 +128,7 @@ try {
     Write-Host "[3/10] Testando get_server_status..." -NoNewline
     $statusCall = Send-RpcRequest "tools/call" @{ name = "get_server_status"; arguments = @{} }
     $statusData = $statusCall.result.content[0].text | ConvertFrom-Json
-    if ($statusData.connected -and $statusData.case_open -and $statusData.server_version -like "1.0.0*") {
+    if ($statusData.connected -and $statusData.case_open -and $statusData.server_version -like "1.0.1*") {
         Write-Host (" PASS (Versao: " + $statusData.server_version + " | Fonte: " + $statusData.case_source_id + ")") -ForegroundColor Green
     } else {
         Write-Host " FAIL" -ForegroundColor Red; exit 1

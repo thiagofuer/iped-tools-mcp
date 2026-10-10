@@ -39,7 +39,7 @@ The MCP server runtime SHALL advertise the authoritative SemVer release version 
 - **THEN** the returned JSON payload includes a `server_version` property containing the SemVer release version.
 
 ### Requirement: Repository Hygiene and Governance Documentation
-The project repository SHALL maintain strict `.gitignore` exclusions and comprehensive documentation for GitFlow development, semantic versioning, binary distribution, and forensic user personas across criminal, judicial, and private litigation contexts.
+The project repository SHALL maintain strict `.gitignore` exclusions and comprehensive documentation for GitFlow development, semantic versioning, binary distribution, and forensic user personas across criminal, judicial, and private litigation contexts. The `README.md` SHALL act as a concise entry point that directs users to the GitHub Wiki for installation, configuration, usage, tool reference, and development guides.
 
 #### Scenario: Contributor builds project in a clean clone
 - **WHEN** a developer compiles and packages the project
@@ -56,3 +56,27 @@ The project repository SHALL maintain strict `.gitignore` exclusions and compreh
 #### Scenario: User inspects forensic personas and usage profiles in README
 - **WHEN** an examiner, judicial expert, or legal actor accesses `README.md` to evaluate target use cases
 - **THEN** the "Personas e Perfis de Uso" section explicitly documents the roles and tool capabilities for Perito Criminal Oficial, Perito Judicial, Assistente Técnico, Analista de Inteligência Policial, and Autoridade Policial/Delegado/Promotor.
+
+#### Scenario: User looks for setup and usage guidance in README
+- **WHEN** a user accesses `README.md` to learn how to install, configure, or use the product
+- **THEN** the README presents a short quickstart and links to the GitHub Wiki, and does not duplicate the tool catalog, per-client configuration guides, architecture, or build instructions.
+
+#### Scenario: README lists supported AI clients
+- **WHEN** the README mentions compatible AI clients
+- **THEN** it names only clients that have a configuration guide in the GitHub Wiki
+
+### Requirement: Production Release 1.0.0 Tagging and Branch Governance
+The project SHALL formalize the first production general-availability release (`1.0.0`) by dropping the `-SNAPSHOT` development suffix in `pom.xml`, establishing the canonical production `main` branch, generating an immutable release Git tag `v1.0.0`, and producing validated distribution binaries.
+
+#### Scenario: User queries production release version
+- **WHEN** the user executes `IPED-Tools-MCP.exe --version`
+- **THEN** the application outputs `IPED Tools MCP v1.0.0` without any `-SNAPSHOT` suffix and exits with code 0.
+
+#### Scenario: Contributor verifies production Git repository state
+- **WHEN** the release transition completes
+- **THEN** branch `main` exists containing the identical commits from `develop`, and tag `v1.0.0` points directly to the release commit on `main`.
+
+#### Scenario: Examiner downloads verified production binaries
+- **WHEN** the examiner obtains `IPED-Tools-MCP-1.0.0-windows-x64-portable.zip` or `IPED-Tools-MCP-1.0.0.msi`
+- **THEN** both distribution files match their respective cryptographic hashes recorded in `SHA256SUMS.txt`.
+

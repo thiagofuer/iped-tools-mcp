@@ -6,7 +6,7 @@
 
     <groupId>br.com.ipedtools</groupId>
     <artifactId>iped-tools-mcp</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <packaging>jar</packaging>
 
     <name>IPED Tools MCP</name>

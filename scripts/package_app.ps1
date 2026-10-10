@@ -14,14 +14,14 @@ if (-not $Version) {
         $pomXml = [xml](Get-Content (Join-Path $projectRoot "pom.xml"))
         $Version = $pomXml.project.version
     } catch {
-        $Version = "1.0.0"
+        $Version = "1.0.1"
     }
 }
 
 # jpackage exige formato de versao estritamente numerico (ex: 1.0.0), sem sufixos como -SNAPSHOT
 $numericVersion = ($Version -replace '-.*$', '').Trim()
 if (-not ($numericVersion -match '^\d+(\.\d+)*$')) {
-    $numericVersion = "1.0.0"
+    $numericVersion = "1.0.1"
 }
 
 Write-Host "==========================================================" -ForegroundColor Cyan
@@ -102,6 +102,7 @@ if (Test-Path $buildDestDir) { Remove-Item -Recurse -Force $buildDestDir }
 New-Item -ItemType Directory -Path $buildDestDir | Out-Null
 
 $jvmOptions = @(
+    "--java-options", '-Duser.dir=$APPDIR',
     "--java-options", "--add-opens=java.base/java.lang=ALL-UNNAMED",
     "--java-options", "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
     "--java-options", "--add-opens=java.base/java.math=ALL-UNNAMED",
