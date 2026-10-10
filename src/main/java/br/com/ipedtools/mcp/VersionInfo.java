@@ -15,7 +15,7 @@ public final class VersionInfo {
     public static final String GITHUB_REPO = "https://github.com/thiagofuer/iped-tools-mcp";
     public static final String LICENSE = "GPLv3 / Open Source";
 
-    private static String version = "1.0.0";
+    private static String version = "1.0.1";
     private static String buildTimestamp = "2026-09-29";
     private static String ipedVersion = "4.4.0";
 

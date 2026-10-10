@@ -8,7 +8,7 @@ O IPED Tools MCP oferece duas modalidades de distribuição para Windows: o **In
 
 Ideal para estações de trabalho e gabinetes de perícia.
 
-1. Baixe o arquivo `IPED-Tools-MCP-1.0.0.msi` do portal oficial [www.mcp.ipedtools.com.br](https://www.mcp.ipedtools.com.br).
+1. Baixe o arquivo `IPED-Tools-MCP-1.0.1.msi` do portal oficial [www.mcp.ipedtools.com.br](https://www.mcp.ipedtools.com.br).
 2. Execute o instalador com privilégios de administrador.
 3. Siga o assistente de instalação padrão do Windows.
 4. Por padrão, o executável é instalado em:
@@ -23,7 +23,7 @@ Ideal para estações de trabalho e gabinetes de perícia.
 
 Indicado para execução direta sem necessidade de privilégios de administrador, pendrives ou unidades externas de perícia.
 
-1. Baixe o arquivo `IPED-Tools-MCP-1.0.0-windows-x64-portable.zip` do portal oficial.
+1. Baixe o arquivo `IPED-Tools-MCP-1.0.1-windows-x64-portable.zip` do portal oficial.
 2. Descompacte o arquivo `.zip` na pasta de sua preferência (exemplo: `C:\Ferramentas\IPED-Tools-MCP\`).
 3. A estrutura da pasta extraída conterá:
    * `IPED-Tools-MCP.exe` — Executável principal unificado (GUI e MCP STDIO).
@@ -45,7 +45,7 @@ Para confirmar se a instalação foi bem-sucedida, abra o Prompt de Comando (`cm
 A saída esperada deve exibir a versão instalada, data do build e runtime Java:
 
 ```text
-IPED Tools MCP v1.0.0 (build 2026-10-08 17:37:34, Java 21.0.12, IPED Core 4.4.0-SNAPSHOT)
+IPED Tools MCP v1.0.1 (build 2026-10-10, Java 21, IPED Core 4.4.0)
 Website: https://www.mcp.ipedtools.com.br
 Codigo-fonte: https://github.com/thiagofuer/iped-tools-mcp
 Licenca: GPLv3 / Open Source

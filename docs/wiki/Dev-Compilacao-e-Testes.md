@@ -25,7 +25,7 @@ mvn clean package -DskipTests
 
 O artefato compilado é gerado em:
 ```text
-target/iped-tools-mcp-1.0.0-runner.jar
+target/iped-tools-mcp-1.0.1-runner.jar
 ```
 
 ---

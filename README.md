@@ -1,6 +1,6 @@
 # IPED Tools MCP
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](pom.xml)
+[![Version](https://img.shields.io/badge/version-1.0.1-blue.svg)](pom.xml)
 [![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/projects/jdk/21/)
 [![Quarkus](https://img.shields.io/badge/Quarkus-3.39.3-red.svg)](https://quarkus.io/)
 [![MCP](https://img.shields.io/badge/MCP-2024--11--05-green.svg)](https://modelcontextprotocol.io/)

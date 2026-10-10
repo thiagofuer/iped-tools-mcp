@@ -9,6 +9,10 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Unreleased]
 
+---
+
+## [1.0.1] - 2026-10-10
+
 ### Adicionado
 - **Prompt Forense MCP `start_case` (`ForensicPrompts`):**
   - Implementação do prompt pericial `start_case` estabelecendo o protocolo de engajamento entre o LLM e o caso IPED ativo.
@@ -36,6 +40,10 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
   - Suíte de testes unitários expandida para 52 testes com 100% de aprovação em `IpedCoreServiceTest`, `McpToolsTest` e `VersionInfoTest`.
 
 ### Corrigido
+- **Compatibilidade de Inicialização com Claude Desktop e Windows MSIX:**
+  - Salvaguarda automática da propriedade `user.dir` no método `main` de `McpApplication`, redirecionando para `~/.iped-tools-mcp` quando o processo herda diretório restrito do sistema (`C:\Windows\System32`), prevenindo falhas fatais com `AccessDeniedException` ao acessar `System32\config`.
+  - Inicialização assíncrona do leitor de casos IPED no modo `--stdio` via thread daemon (`iped-case-preloader`), liberando o loop de eventos STDIN do Quarkus em menos de 1,5 segundos para evitar estouro de timeout de conexão em clientes MCP.
+  - Injeção da opção JVM `-Duser.dir=$APPDIR` no arquivo de configuração nativo `IPED-Tools-MCP.cfg` e script de empacotamento `package_app.ps1`.
 - **Subsistema GUI no Executável Nativo Windows:**
   - Remoção da flag `--win-console` no `package_app.ps1` e `package_msi.ps1`, restaurando o subsistema `IMAGE_SUBSYSTEM_WINDOWS_GUI` e prevenindo a abertura de janela fantasma de terminal ao executar o aplicativo por duplo-clique.
   - Preservação dos descritores de stream `stdin`/`stdout` para comunicação JSON-RPC quando executado via clientes MCP.
