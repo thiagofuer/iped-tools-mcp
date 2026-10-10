@@ -129,8 +129,9 @@ Adotamos o fluxo padrão **Fork & Pull Request** do GitHub para contribuições 
    git checkout -b fix/seu-fix develop
    ```
 4. **Implemente e Teste:** Escreva o código mantendo o estilo do projeto e valide a suíte de testes (`mvn clean test`).
-5. **Faça o Push:** Envie a sua branch para o seu fork no GitHub:
+5. **Atualize a Documentação da Wiki:** Se a sua contribuição adicionar, renomear ou modificar ferramentas MCP (`@Tool`), opções de linha de comando ou recursos do configurador gráfico, **atualize as páginas correspondentes em `docs/wiki/` no mesmo Pull Request**. O diretório `docs/wiki/` é a fonte única da verdade para a wiki oficial do projeto e é sincronizado automaticamente na release.
+6. **Faça o Push:** Envie a sua branch para o seu fork no GitHub:
    ```bash
    git push origin feature/sua-feature
    ```
-6. **Abra o Pull Request:** Abra um Pull Request no GitHub tendo como destino (**base branch**) a branch `develop` do repositório oficial (`upstream`). Descreva com clareza a motivação, o que foi alterado e as evidências de teste.
+7. **Abra o Pull Request:** Abra um Pull Request no GitHub tendo como destino (**base branch**) a branch `develop` do repositório oficial (`upstream`). Descreva com clareza a motivação, o que foi alterado e as evidências de teste.

@@ -1,0 +1,64 @@
+name: Publicar Wiki Oficial
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/wiki/**'
+  workflow_dispatch:
+
+concurrency:
+  group: publish-wiki
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish-wiki:
+    name: Sincronizar docs/wiki para a Wiki do GitHub
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do Repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Git e Clonar Repositório da Wiki
+        id: clone_wiki
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Clonando o repositório da wiki do GitHub..."
+          if ! git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.wiki.git" wiki; then
+            echo "::error::Não foi possível clonar a wiki do repositório (${{ github.repository }}.wiki.git)."
+            echo "::error::A Wiki do GitHub só é inicializada fisicamente após a criação manual da primeira página pela interface web."
+            echo "::error::Por favor, acesse a aba 'Wiki' no repositório, clique em 'Create the first page', salve a página provisória e reexecute este workflow."
+            exit 1
+          fi
+
+      - name: Sincronizar Arquivos da Wiki
+        run: |
+          echo "Sincronizando arquivos de docs/wiki/ para wiki/..."
+          rsync -av --delete --exclude '.git' docs/wiki/ wiki/
+
+      - name: Publicar Alterações na Wiki
+        working-directory: wiki
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "Nenhuma alteração detectada. A Wiki já está em sincronia exata com docs/wiki/."
+            exit 0
+          fi
+
+          echo "Alterações detectadas na documentação. Gerando commit..."
+          git add -A
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          git commit -m "docs(wiki): sincroniza wiki com docs/wiki@${SHORT_SHA}"
+          
+          # No GitHub Wiki a branch principal padrão é 'master'
+          DEFAULT_BRANCH=$(git branch --show-current)
+          echo "Enviando commit para a branch ${DEFAULT_BRANCH}..."
+          git push origin "${DEFAULT_BRANCH}"

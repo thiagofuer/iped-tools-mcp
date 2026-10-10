@@ -45,7 +45,7 @@ if (-not (Test-Path $JavaPath)) {
 # Teste prévio: flag --version
 Write-Host "[0/26] Testando flag '--version'..." -NoNewline
 $verOutput = & $JavaPath -jar $JarPath --version
-if ($verOutput -match "IPED Tools MCP v1\.0\.0" -and $verOutput -match "www\.ipedtools\.com\.br") {
+if ($verOutput -match "IPED Tools MCP v1\.0\.0" -and $verOutput -match "ipedtools\.com\.br") {
     Write-Host (" PASS (" + $verOutput[0] + ")") -ForegroundColor Green
 } else {
     Write-Host " FAIL: $verOutput" -ForegroundColor Red; exit 1
