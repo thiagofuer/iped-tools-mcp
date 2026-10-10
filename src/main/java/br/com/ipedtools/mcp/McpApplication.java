@@ -23,6 +23,18 @@ public class McpApplication {
     private static final Logger LOGGER = LoggerFactory.getLogger(McpApplication.class);
 
     public static void main(String... args) {
+        // Safeguard user.dir when launched by clients like Claude Desktop (Windows Store / MSIX)
+        // which default child process working directory to C:\Windows\System32.
+        // Quarkus scans ${user.dir}/config for config files, throwing AccessDeniedException on C:\Windows\System32\config.
+        String currentDir = System.getProperty("user.dir", "");
+        if (currentDir.toLowerCase().contains("system32") || !new File(currentDir).canWrite()) {
+            File fallbackDir = new File(System.getProperty("user.home", "."), ".iped-tools-mcp");
+            if (!fallbackDir.exists()) {
+                fallbackDir.mkdirs();
+            }
+            System.setProperty("user.dir", fallbackDir.getAbsolutePath());
+        }
+
         boolean stdioMode = false;
         String casePath = null;
 
@@ -58,14 +70,22 @@ public class McpApplication {
                     System.err.println("ERRO: Não foi possível carregar o caso especificado: " + e.getMessage());
                 }
             } else {
-                LOGGER.info("Nenhum caso especificado com '--case'. Verificando caso ativo na GUI...");
-                IpedCoreService.getInstance().syncActiveCaseIfNeeded();
-                if (IpedCoreService.getInstance().isCaseOpen()) {
-                    LOGGER.info("Caso ativo carregado automaticamente da GUI: {}",
-                            IpedCoreService.getInstance().getCaseDirectory().getAbsolutePath());
-                } else {
-                    LOGGER.warn("Nenhum caso ativo encontrado. As ferramentas aguardarão seleção posterior ou comando 'open_case'.");
-                }
+                LOGGER.info("Nenhum caso especificado com '--case'. Sincronizando caso ativo em segundo plano...");
+                Thread preloader = new Thread(() -> {
+                    try {
+                        IpedCoreService.getInstance().syncActiveCaseIfNeeded();
+                        if (IpedCoreService.getInstance().isCaseOpen()) {
+                            LOGGER.info("Caso ativo carregado automaticamente da GUI: {}",
+                                    IpedCoreService.getInstance().getCaseDirectory().getAbsolutePath());
+                        } else {
+                            LOGGER.warn("Nenhum caso ativo encontrado. As ferramentas aguardarão seleção posterior ou comando 'open_case'.");
+                        }
+                    } catch (Exception e) {
+                        LOGGER.debug("Erro na pré-carga assíncrona do caso: {}", e.getMessage());
+                    }
+                }, "iped-case-preloader");
+                preloader.setDaemon(true);
+                preloader.start();
             }
 
             Quarkus.run(args);

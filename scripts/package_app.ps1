@@ -102,6 +102,7 @@ if (Test-Path $buildDestDir) { Remove-Item -Recurse -Force $buildDestDir }
 New-Item -ItemType Directory -Path $buildDestDir | Out-Null
 
 $jvmOptions = @(
+    "--java-options", '-Duser.dir=$APPDIR',
     "--java-options", "--add-opens=java.base/java.lang=ALL-UNNAMED",
     "--java-options", "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
     "--java-options", "--add-opens=java.base/java.math=ALL-UNNAMED",
