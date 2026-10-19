@@ -45,13 +45,17 @@ if (-not (Test-Path $JavaPath)) {
 # Teste prévio: flag --version
 Write-Host "[0/26] Testando flag '--version'..." -NoNewline
 $verOutput = & $JavaPath -jar $JarPath --version
-if ($verOutput -match "IPED Tools MCP v1\.0\.0" -and $verOutput -match "ipedtools\.com\.br") {
+if ($verOutput -match "IPED Tools MCP v1\.\d+\.\d+" -and $verOutput -match "ipedtools\.com\.br") {
     Write-Host (" PASS (" + $verOutput[0] + ")") -ForegroundColor Green
 } else {
     Write-Host " FAIL: $verOutput" -ForegroundColor Red; exit 1
 }
 
 $jvmArgs = @(
+    "-Dfile.encoding=UTF-8",
+    "-Dstdout.encoding=UTF-8",
+    "-Dstderr.encoding=UTF-8",
+    "-Dstdin.encoding=UTF-8",
     "--add-opens=java.base/java.lang=ALL-UNNAMED",
     "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
     "--add-opens=java.base/java.math=ALL-UNNAMED",
@@ -72,11 +76,13 @@ $psi.Arguments = ($jvmArgs -join " ")
 $psi.RedirectStandardInput = $true
 $psi.RedirectStandardOutput = $true
 $psi.RedirectStandardError = $false
+$psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
 $psi.UseShellExecute = $false
 $psi.CreateNoWindow = $true
 
 $proc = [System.Diagnostics.Process]::Start($psi)
-$writer = $proc.StandardInput
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$writer = New-Object System.IO.StreamWriter($proc.StandardInput.BaseStream, $utf8NoBom)
 $reader = $proc.StandardOutput
 
 $reqId = 1
@@ -213,11 +219,11 @@ try {
     $metaData = $metaText | ConvertFrom-Json
     $item = if ($metaData -is [System.Array]) { $metaData[0] } else { $metaData }
     $docName = if ($item.properties.basic) { $item.properties.basic.name } else { $item.properties.name }
-    if ($item.id -eq $sampleDocId -and $item.properties) {
+    if ($item.id -eq $sampleDocId -and $item.properties -and -not $metaText.Contains([char]0xFFFD)) {
         $blocks = ($item.properties | Get-Member -MemberType NoteProperty).Name -join ", "
         Write-Host (" PASS (Nome: " + $docName + " | Blocos presentes: " + $blocks + ")") -ForegroundColor Green
     } else {
-        Write-Host " FAIL" -ForegroundColor Red; exit 1
+        Write-Host " FAIL (Metadados invalidos ou corrupcao UTF-8 U+FFFD detectada)" -ForegroundColor Red; exit 1
     }
 
     # 11. Call get_document_text
@@ -230,23 +236,26 @@ try {
         Write-Host " FAIL" -ForegroundColor Red; exit 1
     }
 
-    # 12. Call list_categories & list_bookmarks
-    Write-Host "[11/15] Testando calls list_categories e list_bookmarks..." -NoNewline
+    # 12. Call list_sources, list_categories & list_bookmarks
+    Write-Host "[11/15] Testando calls list_sources, list_categories e list_bookmarks (UTF-8)..." -NoNewline
+    $sourcesCall = Send-RpcRequest "tools/call" @{ name = "list_sources"; arguments = @{} }
+    $sourcesJson = ($sourcesCall | ConvertTo-Json -Depth 6 -Compress)
     $catsCall = Send-RpcRequest "tools/call" @{ name = "list_categories"; arguments = @{} }
     $catsCount = $catsCall.result.content.Count
     $bmsCall = Send-RpcRequest "tools/call" @{ name = "list_bookmarks"; arguments = @{} }
     $bmsCount = $bmsCall.result.content.Count
-    if ($catsCount -gt 0) {
-        Write-Host (" PASS (" + $catsCount + " categorias, " + $bmsCount + " marcadores)") -ForegroundColor Green
+    if ($catsCount -gt 0 -and -not $sourcesJson.Contains([char]0xFFFD)) {
+        Write-Host (" PASS (" + $catsCount + " categorias, " + $bmsCount + " marcadores, UTF-8 integro)") -ForegroundColor Green
     } else {
-        Write-Host " FAIL" -ForegroundColor Red; exit 1
+        Write-Host " FAIL (Categorias vazias ou corrupcao UTF-8 U+FFFD em list_sources)" -ForegroundColor Red; exit 1
     }
 
-    # 13. Call add_to_bookmark
-    Write-Host "[12/15] Testando call add_to_bookmark..." -NoNewline
-    $addBmCall = Send-RpcRequest "tools/call" @{ name = "add_to_bookmark"; arguments = @{ bookmark_name = "Pericia AI"; doc_ids = @($sampleDocId) } }
+    # 13. Call add_to_bookmark (com acentuacao UTF-8)
+    $expectedBm = "Per$([char]0x00ED)cia IA"
+    Write-Host ("[12/15] Testando call add_to_bookmark (UTF-8 '" + $expectedBm + "')...") -NoNewline
+    $addBmCall = Send-RpcRequest "tools/call" @{ name = "add_to_bookmark"; arguments = @{ bookmark_name = $expectedBm; doc_ids = @($sampleDocId) } }
     $addBmText = $addBmCall.result.content[0].text
-    if ($addBmText -match "Sucesso") {
+    if ($addBmText -match "Sucesso" -and $addBmText.Contains($expectedBm) -and -not $addBmText.Contains([char]0xFFFD)) {
         Write-Host (" PASS (" + $addBmText + ")") -ForegroundColor Green
     } else {
         Write-Host (" FAIL (" + $addBmText + ")") -ForegroundColor Red; exit 1
