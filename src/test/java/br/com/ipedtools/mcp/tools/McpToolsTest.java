@@ -353,5 +353,36 @@ public class McpToolsTest {
         assertFalse(csam.containsKey("error"));
         assertEquals("csam", csam.get("filter_type"));
     }
+
+    @Test
+    void testEnforceUtf8StandardStreams() {
+        java.io.PrintStream origOut = System.out;
+        java.io.PrintStream origErr = System.err;
+        try {
+            java.nio.charset.Charset cp1252 = java.nio.charset.Charset.forName("windows-1252");
+            System.setOut(new java.io.PrintStream(new java.io.ByteArrayOutputStream(), true, cp1252));
+            System.setErr(new java.io.PrintStream(new java.io.ByteArrayOutputStream(), true, cp1252));
+            assertEquals(cp1252, System.out.charset());
+
+            br.com.ipedtools.mcp.McpApplication.enforceUtf8StandardStreams();
+            assertEquals(java.nio.charset.StandardCharsets.UTF_8, System.out.charset());
+            assertEquals(java.nio.charset.StandardCharsets.UTF_8, System.err.charset());
+            assertEquals("UTF-8", System.getProperty("stdout.encoding"));
+            assertEquals("UTF-8", System.getProperty("stderr.encoding"));
+            assertEquals("UTF-8", System.getProperty("stdin.encoding"));
+            assertEquals("UTF-8", System.getProperty("file.encoding"));
+
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            try (java.io.PrintStream utf8Stream = new java.io.PrintStream(baos, true, System.out.charset())) {
+                utf8Stream.print("Galaxy S21_2024-10-10_Relatório.ufdr | Perícia");
+            }
+            String decoded = baos.toString(java.nio.charset.StandardCharsets.UTF_8);
+            assertEquals("Galaxy S21_2024-10-10_Relatório.ufdr | Perícia", decoded);
+            assertFalse(decoded.contains("\uFFFD"));
+        } finally {
+            System.setOut(origOut);
+            System.setErr(origErr);
+        }
+    }
 }
 
