@@ -136,10 +136,12 @@ try {
     Write-Host "[2/25] Testando tools/list..." -NoNewline
     $toolsList = Send-RpcRequest "tools/list"
     $toolCount = $toolsList.result.tools.Count
-    if ($toolCount -ge 24) {
+    $expectedTools = 28
+    $toolNames = $toolsList.result.tools | ForEach-Object { $_.name }
+    if ($toolCount -eq $expectedTools -and ($toolNames -contains "get_contact_relationship")) {
         Write-Host (" PASS (" + $toolCount + " ferramentas registradas)") -ForegroundColor Green
     } else {
-        Write-Host (" FAIL (" + $toolCount + " ferramentas)") -ForegroundColor Red; exit 1
+        Write-Host (" FAIL (" + $toolCount + " ferramentas, esperado " + $expectedTools + " incluindo get_contact_relationship)") -ForegroundColor Red; exit 1
     }
 
     # 4. Call get_property_dictionary
@@ -298,23 +300,74 @@ try {
     }
 
     # 17. Call get_top_contacts
-    Write-Host "[16/17] Testando call get_top_contacts..." -NoNewline
+    Write-Host "[16/19] Testando call get_top_contacts..." -NoNewline
     $contactsCall = Send-RpcRequest "tools/call" @{ name = "get_top_contacts"; arguments = @{ limit = 10 } }
     $contactsData = $contactsCall.result.content[0].text | ConvertFrom-Json
-    if ($contactsData.contacts -ne $null -and $contactsData.total_contacts_discovered -ge 0) {
-        Write-Host (" PASS (" + $contactsData.total_contacts_discovered + " contatos identificados, " + $contactsData.returned_count + " no ranking)") -ForegroundColor Green
+    $contactFields = @("rank", "identifier", "name", "total_interactions", "messages_count", "calls_count", "incoming_count",
+        "outgoing_count", "unknown_direction_count", "channels", "by_channel", "by_month", "active_days",
+        "first_interaction", "last_interaction", "evidence_ids")
+    $contactsOk = $contactsData.contacts -ne $null -and $contactsData.diagnostics.events_analyzed -ne $null `
+        -and $contactsData.truncated -ne $null -and $contactsData.unknown_direction_total -ne $null `
+        -and $contactsData.group_activity -ne $null -and $contactsData.returned_count -le 10
+    foreach ($c in $contactsData.contacts) {
+        $names = ($c | Get-Member -MemberType NoteProperty).Name
+        foreach ($f in $contactFields) { if ($names -notcontains $f) { $contactsOk = $false } }
+        if ($c.total_interactions -ne ($c.incoming_count + $c.outgoing_count)) { $contactsOk = $false }
+        if ($c.evidence_ids.Count -gt 5) { $contactsOk = $false }
+    }
+    if ($contactsOk) {
+        $dir = $contactsData.diagnostics.with_explicit_direction
+        Write-Host (" PASS (" + $contactsData.total_contacts_discovered + " contatos, " + $contactsData.returned_count + " no ranking, " +
+            $contactsData.diagnostics.events_analyzed + " eventos, direcao explicita " + $dir.percent + "%, unknown " + $contactsData.unknown_direction_total + ")") -ForegroundColor Green
     } else {
         Write-Host (" FAIL: " + ($contactsCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
-    # 18. Call get_communications_graph
+    # 18. Call get_communications_graph (sem e com Mermaid)
     Write-Host "[17/19] Testando call get_communications_graph..." -NoNewline
     $graphCall = Send-RpcRequest "tools/call" @{ name = "get_communications_graph"; arguments = @{ min_interactions = 1; limit_edges = 20 } }
     $graphData = $graphCall.result.content[0].text | ConvertFrom-Json
-    if ($graphData.nodes -ne $null -and $graphData.edges -ne $null) {
-        Write-Host (" PASS (" + $graphData.total_nodes + " nos, " + $graphData.total_edges + " arestas no grafo)") -ForegroundColor Green
+    $graphNames = ($graphData | Get-Member -MemberType NoteProperty).Name
+    $graphOk = $graphData.nodes -ne $null -and $graphData.edges -ne $null -and $graphData.graph_source -eq "lucene-index" `
+        -and $graphData.truncated -ne $null -and $graphData.diagnostics.events_analyzed -ne $null `
+        -and $graphData.unlinked_events -ne $null -and $graphData.edges.Count -le 20 -and ($graphNames -notcontains "mermaid")
+    foreach ($n in $graphData.nodes) {
+        if (@("ACCOUNT", "GROUP", "LOCAL_ENDPOINT") -notcontains $n.type) { $graphOk = $false }
+        if ($n.id -eq "Dispositivo_Local") { $graphOk = $false }
+        if ($n.type -eq "LOCAL_ENDPOINT" -and $n.identity_resolved -ne $false) { $graphOk = $false }
+    }
+    foreach ($e in $graphData.edges) { if ($e.evidence_ids.Count -gt 5) { $graphOk = $false } }
+    $mermaidCall = Send-RpcRequest "tools/call" @{ name = "get_communications_graph"; arguments = @{ min_interactions = 1; limit_edges = 20; include_mermaid = $true } }
+    $mermaidData = $mermaidCall.result.content[0].text | ConvertFrom-Json
+    if (-not ($mermaidData.mermaid -like "flowchart LR*")) { $graphOk = $false }
+    if ($graphOk) {
+        Write-Host (" PASS (" + $graphData.total_nodes + " nos, " + $graphData.total_edges + " de " + $graphData.total_eligible_edges +
+            " arestas, truncated=" + $graphData.truncated + ", unlinked=" + $graphData.unlinked_events + ", mermaid OK)") -ForegroundColor Green
     } else {
         Write-Host (" FAIL: " + ($graphCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
+    }
+
+    # 18b. Call get_contact_relationship
+    Write-Host "[18b/19] Testando call get_contact_relationship..." -NoNewline
+    $pair = $graphData.edges | Where-Object { -not $_.source.StartsWith("local:") -and -not $_.target.StartsWith("local:") } | Select-Object -First 1
+    if (-not $pair) { $pair = $graphData.edges | Select-Object -First 1 }
+    if ($pair) {
+        $relA = $pair.source; $relB = $pair.target
+        if ($relA.StartsWith("local:")) { $relA = $pair.target; $relB = $graphData.nodes[0].id }
+    } else {
+        $relA = "zz-inexistente-zz"; $relB = "yy-inexistente-yy"
+    }
+    $relCallC = Send-RpcRequest "tools/call" @{ name = "get_contact_relationship"; arguments = @{ contact_a = $relA; contact_b = $relB; evidence_limit = 5 } }
+    $relDataC = $relCallC.result.content[0].text | ConvertFrom-Json
+    $relOk = @("found", "no_relationship", "ambiguous", "not_found", "same_identity") -contains $relDataC.status `
+        -and $relDataC.diagnostics -ne $null
+    if ($relDataC.status -eq "found") {
+        $relOk = $relOk -and $relDataC.by_channel -ne $null -and $relDataC.by_month -ne $null -and $relDataC.evidence_ids.Count -le 5
+    }
+    if ($relOk) {
+        Write-Host (" PASS (" + $relA + " x " + $relB + ": status=" + $relDataC.status + ", interacoes=" + $relDataC.total_interactions + ")") -ForegroundColor Green
+    } else {
+        Write-Host (" FAIL: " + ($relCallC | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
     # 19. Call list_folder_contents

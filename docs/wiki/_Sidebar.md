@@ -14,7 +14,7 @@
 
 ### 🔍 Operação e Investigação
 * [Fluxo de Investigação](Fluxo-de-Investigacao)
-* [Catálogo de Ferramentas (27 Tools)](Catalogo-de-Ferramentas)
+* [Catálogo de Ferramentas (28 Tools)](Catalogo-de-Ferramentas)
 * [Consultas Lucene e Propriedades](Consultas-Lucene-e-Propriedades)
 * [Boas Práticas Forenses](Boas-Praticas-Forenses)
 * [Solução de Problemas](Solucao-de-Problemas)

@@ -77,5 +77,5 @@ Se você preferir travar a inicialização sempre em um caso pericial específic
 
 1. Salve o arquivo `claude_desktop_config.json`.
 2. Reinicie o Claude Desktop completamente (fechando e reabrindo o aplicativo).
-3. No canto inferior da barra de digitação do Claude, você verá o ícone de ferramentas MCP indicando que o servidor `iped` está ativo com as 27 ferramentas periciais disponíveis.
+3. No canto inferior da barra de digitação do Claude, você verá o ícone de ferramentas MCP indicando que o servidor `iped` está ativo com as 28 ferramentas periciais disponíveis.
 4. Digite a saudação pericial ou chame o prompt `/start_case` para iniciar a análise probatória com rigor metodológico.

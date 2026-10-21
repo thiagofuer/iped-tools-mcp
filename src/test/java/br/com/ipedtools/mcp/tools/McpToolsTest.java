@@ -15,8 +15,10 @@ import org.junit.jupiter.api.condition.EnabledIf;
 
 import br.com.ipedtools.mcp.service.IpedCoreService;
 import br.com.ipedtools.mcp.test.TestCaseResolver;
+import br.com.ipedtools.mcp.test.TestItems;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 public class McpToolsTest {
 
@@ -179,11 +181,14 @@ public class McpToolsTest {
     @Test
     @EnabledIf("isCaseAvailable")
     void testItemRelationsTool() {
+        int[] pair = TestItems.childAndParent();
+        assumeTrue(pair != null, "Caso sem subitens com parent");
+        int childId = pair[0];
         ItemRelationsTool tool = new ItemRelationsTool();
-        Map<String, Object> relations = tool.getItemRelations(27328);
+        Map<String, Object> relations = tool.getItemRelations(childId);
         assertNotNull(relations);
         assertFalse(relations.containsKey("error"));
-        assertEquals(27328, ((Map<?, ?>) relations.get("target_item")).get("id"));
+        assertEquals(childId, ((Map<?, ?>) relations.get("target_item")).get("id"));
         assertNotNull(relations.get("parent"));
         assertTrue(relations.containsKey("children"));
         assertTrue(relations.containsKey("duplicates"));
@@ -209,26 +214,89 @@ public class McpToolsTest {
     @EnabledIf("isCaseAvailable")
     void testCommunicationsGraphTool() {
         CommunicationsGraphTool tool = new CommunicationsGraphTool();
-        
-        // 1. Top contacts
-        Map<String, Object> top = tool.getTopContacts(10);
+
+        // 1. Top contacts: previous contract fields kept, plus diagnostics/truncation
+        Map<String, Object> top = tool.getTopContacts(10, "", "", "");
         assertNotNull(top);
         assertFalse(top.containsKey("error"));
         assertTrue(top.containsKey("contacts"));
         assertTrue(top.containsKey("total_contacts_discovered"));
+        assertTrue(top.containsKey("returned_count"));
+        assertTrue(top.containsKey("truncated"));
+        assertTrue(top.containsKey("unknown_direction_total"));
+        assertTrue(top.containsKey("group_activity"));
+        assertTrue(top.containsKey("diagnostics"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> contacts = (List<Map<String, Object>>) top.get("contacts");
+        assertTrue(contacts.size() <= 10);
+        for (Map<String, Object> c : contacts) {
+            for (String key : List.of("rank", "identifier", "name", "total_interactions", "messages_count", "calls_count",
+                    "incoming_count", "outgoing_count", "channels", "first_interaction", "last_interaction",
+                    "unknown_direction_count", "by_channel", "by_month", "active_days", "evidence_ids")) {
+                assertTrue(c.containsKey(key), "Contato deve conter " + key);
+            }
+            assertEquals((int) c.get("total_interactions"), (int) c.get("incoming_count") + (int) c.get("outgoing_count"),
+                    "Total do ranking deve ser formado só por eventos com direção explícita");
+            assertTrue(((List<?>) c.get("evidence_ids")).size() <= 5);
+        }
 
         // 2. Communications graph
-        Map<String, Object> graph = tool.getCommunicationsGraph("", 1, 30);
+        Map<String, Object> graph = tool.getCommunicationsGraph("", 1, 30, "", "", "", false);
         assertNotNull(graph);
         assertFalse(graph.containsKey("error"));
         assertTrue(graph.containsKey("nodes"));
         assertTrue(graph.containsKey("edges"));
+        assertTrue(graph.containsKey("truncated"));
+        assertTrue(graph.containsKey("diagnostics"));
+        assertTrue(graph.containsKey("unlinked_events"));
+        assertEquals("lucene-index", graph.get("graph_source"));
+        assertFalse(graph.containsKey("mermaid"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) graph.get("nodes");
+        for (Map<String, Object> n : nodes) {
+            assertNotEquals("Dispositivo_Local", n.get("id"));
+            assertTrue(List.of("ACCOUNT", "GROUP", "LOCAL_ENDPOINT").contains((String) n.get("type")));
+            if ("LOCAL_ENDPOINT".equals(n.get("type"))) {
+                assertEquals(false, n.get("identity_resolved"));
+            }
+        }
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> edges = (List<Map<String, Object>>) graph.get("edges");
+        assertTrue(edges.size() <= 30);
+
+        Map<String, Object> withMermaid = tool.getCommunicationsGraph("", 1, 30, "", "", "", true);
+        assertTrue(((String) withMermaid.get("mermaid")).startsWith("flowchart LR"));
 
         // 3. Focal contact graph
-        Map<String, Object> focal = tool.getCommunicationsGraph("Silva", 1, 10);
+        Map<String, Object> focal = tool.getCommunicationsGraph("Silva", 1, 10, "", "", "", false);
         assertNotNull(focal);
         assertFalse(focal.containsKey("error"));
         assertEquals("Silva", focal.get("focal_contact"));
+    }
+
+    @Test
+    @EnabledIf("isCaseAvailable")
+    void testContactRelationshipTool() {
+        CommunicationsGraphTool tool = new CommunicationsGraphTool();
+        Map<String, Object> graph = tool.getCommunicationsGraph("", 1, 50, "", "", "", false);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> edges = (List<Map<String, Object>>) graph.get("edges");
+        Map<String, Object> edge = edges.stream()
+                .filter(e -> !((String) e.get("source")).startsWith("local:") && !((String) e.get("target")).startsWith("local:"))
+                .findFirst().orElse(null);
+        if (edge != null) {
+            Map<String, Object> rel = tool.getContactRelationship((String) edge.get("source"), (String) edge.get("target"), "", "", "", 5);
+            assertFalse(rel.containsKey("error"));
+            assertEquals("found", rel.get("status"));
+            assertTrue((int) rel.get("total_interactions") >= 1 || !((List<?>) rel.get("shared_groups")).isEmpty());
+            assertTrue(rel.containsKey("by_channel"));
+            assertTrue(rel.containsKey("by_month"));
+            assertTrue(rel.containsKey("diagnostics"));
+            assertTrue(((List<?>) rel.get("evidence_ids")).size() <= 5);
+        }
+
+        Map<String, Object> missing = tool.getContactRelationship("zz-inexistente-zz", "yy-inexistente-yy", "", "", "", 5);
+        assertEquals("not_found", missing.get("status"));
     }
 
     @Test
@@ -259,35 +327,46 @@ public class McpToolsTest {
     @Test
     @EnabledIf("isCaseAvailable")
     void testTriageTool() {
+        int[] pair = TestItems.childAndParent();
+        assumeTrue(pair != null, "Caso sem subitens para o teste de triagem");
+        int itemId = pair[0];
+        boolean initial = IpedCoreService.getInstance().getSource().getBookmarks().isChecked(itemId);
         TriageTool tool = new TriageTool();
 
         // 1. Set item checked
-        Map<String, Object> checked = tool.setItemChecked(25830, true);
+        Map<String, Object> checked = tool.setItemChecked(itemId, true);
         assertNotNull(checked);
         assertFalse(checked.containsKey("error"));
         assertTrue((boolean) checked.get("success"));
         assertTrue((boolean) checked.get("checked"));
 
         // 2. Set item unchecked
-        Map<String, Object> unchecked = tool.setItemChecked(25830, false);
+        Map<String, Object> unchecked = tool.setItemChecked(itemId, false);
         assertNotNull(unchecked);
         assertFalse(unchecked.containsKey("error"));
         assertTrue((boolean) unchecked.get("success"));
         assertFalse((boolean) unchecked.get("checked"));
+
+        // Restore the examiner's original triage state
+        if (initial) {
+            tool.setItemChecked(itemId, true);
+        }
     }
 
     @Test
     @EnabledIf("isCaseAvailable")
     void testMultimodalTool() {
+        Integer imageId = TestItems.imageWithThumbnail();
+        assumeTrue(imageId != null, "Caso sem imagens com miniatura");
         MultimodalTool tool = new MultimodalTool();
-        List<Content> contents = tool.getItemThumbnail(25830, 256);
+        List<Content> contents = tool.getItemThumbnail(imageId, 256);
         assertNotNull(contents);
         assertEquals(2, contents.size());
         assertInstanceOf(TextContent.class, contents.getFirst());
         assertInstanceOf(ImageContent.class, contents.get(1));
         TextContent text = (TextContent) contents.getFirst();
         ImageContent image = (ImageContent) contents.get(1);
-        assertTrue(text.text().contains("25830"));
+        assertTrue(text.text().contains(String.valueOf(imageId)));
         assertEquals("image/jpeg", image.mimeType());
         assertNotNull(image.data());
         assertFalse(image.data().isBlank());
@@ -296,23 +375,25 @@ public class McpToolsTest {
     @Test
     @EnabledIf("isCaseAvailable")
     void testSimilaritySearchTool() {
+        Integer imageId = TestItems.imageWithSimilarityFeatures();
+        assumeTrue(imageId != null, "Caso sem imagens com vetores de similaridade");
         SimilaritySearchTool tool = new SimilaritySearchTool();
 
         // 1. Similar images
-        Map<String, Object> imgRes = tool.searchSimilarImages(25830, 1.0f, 10);
+        Map<String, Object> imgRes = tool.searchSimilarImages(imageId, 1.0f, 10);
         assertNotNull(imgRes);
         assertFalse(imgRes.containsKey("error"));
-        assertEquals(25830, imgRes.get("reference_id"));
+        assertEquals(imageId, imgRes.get("reference_id"));
 
         // 2. Similar faces
-        Map<String, Object> faceRes = tool.searchSimilarFaces(25830, 50.0f, 10);
+        Map<String, Object> faceRes = tool.searchSimilarFaces(imageId, 50.0f, 10);
         assertNotNull(faceRes);
-        assertEquals(25830, faceRes.get("reference_id"));
+        assertEquals(imageId, faceRes.get("reference_id"));
 
         // 3. Similar documents
-        Map<String, Object> docRes = tool.searchSimilarDocuments(25830, 50, 10);
+        Map<String, Object> docRes = tool.searchSimilarDocuments(imageId, 50, 10);
         assertNotNull(docRes);
-        assertEquals(25830, docRes.get("reference_id"));
+        assertEquals(imageId, docRes.get("reference_id"));
     }
 
     @Test
@@ -374,10 +455,10 @@ public class McpToolsTest {
 
             java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
             try (java.io.PrintStream utf8Stream = new java.io.PrintStream(baos, true, System.out.charset())) {
-                utf8Stream.print("Galaxy S21_2024-10-10_Relatório.ufdr | Perícia");
+                utf8Stream.print("Aparelho_Exemplo_2024-01-01_Relatório.ufdr | Perícia");
             }
             String decoded = baos.toString(java.nio.charset.StandardCharsets.UTF_8);
-            assertEquals("Galaxy S21_2024-10-10_Relatório.ufdr | Perícia", decoded);
+            assertEquals("Aparelho_Exemplo_2024-01-01_Relatório.ufdr | Perícia", decoded);
             assertFalse(decoded.contains("\uFFFD"));
         } finally {
             System.setOut(origOut);

@@ -1,6 +1,6 @@
-# Catálogo de Ferramentas Forenses (27 MCP Tools)
+# Catálogo de Ferramentas Forenses (28 MCP Tools)
 
-O **IPED Tools MCP** expõe 27 ferramentas periciais especializadas agrupadas em 9 domínios operacionais. Abaixo está a referência completa de cada ferramenta, seus objetivos e exemplos práticos de perguntas em português que o examinador pode fazer no chat.
+O **IPED Tools MCP** expõe 28 ferramentas periciais especializadas agrupadas em 9 domínios operacionais. Abaixo está a referência completa de cada ferramenta, seus objetivos e exemplos práticos de perguntas em português que o examinador pode fazer no chat.
 
 ---
 
@@ -75,12 +75,32 @@ O **IPED Tools MCP** expõe 27 ferramentas periciais especializadas agrupadas em
 * **Exemplo de Pergunta:** *"Quem é o proprietário identificado deste celular e quais são seus números de telefone e IMEI?"*
 
 ### `get_top_contacts`
-* **Propósito:** Gera o ranking dos contatos mais frequentes em mensagens, chamadas telefônicas e aplicativos de mensageria.
+* **Propósito:** Gera o ranking dos interlocutores mais frequentes em mensagens, chamadas e e-mails, com contagens por direção, por canal e por mês, primeira e última interação, dias ativos e `evidence_ids`.
+* **Parâmetros:** `limit` (padrão 20, máximo 200), `channel`, `start_date`, `end_date`.
 * **Exemplo de Pergunta:** *"Quais são os 10 contatos com maior volume de interação neste telefone?"*
+* **Exemplo de Pergunta:** *"Com quem houve mais conversas pelo Viber em 2024?"*
 
 ### `get_communications_graph`
-* **Propósito:** Extrai o grafo de rede de comunicações (nós e arestas ponderadas com volume de mensagens trocadas entre interlocutores).
+* **Propósito:** Extrai o grafo de rede de comunicações: nós tipados e arestas dirigidas e ponderadas, com agregados por canal e por mês e até 5 `evidence_ids` por aresta. Opcionalmente devolve um diagrama Mermaid (`include_mermaid: true`) com exatamente os nós e arestas retornados.
+* **Parâmetros:** `focal_contact`, `min_interactions` (padrão 5), `limit_edges` (padrão 50, máximo 200), `channel`, `start_date`, `end_date`, `include_mermaid`.
 * **Exemplo de Pergunta:** *"Construa o grafo de comunicação entre os principais interlocutores identificados no caso."*
+* **Exemplo de Pergunta:** *"Monte um diagrama de vínculos em torno do número +1 555-010-1181."*
+
+### `get_contact_relationship`
+* **Propósito:** Detalha como dois contatos se relacionam: total de interações, mensagens, chamadas e e-mails, quebra por canal e por direção, histograma mensal, primeira e última interação, grupos em comum e `evidence_ids`. Quando uma referência corresponde a várias identidades, devolve os `candidates` sem escolher nenhum.
+* **Parâmetros:** `contact_a`, `contact_b` (telefone, e-mail, conta, `contact_key` ou nome), `channel`, `start_date`, `end_date`, `evidence_limit` (padrão 5, máximo 20).
+* **Exemplo de Pergunta:** *"Como Carlos Teste e Bruno Exemplo se comunicavam, por quais aplicativos e em quais meses?"*
+
+### Como interpretar os resultados de comunicação
+As três ferramentas acima usam o mesmo modelo de eventos, derivado somente das propriedades indexadas pelo IPED (`Communication:From`, `Communication:To` e subpropriedades `:id`, `:name` e `:phoneNumber`), em modo somente leitura.
+
+* **Direção explícita:** `incoming` e `outgoing` vêm somente de `Communication:Direction` ou, em chamadas UFED, de `ufed:Direction`. Sem essas propriedades, o evento fica com direção `unknown` e **não** é contado como recebido nem enviado. Ele aparece em `unknown_direction_total`, `unknown_direction_count` e `group_activity`. Mensagens de grupo de WhatsApp costumam não ter direção, então não use eventos `unknown` para concluir quem iniciou uma conversa.
+* **Sem presunção de dono:** nenhuma identidade é rotulada como dono do aparelho. O lado local de cada canal é o nó `local:<canal>` (`type: LOCAL_ENDPOINT`, `identity_resolved: false`), que apenas lista os identificadores locais observados (`observed_local_identifiers`). Os demais nós são `ACCOUNT` (pessoa ou conta) e `GROUP` (grupo, com `participants_observed`).
+* **Canais:** o canal é o aplicativo real, resolvido nesta ordem: `ufed:SourceApplication` (ex.: `Viber`, `Signal`), `accountType` (ex.: `WhatsApp`, `Telegram`) e `contentType`. Chamadas sem aplicativo aparecem como `Phone`, e-mails como `Email`, e o que não pode ser determinado como `unknown`.
+* **Identidades:** telefones são normalizados (ex.: `+1 555-010-1181` e `15550101181` viram a mesma identidade, `tel:15550101181`), e-mails ficam em minúsculas e as variantes aparecem em `aliases`. Remetentes de sistema (`System Message`, `status@broadcast`) são descartados. Use `contact_key` (ou o `id` do nó) para chamar `get_contact_relationship` sem ambiguidade.
+* **Truncamento:** `truncated: true` indica que o limite cortou o resultado. Compare `total_contacts_discovered` com `returned_count`, ou `total_eligible_edges` com `returned_edges`. Ausência na lista não significa ausência de vínculo. `unlinked_events` conta eventos sem direção e com apenas uma parte identificada, que não geram aresta.
+* **Cobertura:** `diagnostics` informa `events_analyzed` e quantos eventos (e o percentual) têm direção explícita, canal resolvido e data. Quando há filtro de data, `events_without_date_excluded` mostra quantos eventos sem data ficaram de fora.
+* **Evidências:** cada contato e cada aresta trazem até 5 `evidence_ids` (o mais antigo, o mais recente e uma amostra determinística), que podem ser abertos com `get_document_metadata`.
 
 ---
 
