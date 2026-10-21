@@ -14,7 +14,7 @@ Bem-vindo à documentação oficial do **IPED Tools MCP**, o servidor nativo bas
 | **[Configurador Gráfico](Configurador-Grafico)** | Como utilizar a interface visual para alternar o caso ativo e gerar configurações 1-click. |
 | **[Clientes de IA](Cliente-Claude-Desktop)** | Guias específicos para [Claude Desktop](Cliente-Claude-Desktop), [Cursor](Cliente-Cursor), [Antigravity](Cliente-Antigravity), [LM Studio (Air-Gapped)](Cliente-LM-Studio) e [Claude Code](Cliente-Claude-Code). |
 | **[Fluxo de Investigação](Fluxo-de-Investigacao)** | Metodologia forense assistida por IA, uso do prompt `start_case` e ciclo de auditoria. |
-| **[Catálogo de Ferramentas](Catalogo-de-Ferramentas)** | Documentação completa das 27 ferramentas periciais disponíveis com exemplos de comandos. |
+| **[Catálogo de Ferramentas](Catalogo-de-Ferramentas)** | Documentação completa das 28 ferramentas periciais disponíveis com exemplos de comandos. |
 | **[Consultas Lucene e Propriedades](Consultas-Lucene-e-Propriedades)** | Sintaxe de pesquisa, escape de caracteres especiais e catálogo de metadados. |
 | **[Boas Práticas Forenses](Boas-Praticas-Forenses)** | Princípios de preservação probatória, modo somente-leitura e operação desconectada. |
 | **[Solução de Problemas](Solucao-de-Problemas)** | Diagnóstico de falhas comuns, logs de execução e resolução de incidentes. |

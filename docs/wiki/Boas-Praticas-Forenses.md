@@ -42,7 +42,7 @@ Para manter o assistente MCP leve, performático e seguro, foram deliberadamente
 
 * **Não-Meta 1: Exportação Física em Massa:** O IPED Tools MCP não é uma ferramenta para descompactar ou exportar terabytes de arquivos físicos para o disco do usuário. Essa tarefa continua sob responsabilidade do IPED Desktop.
 * **Não-Meta 2: Geração de Laudos Oficiais em PDF/HTML:** A diagramação formal e a assinatura digital do Laudo Pericial pertencem ao fluxo de trabalho oficial do perito no IPED Desktop.
-* **Não-Meta 3: Execução de Comandos no Host:** O servidor proíbe terminantemente que a IA tente invocar ferramentas de linha de comando (`dir`, `ls`, scripts de sistema) diretamente no disco da máquina para ler dados do caso, forçando o uso exclusivo das 27 ferramentas MCP auditáveis.
+* **Não-Meta 3: Execução de Comandos no Host:** O servidor proíbe terminantemente que a IA tente invocar ferramentas de linha de comando (`dir`, `ls`, scripts de sistema) diretamente no disco da máquina para ler dados do caso, forçando o uso exclusivo das 28 ferramentas MCP auditáveis.
 
 ---
 
