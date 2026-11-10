@@ -71,7 +71,9 @@ public class ForensicPrompts {
             - Utilize ferramentas especializadas quando o escopo exigir:
               - **IA e Mídias**: `query_ai_detections` / `list_ai_filters` (armas, drogas, nudez, faces, transcrição de áudio).
               - **Linha do Tempo**: `get_timeline` e `get_events_around_time` para correlação temporal e análise de marcos cronológicos.
-              - **Contatos e Redes**: `get_communications_graph` e `get_top_contacts` para análise de vínculos e histórico de chamadas/mensagens.
+              - **Contatos e Redes**: `get_top_contacts` e `get_communications_graph` para análise de vínculos e histórico de chamadas/mensagens; `get_contact_relationship` para detalhar como dois contatos se relacionam (canais, meses, grupos em comum e evidências).
+                - A direção (`incoming`/`outgoing`) vem somente de propriedades explícitas; eventos com direção `unknown` não indicam quem enviou ou iniciou a conversa e não devem ser reportados como recebidos.
+                - Essas ferramentas não presumem o dono do aparelho: o nó `local:<canal>` representa apenas o lado local do canal. Consulte `diagnostics` (cobertura) e `truncated` antes de concluir que um vínculo não existe, e cite os `evidence_ids`.
               - **Estrutura de Pastas**: `list_folder_contents` para navegação na árvore de arquivos da evidência.
               - **Similaridade**: `search_similar_documents`, `search_similar_images` e `search_similar_faces`.
 

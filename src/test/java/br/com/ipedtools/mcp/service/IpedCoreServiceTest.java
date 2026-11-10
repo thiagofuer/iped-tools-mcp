@@ -4,14 +4,21 @@ import java.io.File;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.lucene.index.Term;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.WildcardQuery;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 
 import br.com.ipedtools.mcp.test.TestCaseResolver;
+import br.com.ipedtools.mcp.test.TestItems;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 public class IpedCoreServiceTest {
 
@@ -40,31 +47,34 @@ public class IpedCoreServiceTest {
     @Test
     @EnabledIf("isCaseAvailable")
     void testSetItemChecked() throws Exception {
+        int[] pair = TestItems.childAndParent();
+        assumeTrue(pair != null, "Caso sem subitens para o teste de triagem");
+        int itemId = pair[0];
         IpedCoreService service = IpedCoreService.getInstance();
-        boolean initial = service.getSource().getBookmarks().isChecked(25830);
+        boolean initial = service.getSource().getBookmarks().isChecked(itemId);
         
         // 1. Mark as checked
-        Map<String, Object> resCheck = service.setItemChecked(25830, true);
+        Map<String, Object> resCheck = service.setItemChecked(itemId, true);
         assertNotNull(resCheck);
         assertTrue((boolean) resCheck.get("success"));
         assertTrue((boolean) resCheck.get("checked"));
         assertEquals(initial, resCheck.get("previous_state"));
-        assertTrue(service.getSource().getBookmarks().isChecked(25830));
+        assertTrue(service.getSource().getBookmarks().isChecked(itemId));
         
         // Check document metadata reflects selection
-        Map<String, Object> meta = service.getDocumentMetadata(25830);
+        Map<String, Object> meta = service.getDocumentMetadata(itemId);
         assertTrue((boolean) meta.get("selected"));
         
         // 2. Unmark
-        Map<String, Object> resUncheck = service.setItemChecked(25830, false);
+        Map<String, Object> resUncheck = service.setItemChecked(itemId, false);
         assertNotNull(resUncheck);
         assertTrue((boolean) resUncheck.get("success"));
         assertFalse((boolean) resUncheck.get("checked"));
-        assertFalse(service.getSource().getBookmarks().isChecked(25830));
+        assertFalse(service.getSource().getBookmarks().isChecked(itemId));
         
         // Restore initial if needed
         if (initial) {
-            service.setItemChecked(25830, true);
+            service.setItemChecked(itemId, true);
         }
     }
 
@@ -261,24 +271,28 @@ public class IpedCoreServiceTest {
         assertTrue(rootRel.containsKey("children"));
         assertTrue(rootRel.containsKey("duplicates"));
 
-        // 2. Subitem with parent (id=27328, parentId=20422)
-        Map<String, Object> childRel = service.getItemRelations(27328);
+        // 2. Subitem with parent (discovered in the open case)
+        int[] pair = TestItems.childAndParent();
+        assumeTrue(pair != null, "Caso sem subitens com parent");
+        int childId = pair[0];
+        int parentId = pair[1];
+        Map<String, Object> childRel = service.getItemRelations(childId);
         assertNotNull(childRel);
         assertNotNull(childRel.get("parent"), "Subitem deve possuir parent identificado");
         @SuppressWarnings("unchecked")
         Map<String, Object> parentMap = (Map<String, Object>) childRel.get("parent");
-        assertEquals(20422, parentMap.get("id"));
+        assertEquals(parentId, parentMap.get("id"));
 
-        // 3. Parent container (id=20422) should have children
-        Map<String, Object> parentRel = service.getItemRelations(20422);
+        // 3. Parent container should list the child
+        Map<String, Object> parentRel = service.getItemRelations(parentId);
         assertNotNull(parentRel);
         int childrenCount = (int) parentRel.get("children_count");
-        assertTrue(childrenCount > 0, "Container 20422 deve conter children");
+        assertTrue(childrenCount > 0, "Container " + parentId + " deve conter children");
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> children = (List<Map<String, Object>>) parentRel.get("children");
         assertFalse(children.isEmpty());
-        boolean foundChild = children.stream().anyMatch(c -> (int) c.get("id") == 27328);
-        assertTrue(foundChild, "Item 27328 deve constar na lista de filhos");
+        boolean foundChild = children.stream().anyMatch(c -> (int) c.get("id") == childId);
+        assertTrue(foundChild, "Item " + childId + " deve constar na lista de filhos");
     }
 
     @Test
@@ -480,10 +494,12 @@ public class IpedCoreServiceTest {
     @Test
     @EnabledIf("isCaseAvailable")
     void testGetThumbnail() throws Exception {
+        Integer imageId = TestItems.imageWithThumbnail();
+        assumeTrue(imageId != null, "Caso sem imagens com miniatura");
         IpedCoreService service = IpedCoreService.getInstance();
-        Map<String, Object> thumb = service.getThumbnail(25830, 256);
+        Map<String, Object> thumb = service.getThumbnail(imageId, 256);
         assertNotNull(thumb);
-        assertEquals(25830, thumb.get("id"));
+        assertEquals(imageId, thumb.get("id"));
         assertEquals("image/jpeg", thumb.get("mime_type"));
         assertTrue((int) thumb.get("width") > 0);
         assertTrue((int) thumb.get("height") > 0);
@@ -498,25 +514,27 @@ public class IpedCoreServiceTest {
     @Test
     @EnabledIf("isCaseAvailable")
     void testSimilaritySearches() throws Exception {
+        Integer imageId = TestItems.imageWithSimilarityFeatures();
+        assumeTrue(imageId != null, "Caso sem imagens com vetores de similaridade");
         IpedCoreService service = IpedCoreService.getInstance();
         
         // 1. Similar images
-        Map<String, Object> imgSim = service.searchSimilarImages(25830, 1.0f, 10);
+        Map<String, Object> imgSim = service.searchSimilarImages(imageId, 1.0f, 10);
         assertNotNull(imgSim);
-        assertEquals(25830, imgSim.get("reference_id"));
+        assertEquals(imageId, imgSim.get("reference_id"));
         assertTrue(imgSim.containsKey("total_found"));
         assertTrue(imgSim.containsKey("items"));
 
         // 2. Similar faces
-        Map<String, Object> faceSim = service.searchSimilarFaces(25830, 50.0f, 10);
+        Map<String, Object> faceSim = service.searchSimilarFaces(imageId, 50.0f, 10);
         assertNotNull(faceSim);
-        assertEquals(25830, faceSim.get("reference_id"));
+        assertEquals(imageId, faceSim.get("reference_id"));
         assertTrue(faceSim.containsKey("total_found") || faceSim.containsKey("error"));
 
         // 3. Similar documents
-        Map<String, Object> docSim = service.searchSimilarDocuments(25830, 50, 10);
+        Map<String, Object> docSim = service.searchSimilarDocuments(imageId, 50, 10);
         assertNotNull(docSim);
-        assertEquals(25830, docSim.get("reference_id"));
+        assertEquals(imageId, docSim.get("reference_id"));
         assertTrue(docSim.containsKey("total_found") || docSim.containsKey("error"));
     }
 
@@ -568,19 +586,21 @@ public class IpedCoreServiceTest {
     }
 
     @Test
-    void testContactIdentityMatchesFocalNullSafety() {
-        IpedCoreService.ContactIdentity unnamed = new IpedCoreService.ContactIdentity("raw", "+5511999998888", null, false);
-        assertTrue(IpedCoreService.ContactIdentity.matchesFocal(unnamed, "999998888"), "Deveria encontrar por id numérico quando nome for nulo");
-        assertFalse(IpedCoreService.ContactIdentity.matchesFocal(unnamed, "silva"), "Não deveria lançar NullPointerException com nome nulo");
+    @EnabledIf("isCaseAvailable")
+    void testCommunicationEventCountMatchesIndex() throws Exception {
+        IpedCoreService service = IpedCoreService.getInstance();
+        IndexSearcher searcher = new IndexSearcher(service.getSource().getReader());
+        BooleanQuery query = new BooleanQuery.Builder()
+                .add(new WildcardQuery(new Term(CommunicationAnalytics.FROM, "*")), BooleanClause.Occur.SHOULD)
+                .add(new WildcardQuery(new Term(CommunicationAnalytics.TO, "*")), BooleanClause.Occur.SHOULD)
+                .build();
+        int directCount = searcher.count(query);
 
-        IpedCoreService.ContactIdentity named = new IpedCoreService.ContactIdentity("raw", "+5511999998888", "Carlos Silva", false);
-        assertTrue(IpedCoreService.ContactIdentity.matchesFocal(named, "silva"), "Deveria encontrar por nome");
-        assertTrue(IpedCoreService.ContactIdentity.matchesFocal(named, "999998888"), "Deveria encontrar por id");
-        assertFalse(IpedCoreService.ContactIdentity.matchesFocal(named, "souza"), "Não deveria encontrar contato inexistente");
-
-        assertFalse(IpedCoreService.ContactIdentity.matchesFocal(null, "silva"));
-        assertFalse(IpedCoreService.ContactIdentity.matchesFocal(named, null));
+        Map<String, Object> top = service.getTopContacts(5);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> diagnostics = (Map<String, Object>) top.get("diagnostics");
+        assertEquals((long) directCount, diagnostics.get("events_analyzed"),
+                "Cada item com Communication:From ou Communication:To deve gerar exatamente um evento");
+        assertEquals(directCount, service.countCommunicationEventItems());
     }
 }
-
-

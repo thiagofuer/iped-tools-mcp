@@ -9,6 +9,25 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Unreleased]
 
+### Adicionado
+- **Modelo único de eventos de comunicação (`CommunicationAnalytics`, `CommunicationEventExtractor`):**
+  - Eventos derivados somente do índice Lucene (somente leitura) a partir de itens com `Communication:From` ou `Communication:To`, com leitura seletiva dos campos armazenados e processamento em *streaming*.
+  - Canal resolvido por `ufed:SourceApplication` → `accountType` → `contentType` (ex.: `Viber`, `WhatsApp`, `Telegram`, `Phone`, `Email`), com `unknown` quando não determinável.
+  - Identidade das partes pelas subpropriedades estruturadas `Communication:From/To:id|name|phoneNumber` antes do parsing de texto, normalização de telefones com libphonenumber, e-mails em minúsculas, união de aliases e descarte de remetentes de sistema (`System Message`, `status@broadcast`).
+  - Mensagens de grupo vinculadas ao nó de grupo (o `Communication:To:id` do chat não vira pessoa).
+  - Diagnósticos de cobertura em todas as respostas (`events_analyzed`, direção explícita, canal resolvido e data).
+- **Nova ferramenta MCP `get_contact_relationship`:** detalha a relação entre dois contatos (totais, canais, direções, histograma mensal, grupos em comum e `evidence_ids`), devolvendo `candidates` quando a referência é ambígua. O servidor passa a expor 28 ferramentas.
+- **Filtros `channel`, `start_date` e `end_date`** em `get_top_contacts`, `get_communications_graph` e `get_contact_relationship`; `include_mermaid` opcional em `get_communications_graph`.
+- **Rastreabilidade e transparência:** até 5 `evidence_ids` por contato e por aresta (mais antigo, mais recente e amostra determinística), campos `truncated`, `total_eligible_edges`, `unlinked_events` e `unknown_direction_total`.
+
+### Modificado
+- **BREAKING — `get_communications_graph`:** o nó sintético `Dispositivo_Local` foi removido; o lado local de cada evento com direção explícita passa a ser o nó `local:<canal>` (`type: LOCAL_ENDPOINT`, `identity_resolved: false`) com os identificadores locais observados. Os nós passam a ter `type` (`ACCOUNT`, `GROUP`, `LOCAL_ENDPOINT`) e os ids são chaves canônicas (ex.: `tel:15550101181`).
+- **BREAKING — `channels`:** passa a conter o aplicativo real (ex.: `Viber`) em vez de rótulos genéricos (`chat messages`, `calls`).
+- **`get_top_contacts` e `get_communications_graph` não usam mais `get_device_and_owner_info`, `ufed:PhoneOwner` nem `Conversation:Account`:** nenhuma identidade é rotulada como dono do aparelho.
+
+### Corrigido
+- **Direção das comunicações (issue #4):** `"OUTGOING".contains("IN")` fazia toda mensagem enviada ser contada também como recebida. A direção agora vem somente de `Communication:Direction` ou `ufed:Direction` (comparação exata); chamadas UFED passam a ter direção, e eventos sem direção explícita ficam como `unknown` em vez de serem tratados como recebidos.
+
 ---
 
 ## [1.0.1] - 2026-10-10

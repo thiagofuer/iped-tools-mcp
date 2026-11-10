@@ -42,7 +42,7 @@ mvn test
 > ℹ️ **Resolução Dinâmica de Casos:** Os testes verificam a existência de um caso pericial configurado em `local-test.properties` (ou variável de ambiente `IPED_TEST_CASE_PATH`). Se nenhum caso for informado, os testes que exigem leitura direta degradam suavemente (*skipped*) sem quebrar a compilação do projeto.
 
 ### B. Teste Ponta a Ponta do Protocolo STDIO MCP
-Script PowerShell que inicia o servidor em modo STDIO, envia frames JSON-RPC 2.0 reais pelo pipe e valida as respostas de todas as 27 ferramentas:
+Script PowerShell que inicia o servidor em modo STDIO, envia frames JSON-RPC 2.0 reais pelo pipe e valida as respostas de todas as 28 ferramentas:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\test_stdio_mcp.ps1 -CasePath "C:\casos_forenses\caso_operacao_01"

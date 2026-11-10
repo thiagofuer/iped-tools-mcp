@@ -91,6 +91,12 @@ class ForensicPromptsTest {
         assertTrue(text.contains("get_document_metadata"), "Deve orientar inspeção progressiva de metadados");
         assertTrue(text.contains("get_document_text"), "Deve orientar paginação de texto com offset e max_chars");
         assertTrue(text.contains("add_to_bookmark"), "Deve orientar bookmark de evidências");
+
+        // Contatos e redes
+        assertTrue(text.contains("get_top_contacts"), "Deve citar get_top_contacts");
+        assertTrue(text.contains("get_communications_graph"), "Deve citar get_communications_graph");
+        assertTrue(text.contains("get_contact_relationship"), "Deve citar get_contact_relationship");
+        assertTrue(text.contains("`unknown`"), "Deve explicar o significado da direção unknown");
     }
 
     @Test

@@ -1741,600 +1741,87 @@ public class IpedCoreService {
     // COMMUNICATIONS GRAPH & CONTACT ANALYTICS
     // =========================================================================
 
-    static class ContactIdentity {
-        final String raw;
-        final String id;
-        final String name;
-        final boolean isGroup;
+    /** Optional system property with the default region (ISO 3166, e.g. BR) for phones without country code. */
+    static final String PHONE_REGION_PROPERTY = "iped.mcp.phone.region";
 
-        ContactIdentity(String raw, String id, String name, boolean isGroup) {
-            this.raw = raw;
-            this.id = id;
-            this.name = name;
-            this.isGroup = isGroup;
-        }
-
-    static boolean matchesFocal(ContactIdentity ci, String focalClean) {
-        if (ci == null || focalClean == null) return false;
-        boolean idMatches = ci.id != null && ci.id.toLowerCase().contains(focalClean);
-        boolean nameMatches = ci.name != null && ci.name.toLowerCase().contains(focalClean);
-        return idMatches || nameMatches;
+    private CommunicationEventExtractor communicationExtractor(String channel, String startDate, String endDate) {
+        CommunicationAnalytics.EventFilter filter = CommunicationAnalytics.EventFilter.of(channel, startDate, endDate,
+                s -> normalizeIsoDate(s, false), s -> normalizeIsoDate(s, true));
+        String region = System.getProperty(PHONE_REGION_PROPERTY);
+        return new CommunicationEventExtractor(ipedSource, filter, region, s -> normalizeIsoDate(s, false));
     }
 
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            ContactIdentity that = (ContactIdentity) o;
-            return Objects.equals(id, that.id);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(id);
-        }
-    }
-
-    private static class CommunicationEvent {
-        final ContactIdentity sender;
-        final List<ContactIdentity> recipients;
-        final String channel;
-        final boolean isCall;
-        final boolean isEmail;
-        final boolean isIncoming;
-        final boolean isOutgoing;
-        final String timestamp;
-
-        CommunicationEvent(ContactIdentity sender, List<ContactIdentity> recipients, String channel,
-                           boolean isCall, boolean isEmail, boolean isIncoming, boolean isOutgoing, String timestamp) {
-            this.sender = sender;
-            this.recipients = recipients;
-            this.channel = channel;
-            this.isCall = isCall;
-            this.isEmail = isEmail;
-            this.isIncoming = isIncoming;
-            this.isOutgoing = isOutgoing;
-            this.timestamp = timestamp;
-        }
-    }
-
-    private static final Set<String> IGNORED_CONTACTS = Set.of(
-            "system", "system_message", "broadcast", "status@broadcast", "null",
-            "unknown", "me", "voicemail", "none", "anonymous", ""
-    );
-
-    private ContactIdentity parseContact(String raw, String convName, Map<String, String> contactBook) {
-        if (raw == null || raw.isBlank()) {
-            return null;
-        }
-        String clean = raw.trim();
-        if ((clean.startsWith("\"") && clean.endsWith("\"")) || (clean.startsWith("'") && clean.endsWith("'"))) {
-            clean = clean.substring(1, clean.length() - 1).trim();
-        }
-        if (clean.isBlank()) {
-            return null;
-        }
-        String lower = clean.toLowerCase();
-        if (IGNORED_CONTACTS.contains(lower)) {
-            return null;
-        }
-
-        // WhatsApp Group: e.g. 120363024888888888@g.us
-        if (lower.endsWith("@g.us") || lower.contains("@g.us")) {
-            String name = (convName != null && !convName.isBlank()) ? convName.trim() : ("Grupo (" + clean + ")");
-            return new ContactIdentity(clean, clean, name, true);
-        }
-
-        // WhatsApp individual: e.g. 5511988887777@s.whatsapp.net
-        if (lower.endsWith("@s.whatsapp.net")) {
-            String phoneId = clean.substring(0, clean.indexOf('@')).trim();
-            String name = (convName != null && !convName.isBlank()) ? convName.trim() : (contactBook != null ? contactBook.getOrDefault(phoneId, phoneId) : phoneId);
-            return new ContactIdentity(clean, phoneId, name, false);
-        }
-
-        // Email / Name format: Name <email@domain.com>
-        if (clean.contains("<") && clean.contains(">")) {
-            int start = clean.indexOf('<');
-            int end = clean.indexOf('>', start);
-            String email = clean.substring(start + 1, end).trim().toLowerCase();
-            String name = clean.substring(0, start).trim();
-            if (name.startsWith("\"") && name.endsWith("\"") && name.length() > 2) {
-                name = name.substring(1, name.length() - 1).trim();
-            }
-            if (name.isBlank()) {
-                name = (convName != null && !convName.isBlank()) ? convName.trim() : (contactBook != null ? contactBook.getOrDefault(email, email) : email);
-            }
-            return new ContactIdentity(clean, email, name, false);
-        }
-
-        // Parentheses format: Name (11999998888)
-        if (clean.contains("(") && clean.contains(")")) {
-            int p1 = clean.indexOf('(');
-            int p2 = clean.indexOf(')', p1);
-            String inP = clean.substring(p1 + 1, p2).trim();
-            String outP = clean.substring(0, p1).trim();
-            String digits = inP.replaceAll("[^0-9+]", "");
-            if (digits.length() >= 7) {
-                String name = !outP.isBlank() ? outP : (convName != null && !convName.isBlank() ? convName.trim() : inP);
-                return new ContactIdentity(clean, digits, name, false);
-            }
-        }
-
-        // Phone digits check
-        String digitsOnly = clean.replaceAll("[^0-9]", "");
-        if (digitsOnly.length() >= 7 && (clean.startsWith("+") || clean.matches("^[0-9+\\-()\\s]+$"))) {
-            String phoneId = clean.startsWith("+") ? ("+" + digitsOnly) : digitsOnly;
-            String name = (convName != null && !convName.isBlank()) ? convName.trim() : (contactBook != null ? contactBook.getOrDefault(phoneId, phoneId) : phoneId);
-            return new ContactIdentity(clean, phoneId, name, false);
-        }
-
-        // General identity
-        String name = (convName != null && !convName.isBlank()) ? convName.trim() : (contactBook != null ? contactBook.getOrDefault(clean, clean) : clean);
-        return new ContactIdentity(clean, clean, name, false);
-    }
-
-    private Map<String, String> loadContactBook() {
-        Map<String, String> book = new HashMap<>();
-        try {
-            IPEDSearcher searcher = new IPEDSearcher(ipedSource, "category:(\"contacts\" OR \"contatos\" OR \"phonebook\") OR type:\"text/vcard\" OR type:\"application/x-ufed-contact\"");
-            SearchResult res = searcher.search();
-            int[] ids = res.getIds();
-            if (ids != null) {
-                int limit = Math.min(ids.length, 500);
-                for (int i = 0; i < limit; i++) {
-                    int luceneId = ipedSource.getLuceneId(ids[i]);
-                    if (luceneId < 0) continue;
-                    Document doc = ipedSource.getReader().document(luceneId);
-                    String name = doc.get("name");
-                    if (name == null || name.isBlank()) name = doc.get("userName");
-                    if (name == null || name.isBlank()) name = doc.get("ufed:EntryName");
-
-                    String phone = doc.get("phoneNumber");
-                    if (phone == null || phone.isBlank()) phone = doc.get("userPhone");
-                    if (phone == null || phone.isBlank()) phone = doc.get("ufed:EntryValue");
-
-                    String email = doc.get("emailAddress");
-                    if (email == null || email.isBlank()) email = doc.get("userEmail");
-
-                    if (name != null && !name.isBlank()) {
-                        String cleanName = name.trim();
-                        if (phone != null && !phone.isBlank()) {
-                            String pDigits = phone.replaceAll("[^0-9+]", "");
-                            if (pDigits.length() >= 7) {
-                                book.put(pDigits, cleanName);
-                                if (!pDigits.startsWith("+")) book.put("+" + pDigits, cleanName);
-                            }
-                        }
-                        if (email != null && !email.isBlank()) {
-                            book.put(email.trim().toLowerCase(), cleanName);
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            LOGGER.debug("Não foi possível carregar agenda de contatos: {}", e.getMessage());
-        }
-        return book;
-    }
-
-    private List<CommunicationEvent> collectCommunicationEvents() throws IOException {
+    /** Number of items carrying Communication:From or Communication:To (one communication event per item). */
+    int countCommunicationEventItems() throws IOException {
         checkCaseOpen();
-        Map<String, String> contactBook = loadContactBook();
+        return communicationExtractor(null, null, null).countEventItems();
+    }
 
-        String query = "Communication\\:From:* OR Communication\\:To:* OR from:* OR to:* OR category:(\"chat messages\" OR \"calls\" OR \"emails\" OR \"messages\" OR \"whatsapp\" OR \"telegram\" OR \"signal\" OR \"skype\" OR \"discord\")";
-        IPEDSearcher searcher = new IPEDSearcher(ipedSource, query);
-        SearchResult res = searcher.search();
-        int[] ids = res.getIds();
-        if (ids == null || ids.length == 0) {
-            return List.of();
-        }
-
-        List<CommunicationEvent> events = new ArrayList<>(ids.length);
-        for (int id : ids) {
-            int luceneId = ipedSource.getLuceneId(id);
-            if (luceneId < 0) continue;
-
-            Document doc = ipedSource.getReader().document(luceneId);
-            String convName = doc.get("Conversation:Name");
-            String category = doc.get("category");
-            String catLower = category != null ? category.toLowerCase() : "";
-
-            boolean isCall = catLower.contains("call") || catLower.contains("chamada");
-            boolean isEmail = catLower.contains("email") || catLower.contains("e-mail");
-            String channel = isCall ? "calls" : (isEmail ? "emails" : (catLower.contains("whatsapp") ? "whatsapp" : (catLower.contains("telegram") ? "telegram" : "chat messages")));
-
-            String direction = doc.get("Communication:Direction");
-            boolean isIncoming = direction != null && direction.toUpperCase().contains("IN");
-            boolean isOutgoing = direction != null && direction.toUpperCase().contains("OUT");
-
-            String ts = doc.get("Communication:Date");
-            if (ts == null || ts.isBlank()) ts = doc.get("timeStamp");
-            if (ts == null || ts.isBlank()) ts = doc.get("created");
-            if (ts == null || ts.isBlank()) ts = doc.get("date");
-            if (ts != null) ts = normalizeIsoDate(ts, false);
-
-            // Senders
-            String fromRaw = doc.get("Communication:From");
-            if (fromRaw == null || fromRaw.isBlank()) fromRaw = doc.get("from");
-            if (fromRaw == null || fromRaw.isBlank()) fromRaw = doc.get("Message-From");
-
-            ContactIdentity sender = parseContact(fromRaw, convName, contactBook);
-
-            // Recipients
-            List<ContactIdentity> recipients = new ArrayList<>();
-            String[] toValues = doc.getValues("Communication:To");
-            if (toValues != null) {
-                for (String tVal : toValues) {
-                    ContactIdentity ci = parseContact(tVal, convName, contactBook);
-                    if (ci != null) recipients.add(ci);
-                }
-            }
-            if (recipients.isEmpty()) {
-                String[] toSimple = doc.getValues("to");
-                if (toSimple != null) {
-                    for (String tVal : toSimple) {
-                        ContactIdentity ci = parseContact(tVal, convName, contactBook);
-                        if (ci != null) recipients.add(ci);
-                    }
-                }
-            }
-            if (recipients.isEmpty()) {
-                String toMsg = doc.get("Message-To");
-                if (toMsg != null && !toMsg.isBlank()) {
-                    ContactIdentity ci = parseContact(toMsg, convName, contactBook);
-                    if (ci != null) recipients.add(ci);
-                }
-            }
-
-            if (sender == null && recipients.isEmpty()) {
-                continue;
-            }
-
-            events.add(new CommunicationEvent(sender, recipients, channel, isCall, isEmail, isIncoming, isOutgoing, ts));
-        }
-
-        return events;
+    public Map<String, Object> getTopContacts(int limit) throws IOException {
+        return getTopContacts(limit, null, null, null);
     }
 
     /**
-     * Aggregates message and call volume by contact identity, ranking the most active communicators in the case.
+     * Ranks the interlocutors of events with explicit direction (sender when incoming, recipients when outgoing).
+     * Events without explicit direction are reported in {@code unknown_direction_total} and {@code group_activity}.
      *
      * @param limit Maximum number of top contacts to return (default 20, max 200)
-     * @return Map containing ranked contacts with interaction counts, channels, and time bounds
+     * @param channel Optional channel filter (e.g. Viber, WhatsApp)
+     * @param startDate Optional inclusive ISO-8601 start
+     * @param endDate Optional inclusive ISO-8601 end
      */
-    public Map<String, Object> getTopContacts(int limit) throws IOException {
+    public Map<String, Object> getTopContacts(int limit, String channel, String startDate, String endDate) throws IOException {
         checkCaseOpen();
-        int maxLimit = Math.clamp(limit <= 0 ? 20 : limit, 1, 200);
+        CommunicationEventExtractor extractor = communicationExtractor(channel, startDate, endDate);
+        CommunicationAnalytics.ContactAggregator aggregator = new CommunicationAnalytics.ContactAggregator();
+        CommunicationAnalytics.Diagnostics diagnostics = new CommunicationAnalytics.Diagnostics();
+        extractor.forEach(aggregator, diagnostics);
 
-        List<CommunicationEvent> events = collectCommunicationEvents();
+        Map<String, Object> response = aggregator.result(limit);
+        response.put("filters", CommunicationAnalytics.EventFilter.of(channel, startDate, endDate, null, null).describe());
+        response.put("diagnostics", diagnostics.toMap());
+        return response;
+    }
 
-        // Get likely owner identities to avoid ranking the owner as their own interlocutor
-        Set<String> ownerIdentities = new HashSet<>();
-        try {
-            Map<String, Object> ownerInfo = getDeviceAndOwnerInfo();
-            if (ownerInfo != null) {
-                @SuppressWarnings("unchecked")
-                Collection<String> likelyNames = (Collection<String>) ownerInfo.get("likely_owner_names");
-                if (likelyNames != null) {
-                    for (String n : likelyNames) ownerIdentities.add(n.toLowerCase());
-                }
-                @SuppressWarnings("unchecked")
-                Map<String, String> devProps = (Map<String, String>) ownerInfo.get("device_properties");
-                if (devProps != null) {
-                    for (String val : devProps.values()) {
-                        String digits = val.replaceAll("[^0-9]", "");
-                        if (digits.length() >= 7) ownerIdentities.add(digits);
-                    }
-                }
-            }
-        } catch (Exception ignored) {
-        }
+    public Map<String, Object> getCommunicationsGraph(String focalContact, int minInteractions, int limitEdges) throws IOException {
+        return getCommunicationsGraph(focalContact, minInteractions, limitEdges, null, null, null, false);
+    }
 
-        class ContactStats {
-            final String id;
-            String name;
-            final boolean isGroup;
-            int totalInteractions = 0;
-            int messagesCount = 0;
-            int callsCount = 0;
-            int incomingCount = 0;
-            int outgoingCount = 0;
-            final Set<String> channels = new LinkedHashSet<>();
-            String firstInteraction = null;
-            String lastInteraction = null;
+    /**
+     * Assembles typed nodes (ACCOUNT, GROUP, LOCAL_ENDPOINT) and weighted directed edges from the indexed
+     * communication properties, without assuming who owns the device.
+     */
+    public Map<String, Object> getCommunicationsGraph(String focalContact, int minInteractions, int limitEdges,
+                                                      String channel, String startDate, String endDate,
+                                                      boolean includeMermaid) throws IOException {
+        checkCaseOpen();
+        CommunicationEventExtractor extractor = communicationExtractor(channel, startDate, endDate);
+        CommunicationAnalytics.GraphAggregator aggregator = new CommunicationAnalytics.GraphAggregator();
+        CommunicationAnalytics.Diagnostics diagnostics = new CommunicationAnalytics.Diagnostics();
+        extractor.forEach(aggregator, diagnostics);
 
-            ContactStats(String id, String name, boolean isGroup) {
-                this.id = id;
-                this.name = name;
-                this.isGroup = isGroup;
-            }
-
-            void record(boolean isCall, boolean incoming, boolean outgoing, String channel, String timestamp) {
-                totalInteractions++;
-                if (isCall) callsCount++;
-                else messagesCount++;
-                if (incoming) incomingCount++;
-                if (outgoing) outgoingCount++;
-                if (channel != null && !channel.isBlank()) channels.add(channel);
-                if (timestamp != null && !timestamp.isBlank()) {
-                    if (firstInteraction == null || timestamp.compareTo(firstInteraction) < 0) {
-                        firstInteraction = timestamp;
-                    }
-                    if (lastInteraction == null || timestamp.compareTo(lastInteraction) > 0) {
-                        lastInteraction = timestamp;
-                    }
-                }
-            }
-        }
-
-        Map<String, ContactStats> statsMap = new HashMap<>();
-
-        for (CommunicationEvent ev : events) {
-            // Incoming: interlocutor is sender
-            if (ev.isIncoming && ev.sender != null) {
-                ContactStats cs = statsMap.computeIfAbsent(ev.sender.id, k -> new ContactStats(ev.sender.id, ev.sender.name, ev.sender.isGroup));
-                if (cs.name.equals(cs.id) && !ev.sender.name.equals(ev.sender.id)) {
-                    cs.name = ev.sender.name;
-                }
-                cs.record(ev.isCall, true, false, ev.channel, ev.timestamp);
-            }
-            // Outgoing: interlocutor is each recipient
-            else if (ev.isOutgoing) {
-                for (ContactIdentity r : ev.recipients) {
-                    ContactStats cs = statsMap.computeIfAbsent(r.id, k -> new ContactStats(r.id, r.name, r.isGroup));
-                    if (cs.name.equals(cs.id) && !r.name.equals(r.id)) {
-                        cs.name = r.name;
-                    }
-                    cs.record(ev.isCall, false, true, ev.channel, ev.timestamp);
-                }
-            }
-            // Direction unknown:
-            else {
-                boolean senderIsOwner = ev.sender != null && ownerIdentities.contains(ev.sender.id.toLowerCase());
-                if (senderIsOwner) {
-                    for (ContactIdentity r : ev.recipients) {
-                        ContactStats cs = statsMap.computeIfAbsent(r.id, k -> new ContactStats(r.id, r.name, r.isGroup));
-                        if (cs.name.equals(cs.id) && !r.name.equals(r.id)) cs.name = r.name;
-                        cs.record(ev.isCall, false, true, ev.channel, ev.timestamp);
-                    }
-                } else if (ev.sender != null) {
-                    ContactStats cs = statsMap.computeIfAbsent(ev.sender.id, k -> new ContactStats(ev.sender.id, ev.sender.name, ev.sender.isGroup));
-                    if (cs.name.equals(cs.id) && !ev.sender.name.equals(ev.sender.id)) cs.name = ev.sender.name;
-                    cs.record(ev.isCall, true, false, ev.channel, ev.timestamp);
-                }
-                if (ev.sender == null) {
-                    for (ContactIdentity r : ev.recipients) {
-                        ContactStats cs = statsMap.computeIfAbsent(r.id, k -> new ContactStats(r.id, r.name, r.isGroup));
-                        if (cs.name.equals(cs.id) && !r.name.equals(r.id)) cs.name = r.name;
-                        cs.record(ev.isCall, false, false, ev.channel, ev.timestamp);
-                    }
-                }
-            }
-        }
-
-        // Sort descending by total interactions
-        List<ContactStats> sorted = statsMap.values().stream()
-                .sorted((a, b) -> Integer.compare(b.totalInteractions, a.totalInteractions))
-                .toList();
-
-        List<Map<String, Object>> topList = new ArrayList<>();
-        int rank = 1;
-        for (int i = 0; i < Math.min(sorted.size(), maxLimit); i++) {
-            ContactStats cs = sorted.get(i);
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("rank", rank++);
-            item.put("identifier", cs.id);
-            item.put("name", cs.name);
-            item.put("total_interactions", cs.totalInteractions);
-            item.put("messages_count", cs.messagesCount);
-            item.put("calls_count", cs.callsCount);
-            item.put("incoming_count", cs.incomingCount);
-            item.put("outgoing_count", cs.outgoingCount);
-            item.put("channels", new ArrayList<>(cs.channels));
-            item.put("first_interaction", cs.firstInteraction != null ? cs.firstInteraction : "");
-            item.put("last_interaction", cs.lastInteraction != null ? cs.lastInteraction : "");
-            if (cs.isGroup) {
-                item.put("is_group", true);
-            }
-            topList.add(item);
-        }
-
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("total_contacts_discovered", statsMap.size());
-        response.put("returned_count", topList.size());
-        response.put("limit", maxLimit);
-        response.put("contacts", topList);
+        Map<String, Object> response = aggregator.result(focalContact, minInteractions, limitEdges, includeMermaid);
+        response.put("filters", CommunicationAnalytics.EventFilter.of(channel, startDate, endDate, null, null).describe());
+        response.put("diagnostics", diagnostics.toMap());
         return response;
     }
 
     /**
-     * Assembles a communications network topology containing nodes and weighted interaction edges.
-     *
-     * @param focalContact (Optional) Center the graph on interactions involving this contact
-     * @param minInteractions Minimum interactions required to include an edge (default 5, min 1)
-     * @param limitEdges Maximum number of edges to return (default 50, max 200)
-     * @return Map containing graph nodes and edges suitable for cognitive reasoning or network visualization
+     * Details how two contacts relate: totals, channels, directions, monthly histogram, shared groups and evidence.
+     * Ambiguous references are returned as candidates instead of being guessed.
      */
-    public Map<String, Object> getCommunicationsGraph(String focalContact, int minInteractions, int limitEdges) throws IOException {
+    public Map<String, Object> getContactRelationship(String contactA, String contactB, String channel,
+                                                      String startDate, String endDate, int evidenceLimit) throws IOException {
         checkCaseOpen();
-        int safeMinInteractions = Math.clamp(minInteractions <= 0 ? 5 : minInteractions, 1, Integer.MAX_VALUE);
-        int maxLimitEdges = Math.clamp(limitEdges <= 0 ? 50 : limitEdges, 1, 200);
-
-        List<CommunicationEvent> events = collectCommunicationEvents();
-
-        // Device owner representation for local endpoints
-        String defaultOwnerId = "Dispositivo_Local";
-        String defaultOwnerName = "Dispositivo / Titular (Local)";
-        try {
-            Map<String, Object> ownerInfo = getDeviceAndOwnerInfo();
-            if (ownerInfo != null) {
-                @SuppressWarnings("unchecked")
-                Collection<String> likelyNames = (Collection<String>) ownerInfo.get("likely_owner_names");
-                if (likelyNames != null && !likelyNames.isEmpty()) {
-                    defaultOwnerName = likelyNames.iterator().next();
-                    defaultOwnerId = defaultOwnerName.replaceAll("\\s+", "_");
-                }
-            }
-        } catch (Exception ignored) {
+        if (contactA == null || contactA.isBlank() || contactB == null || contactB.isBlank()) {
+            return Map.of("error", "Os parâmetros 'contact_a' e 'contact_b' são obrigatórios.");
         }
-        ContactIdentity ownerNode = new ContactIdentity(defaultOwnerId, defaultOwnerId, defaultOwnerName, false);
-
-        class EdgeAggregator {
-            final ContactIdentity source;
-            final ContactIdentity target;
-            int weight = 0;
-            int messagesCount = 0;
-            int callsCount = 0;
-            final Set<String> channels = new LinkedHashSet<>();
-            String firstInteraction = null;
-            String lastInteraction = null;
-
-            EdgeAggregator(ContactIdentity source, ContactIdentity target) {
-                this.source = source;
-                this.target = target;
-            }
-
-            void record(boolean isCall, String channel, String timestamp) {
-                weight++;
-                if (isCall) callsCount++;
-                else messagesCount++;
-                if (channel != null && !channel.isBlank()) channels.add(channel);
-                if (timestamp != null && !timestamp.isBlank()) {
-                    if (firstInteraction == null || timestamp.compareTo(firstInteraction) < 0) {
-                        firstInteraction = timestamp;
-                    }
-                    if (lastInteraction == null || timestamp.compareTo(lastInteraction) > 0) {
-                        lastInteraction = timestamp;
-                    }
-                }
-            }
-        }
-
-        Map<String, EdgeAggregator> edgesMap = new HashMap<>();
-        Map<String, ContactIdentity> allKnownNodes = new HashMap<>();
-        allKnownNodes.put(ownerNode.id, ownerNode);
-
-        for (CommunicationEvent ev : events) {
-            ContactIdentity src = null;
-            List<ContactIdentity> targets = new ArrayList<>();
-
-            if (ev.isIncoming) {
-                src = ev.sender;
-                targets.add(ownerNode);
-            } else if (ev.isOutgoing) {
-                src = ownerNode;
-                targets.addAll(ev.recipients);
-            } else {
-                if (ev.sender != null) {
-                    src = ev.sender;
-                    if (!ev.recipients.isEmpty()) {
-                        targets.addAll(ev.recipients);
-                    } else {
-                        targets.add(ownerNode);
-                    }
-                } else if (!ev.recipients.isEmpty()) {
-                    src = ownerNode;
-                    targets.addAll(ev.recipients);
-                }
-            }
-
-            if (src == null || targets.isEmpty()) continue;
-            final ContactIdentity finalSrc = src;
-            allKnownNodes.putIfAbsent(finalSrc.id, finalSrc);
-
-            for (ContactIdentity tgt : targets) {
-                if (tgt == null || finalSrc.id.equals(tgt.id)) continue;
-                allKnownNodes.putIfAbsent(tgt.id, tgt);
-
-                String edgeKey = finalSrc.id + "->" + tgt.id;
-                EdgeAggregator ea = edgesMap.computeIfAbsent(edgeKey, k -> new EdgeAggregator(finalSrc, tgt));
-                ea.record(ev.isCall, ev.channel, ev.timestamp);
-            }
-        }
-
-        // Focal contact filtering
-        final String focalClean = (focalContact != null && !focalContact.isBlank()) ? focalContact.trim().toLowerCase() : null;
-
-        List<EdgeAggregator> eligibleEdges = edgesMap.values().stream()
-                .filter(e -> {
-                    if (focalClean == null) return true;
-                    return ContactIdentity.matchesFocal(e.source, focalClean) || ContactIdentity.matchesFocal(e.target, focalClean);
-                })
-                .filter(e -> e.weight >= safeMinInteractions)
-                .sorted((a, b) -> Integer.compare(b.weight, a.weight))
-                .limit(maxLimitEdges)
-                .toList();
-
-        // Extract nodes connected by retained edges
-        Map<String, Map<String, Object>> connectedNodes = new LinkedHashMap<>();
-        for (EdgeAggregator ea : eligibleEdges) {
-            for (ContactIdentity ci : List.of(ea.source, ea.target)) {
-                connectedNodes.computeIfAbsent(ci.id, k -> {
-                    Map<String, Object> node = new LinkedHashMap<>();
-                    node.put("id", ci.id);
-                    node.put("label", ci.name != null && !ci.name.isBlank() ? ci.name : ci.id);
-                    node.put("name", ci.name);
-                    node.put("phone_or_account", ci.id);
-                    node.put("total_interactions", 0);
-                    node.put("is_focal", focalClean != null && ContactIdentity.matchesFocal(ci, focalClean));
-                    if (ci.isGroup) node.put("is_group", true);
-                    return node;
-                });
-                Map<String, Object> node = connectedNodes.get(ci.id);
-                node.put("total_interactions", (int) node.get("total_interactions") + ea.weight);
-            }
-        }
-
-        // If focal contact was specified and matched a known node, ensure it is in connectedNodes even if 0 edges met threshold
-        if (focalClean != null && connectedNodes.isEmpty()) {
-            for (ContactIdentity ci : allKnownNodes.values()) {
-                if (ContactIdentity.matchesFocal(ci, focalClean)) {
-                    Map<String, Object> node = new LinkedHashMap<>();
-                    node.put("id", ci.id);
-                    node.put("label", ci.name != null && !ci.name.isBlank() ? ci.name : ci.id);
-                    node.put("name", ci.name);
-                    node.put("phone_or_account", ci.id);
-                    node.put("total_interactions", 0);
-                    node.put("is_focal", true);
-                    if (ci.isGroup) node.put("is_group", true);
-                    connectedNodes.put(ci.id, node);
-                    break;
-                }
-            }
-        }
-
-        List<Map<String, Object>> edgesList = new ArrayList<>();
-        for (EdgeAggregator ea : eligibleEdges) {
-            Map<String, Object> edge = new LinkedHashMap<>();
-            edge.put("source", ea.source.id);
-            edge.put("target", ea.target.id);
-            edge.put("weight", ea.weight);
-            edge.put("channels", new ArrayList<>(ea.channels));
-            edge.put("messages_count", ea.messagesCount);
-            edge.put("calls_count", ea.callsCount);
-            edge.put("first_interaction", ea.firstInteraction != null ? ea.firstInteraction : "");
-            edge.put("last_interaction", ea.lastInteraction != null ? ea.lastInteraction : "");
-            edgesList.add(edge);
-        }
-
-        List<Map<String, Object>> nodesList = new ArrayList<>(connectedNodes.values());
-        nodesList.sort((a, b) -> Integer.compare((int) b.get("total_interactions"), (int) a.get("total_interactions")));
-
-        Map<String, Object> response = new LinkedHashMap<>();
-        if (focalClean != null) {
-            response.put("focal_contact", focalContact.trim());
-        }
-        response.put("min_interactions", safeMinInteractions);
-        response.put("limit_edges", maxLimitEdges);
-        response.put("total_nodes", nodesList.size());
-        response.put("total_edges", edgesList.size());
-        response.put("nodes", nodesList);
-        response.put("edges", edgesList);
-
-        if (focalClean != null && edgesList.isEmpty()) {
-            response.put("message", "Nenhuma conexão encontrada para o contato focal com o limite mínimo de " + safeMinInteractions + " interações. Tente reduzir 'min_interactions' para 1.");
-        }
-
+        CommunicationEventExtractor extractor = communicationExtractor(channel, startDate, endDate);
+        CommunicationAnalytics.Diagnostics diagnostics = new CommunicationAnalytics.Diagnostics();
+        Map<String, Object> response = CommunicationAnalytics.relationship(extractor, contactA, contactB,
+                evidenceLimit, extractor.context(), diagnostics);
+        response.put("filters", CommunicationAnalytics.EventFilter.of(channel, startDate, endDate, null, null).describe());
+        response.put("diagnostics", diagnostics.toMap());
         return response;
     }
 

@@ -51,7 +51,7 @@ $resolvedExe = (Resolve-Path $ExePath).Path
 # Teste prévio: flag --version
 Write-Host "[0/10] Testando flag '--version' no executavel..." -NoNewline
 $verOutput = (& $resolvedExe --version | Out-String)
-if ($verOutput -match "IPED Tools MCP v1\.0\.0" -and $verOutput -match "ipedtools\.com\.br") {
+if ($verOutput -match "IPED Tools MCP v1\.\d+\.\d+" -and $verOutput -match "ipedtools\.com\.br") {
     $firstLine = ($verOutput -split "`r?`n")[0]
     Write-Host (" PASS (" + $firstLine + ")") -ForegroundColor Green
 } else {
@@ -64,11 +64,13 @@ $psi.Arguments = "--stdio --case `"$CasePath`""
 $psi.RedirectStandardInput = $true
 $psi.RedirectStandardOutput = $true
 $psi.RedirectStandardError = $false
+$psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
 $psi.UseShellExecute = $false
 $psi.CreateNoWindow = $true
 
 $proc = [System.Diagnostics.Process]::Start($psi)
-$writer = $proc.StandardInput
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$writer = New-Object System.IO.StreamWriter($proc.StandardInput.BaseStream, $utf8NoBom)
 $reader = $proc.StandardOutput
 
 $reqId = 1
@@ -125,13 +127,18 @@ try {
         Write-Host (" FAIL (esperava >= 25, obteve $toolCount)") -ForegroundColor Red; exit 1
     }
 
-    Write-Host "[3/10] Testando get_server_status..." -NoNewline
+    Write-Host "[3/10] Testando get_server_status e list_sources (UTF-8)..." -NoNewline
     $statusCall = Send-RpcRequest "tools/call" @{ name = "get_server_status"; arguments = @{} }
     $statusData = $statusCall.result.content[0].text | ConvertFrom-Json
-    if ($statusData.connected -and $statusData.case_open -and $statusData.server_version -like "1.0.1*") {
-        Write-Host (" PASS (Versao: " + $statusData.server_version + " | Fonte: " + $statusData.case_source_id + ")") -ForegroundColor Green
+    $sourcesCall = Send-RpcRequest "tools/call" @{ name = "list_sources"; arguments = @{} }
+    $sourcesJson = ($sourcesCall | ConvertTo-Json -Depth 6 -Compress)
+    $expectedBm = "Per$([char]0x00ED)cia IA"
+    $bmUtf8Call = Send-RpcRequest "tools/call" @{ name = "add_to_bookmark"; arguments = @{ bookmark_name = $expectedBm; doc_ids = @(1) } }
+    $bmUtf8Text = $bmUtf8Call.result.content[0].text
+    if ($statusData.connected -and $statusData.case_open -and $statusData.server_version -like "1.0.1*" -and -not $sourcesJson.Contains([char]0xFFFD) -and $bmUtf8Text.Contains($expectedBm) -and -not $bmUtf8Text.Contains([char]0xFFFD)) {
+        Write-Host (" PASS (Versao: " + $statusData.server_version + " | Fonte: " + $statusData.case_source_id + " | UTF-8 integro)") -ForegroundColor Green
     } else {
-        Write-Host " FAIL" -ForegroundColor Red; exit 1
+        Write-Host " FAIL (Status invalido ou corrupcao UTF-8 U+FFFD)" -ForegroundColor Red; exit 1
     }
 
     Write-Host "[4/10] Testando get_case_summary..." -NoNewline

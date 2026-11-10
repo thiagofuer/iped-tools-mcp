@@ -568,6 +568,10 @@ No chat com o modelo, chame o prompt '/start_case' para carregar automaticamente
         } else if (isJar) {
             String argsList = pinCase
                     ? """
+                        "-Dfile.encoding=UTF-8",
+                        "-Dstdout.encoding=UTF-8",
+                        "-Dstderr.encoding=UTF-8",
+                        "-Dstdin.encoding=UTF-8",
                         "-Djava.security.manager=allow",
                         "--add-opens=java.base/java.lang=ALL-UNNAMED",
                         "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
@@ -586,6 +590,10 @@ No chat com o modelo, chame o prompt '/start_case' para carregar automaticamente
                         "%s"
                       """.formatted(jsonEscapedExec, jsonEscapedCase)
                     : """
+                        "-Dfile.encoding=UTF-8",
+                        "-Dstdout.encoding=UTF-8",
+                        "-Dstderr.encoding=UTF-8",
+                        "-Dstdin.encoding=UTF-8",
                         "-Djava.security.manager=allow",
                         "--add-opens=java.base/java.lang=ALL-UNNAMED",
                         "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",

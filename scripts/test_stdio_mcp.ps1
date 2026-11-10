@@ -45,13 +45,17 @@ if (-not (Test-Path $JavaPath)) {
 # Teste prévio: flag --version
 Write-Host "[0/26] Testando flag '--version'..." -NoNewline
 $verOutput = & $JavaPath -jar $JarPath --version
-if ($verOutput -match "IPED Tools MCP v1\.0\.0" -and $verOutput -match "ipedtools\.com\.br") {
+if ($verOutput -match "IPED Tools MCP v1\.\d+\.\d+" -and $verOutput -match "ipedtools\.com\.br") {
     Write-Host (" PASS (" + $verOutput[0] + ")") -ForegroundColor Green
 } else {
     Write-Host " FAIL: $verOutput" -ForegroundColor Red; exit 1
 }
 
 $jvmArgs = @(
+    "-Dfile.encoding=UTF-8",
+    "-Dstdout.encoding=UTF-8",
+    "-Dstderr.encoding=UTF-8",
+    "-Dstdin.encoding=UTF-8",
     "--add-opens=java.base/java.lang=ALL-UNNAMED",
     "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
     "--add-opens=java.base/java.math=ALL-UNNAMED",
@@ -72,11 +76,13 @@ $psi.Arguments = ($jvmArgs -join " ")
 $psi.RedirectStandardInput = $true
 $psi.RedirectStandardOutput = $true
 $psi.RedirectStandardError = $false
+$psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
 $psi.UseShellExecute = $false
 $psi.CreateNoWindow = $true
 
 $proc = [System.Diagnostics.Process]::Start($psi)
-$writer = $proc.StandardInput
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$writer = New-Object System.IO.StreamWriter($proc.StandardInput.BaseStream, $utf8NoBom)
 $reader = $proc.StandardOutput
 
 $reqId = 1
@@ -130,10 +136,12 @@ try {
     Write-Host "[2/25] Testando tools/list..." -NoNewline
     $toolsList = Send-RpcRequest "tools/list"
     $toolCount = $toolsList.result.tools.Count
-    if ($toolCount -ge 24) {
+    $expectedTools = 28
+    $toolNames = $toolsList.result.tools | ForEach-Object { $_.name }
+    if ($toolCount -eq $expectedTools -and ($toolNames -contains "get_contact_relationship")) {
         Write-Host (" PASS (" + $toolCount + " ferramentas registradas)") -ForegroundColor Green
     } else {
-        Write-Host (" FAIL (" + $toolCount + " ferramentas)") -ForegroundColor Red; exit 1
+        Write-Host (" FAIL (" + $toolCount + " ferramentas, esperado " + $expectedTools + " incluindo get_contact_relationship)") -ForegroundColor Red; exit 1
     }
 
     # 4. Call get_property_dictionary
@@ -213,11 +221,11 @@ try {
     $metaData = $metaText | ConvertFrom-Json
     $item = if ($metaData -is [System.Array]) { $metaData[0] } else { $metaData }
     $docName = if ($item.properties.basic) { $item.properties.basic.name } else { $item.properties.name }
-    if ($item.id -eq $sampleDocId -and $item.properties) {
+    if ($item.id -eq $sampleDocId -and $item.properties -and -not $metaText.Contains([char]0xFFFD)) {
         $blocks = ($item.properties | Get-Member -MemberType NoteProperty).Name -join ", "
         Write-Host (" PASS (Nome: " + $docName + " | Blocos presentes: " + $blocks + ")") -ForegroundColor Green
     } else {
-        Write-Host " FAIL" -ForegroundColor Red; exit 1
+        Write-Host " FAIL (Metadados invalidos ou corrupcao UTF-8 U+FFFD detectada)" -ForegroundColor Red; exit 1
     }
 
     # 11. Call get_document_text
@@ -230,23 +238,26 @@ try {
         Write-Host " FAIL" -ForegroundColor Red; exit 1
     }
 
-    # 12. Call list_categories & list_bookmarks
-    Write-Host "[11/15] Testando calls list_categories e list_bookmarks..." -NoNewline
+    # 12. Call list_sources, list_categories & list_bookmarks
+    Write-Host "[11/15] Testando calls list_sources, list_categories e list_bookmarks (UTF-8)..." -NoNewline
+    $sourcesCall = Send-RpcRequest "tools/call" @{ name = "list_sources"; arguments = @{} }
+    $sourcesJson = ($sourcesCall | ConvertTo-Json -Depth 6 -Compress)
     $catsCall = Send-RpcRequest "tools/call" @{ name = "list_categories"; arguments = @{} }
     $catsCount = $catsCall.result.content.Count
     $bmsCall = Send-RpcRequest "tools/call" @{ name = "list_bookmarks"; arguments = @{} }
     $bmsCount = $bmsCall.result.content.Count
-    if ($catsCount -gt 0) {
-        Write-Host (" PASS (" + $catsCount + " categorias, " + $bmsCount + " marcadores)") -ForegroundColor Green
+    if ($catsCount -gt 0 -and -not $sourcesJson.Contains([char]0xFFFD)) {
+        Write-Host (" PASS (" + $catsCount + " categorias, " + $bmsCount + " marcadores, UTF-8 integro)") -ForegroundColor Green
     } else {
-        Write-Host " FAIL" -ForegroundColor Red; exit 1
+        Write-Host " FAIL (Categorias vazias ou corrupcao UTF-8 U+FFFD em list_sources)" -ForegroundColor Red; exit 1
     }
 
-    # 13. Call add_to_bookmark
-    Write-Host "[12/15] Testando call add_to_bookmark..." -NoNewline
-    $addBmCall = Send-RpcRequest "tools/call" @{ name = "add_to_bookmark"; arguments = @{ bookmark_name = "Pericia AI"; doc_ids = @($sampleDocId) } }
+    # 13. Call add_to_bookmark (com acentuacao UTF-8)
+    $expectedBm = "Per$([char]0x00ED)cia IA"
+    Write-Host ("[12/15] Testando call add_to_bookmark (UTF-8 '" + $expectedBm + "')...") -NoNewline
+    $addBmCall = Send-RpcRequest "tools/call" @{ name = "add_to_bookmark"; arguments = @{ bookmark_name = $expectedBm; doc_ids = @($sampleDocId) } }
     $addBmText = $addBmCall.result.content[0].text
-    if ($addBmText -match "Sucesso") {
+    if ($addBmText -match "Sucesso" -and $addBmText.Contains($expectedBm) -and -not $addBmText.Contains([char]0xFFFD)) {
         Write-Host (" PASS (" + $addBmText + ")") -ForegroundColor Green
     } else {
         Write-Host (" FAIL (" + $addBmText + ")") -ForegroundColor Red; exit 1
@@ -289,23 +300,74 @@ try {
     }
 
     # 17. Call get_top_contacts
-    Write-Host "[16/17] Testando call get_top_contacts..." -NoNewline
+    Write-Host "[16/19] Testando call get_top_contacts..." -NoNewline
     $contactsCall = Send-RpcRequest "tools/call" @{ name = "get_top_contacts"; arguments = @{ limit = 10 } }
     $contactsData = $contactsCall.result.content[0].text | ConvertFrom-Json
-    if ($contactsData.contacts -ne $null -and $contactsData.total_contacts_discovered -ge 0) {
-        Write-Host (" PASS (" + $contactsData.total_contacts_discovered + " contatos identificados, " + $contactsData.returned_count + " no ranking)") -ForegroundColor Green
+    $contactFields = @("rank", "identifier", "name", "total_interactions", "messages_count", "calls_count", "incoming_count",
+        "outgoing_count", "unknown_direction_count", "channels", "by_channel", "by_month", "active_days",
+        "first_interaction", "last_interaction", "evidence_ids")
+    $contactsOk = $contactsData.contacts -ne $null -and $contactsData.diagnostics.events_analyzed -ne $null `
+        -and $contactsData.truncated -ne $null -and $contactsData.unknown_direction_total -ne $null `
+        -and $contactsData.group_activity -ne $null -and $contactsData.returned_count -le 10
+    foreach ($c in $contactsData.contacts) {
+        $names = ($c | Get-Member -MemberType NoteProperty).Name
+        foreach ($f in $contactFields) { if ($names -notcontains $f) { $contactsOk = $false } }
+        if ($c.total_interactions -ne ($c.incoming_count + $c.outgoing_count)) { $contactsOk = $false }
+        if ($c.evidence_ids.Count -gt 5) { $contactsOk = $false }
+    }
+    if ($contactsOk) {
+        $dir = $contactsData.diagnostics.with_explicit_direction
+        Write-Host (" PASS (" + $contactsData.total_contacts_discovered + " contatos, " + $contactsData.returned_count + " no ranking, " +
+            $contactsData.diagnostics.events_analyzed + " eventos, direcao explicita " + $dir.percent + "%, unknown " + $contactsData.unknown_direction_total + ")") -ForegroundColor Green
     } else {
         Write-Host (" FAIL: " + ($contactsCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
-    # 18. Call get_communications_graph
+    # 18. Call get_communications_graph (sem e com Mermaid)
     Write-Host "[17/19] Testando call get_communications_graph..." -NoNewline
     $graphCall = Send-RpcRequest "tools/call" @{ name = "get_communications_graph"; arguments = @{ min_interactions = 1; limit_edges = 20 } }
     $graphData = $graphCall.result.content[0].text | ConvertFrom-Json
-    if ($graphData.nodes -ne $null -and $graphData.edges -ne $null) {
-        Write-Host (" PASS (" + $graphData.total_nodes + " nos, " + $graphData.total_edges + " arestas no grafo)") -ForegroundColor Green
+    $graphNames = ($graphData | Get-Member -MemberType NoteProperty).Name
+    $graphOk = $graphData.nodes -ne $null -and $graphData.edges -ne $null -and $graphData.graph_source -eq "lucene-index" `
+        -and $graphData.truncated -ne $null -and $graphData.diagnostics.events_analyzed -ne $null `
+        -and $graphData.unlinked_events -ne $null -and $graphData.edges.Count -le 20 -and ($graphNames -notcontains "mermaid")
+    foreach ($n in $graphData.nodes) {
+        if (@("ACCOUNT", "GROUP", "LOCAL_ENDPOINT") -notcontains $n.type) { $graphOk = $false }
+        if ($n.id -eq "Dispositivo_Local") { $graphOk = $false }
+        if ($n.type -eq "LOCAL_ENDPOINT" -and $n.identity_resolved -ne $false) { $graphOk = $false }
+    }
+    foreach ($e in $graphData.edges) { if ($e.evidence_ids.Count -gt 5) { $graphOk = $false } }
+    $mermaidCall = Send-RpcRequest "tools/call" @{ name = "get_communications_graph"; arguments = @{ min_interactions = 1; limit_edges = 20; include_mermaid = $true } }
+    $mermaidData = $mermaidCall.result.content[0].text | ConvertFrom-Json
+    if (-not ($mermaidData.mermaid -like "flowchart LR*")) { $graphOk = $false }
+    if ($graphOk) {
+        Write-Host (" PASS (" + $graphData.total_nodes + " nos, " + $graphData.total_edges + " de " + $graphData.total_eligible_edges +
+            " arestas, truncated=" + $graphData.truncated + ", unlinked=" + $graphData.unlinked_events + ", mermaid OK)") -ForegroundColor Green
     } else {
         Write-Host (" FAIL: " + ($graphCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
+    }
+
+    # 18b. Call get_contact_relationship
+    Write-Host "[18b/19] Testando call get_contact_relationship..." -NoNewline
+    $pair = $graphData.edges | Where-Object { -not $_.source.StartsWith("local:") -and -not $_.target.StartsWith("local:") } | Select-Object -First 1
+    if (-not $pair) { $pair = $graphData.edges | Select-Object -First 1 }
+    if ($pair) {
+        $relA = $pair.source; $relB = $pair.target
+        if ($relA.StartsWith("local:")) { $relA = $pair.target; $relB = $graphData.nodes[0].id }
+    } else {
+        $relA = "zz-inexistente-zz"; $relB = "yy-inexistente-yy"
+    }
+    $relCallC = Send-RpcRequest "tools/call" @{ name = "get_contact_relationship"; arguments = @{ contact_a = $relA; contact_b = $relB; evidence_limit = 5 } }
+    $relDataC = $relCallC.result.content[0].text | ConvertFrom-Json
+    $relOk = @("found", "no_relationship", "ambiguous", "not_found", "same_identity") -contains $relDataC.status `
+        -and $relDataC.diagnostics -ne $null
+    if ($relDataC.status -eq "found") {
+        $relOk = $relOk -and $relDataC.by_channel -ne $null -and $relDataC.by_month -ne $null -and $relDataC.evidence_ids.Count -le 5
+    }
+    if ($relOk) {
+        Write-Host (" PASS (" + $relA + " x " + $relB + ": status=" + $relDataC.status + ", interacoes=" + $relDataC.total_interactions + ")") -ForegroundColor Green
+    } else {
+        Write-Host (" FAIL: " + ($relCallC | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
     # 19. Call list_folder_contents

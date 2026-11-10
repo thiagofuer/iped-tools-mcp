@@ -2,6 +2,10 @@ package br.com.ipedtools.mcp;
 
 import java.awt.EventQueue;
 import java.io.File;
+import java.io.FileDescriptor;
+import java.io.FileOutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +27,8 @@ public class McpApplication {
     private static final Logger LOGGER = LoggerFactory.getLogger(McpApplication.class);
 
     public static void main(String... args) {
+        enforceUtf8StandardStreams();
+
         // Safeguard user.dir when launched by clients like Claude Desktop (Windows Store / MSIX)
         // which default child process working directory to C:\Windows\System32.
         // Quarkus scans ${user.dir}/config for config files, throwing AccessDeniedException on C:\Windows\System32\config.
@@ -102,6 +108,26 @@ public class McpApplication {
                     LOGGER.error("Erro fatal ao abrir interface gráfica: {}", e.getMessage(), e);
                 }
             });
+        }
+    }
+
+    /**
+     * Enforces UTF-8 character encoding on standard I/O streams (stdout, stderr, stdin)
+     * so JSON-RPC 2.0 messages and forensic metadata containing Portuguese diacritics or Unicode
+     * characters are never corrupted by the Windows native codepage (e.g. Cp1252).
+     */
+    public static void enforceUtf8StandardStreams() {
+        System.setProperty("file.encoding", "UTF-8");
+        System.setProperty("stdout.encoding", "UTF-8");
+        System.setProperty("stderr.encoding", "UTF-8");
+        System.setProperty("stdin.encoding", "UTF-8");
+        System.setProperty("sun.stdout.encoding", "UTF-8");
+        System.setProperty("sun.stderr.encoding", "UTF-8");
+        if (System.out != null && !StandardCharsets.UTF_8.equals(System.out.charset())) {
+            System.setOut(new PrintStream(new FileOutputStream(FileDescriptor.out), true, StandardCharsets.UTF_8));
+        }
+        if (System.err != null && !StandardCharsets.UTF_8.equals(System.err.charset())) {
+            System.setErr(new PrintStream(new FileOutputStream(FileDescriptor.err), true, StandardCharsets.UTF_8));
         }
     }
 
