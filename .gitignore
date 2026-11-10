@@ -66,3 +66,6 @@ test-case.properties
 .agents/
 .claude/
 .gemini/
+
+# Local planning documentation (kept outside this repository)
+/openspec/
