@@ -97,6 +97,8 @@ class ForensicPromptsTest {
             assertFalse(text.contains(removed), "Prompt não deve citar ferramenta removida: " + removed);
         }
         assertTrue(text.contains("search_documents"), "Deve orientar busca estruturada");
+        assertTrue(text.contains("next_offset"), "Deve orientar a paginação da busca");
+        assertTrue(text.contains("total_found"), "Deve orientar a relatar o total exato");
         assertTrue(text.contains("Escape de Caracteres Lucene"), "Deve conter regras de escape Lucene");
         assertTrue(text.contains("get_document_metadata"), "Deve orientar inspeção progressiva de metadados");
         assertTrue(text.contains("get_document_text"), "Deve orientar paginação de texto com offset e max_chars");

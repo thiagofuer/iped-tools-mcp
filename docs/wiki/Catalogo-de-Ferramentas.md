@@ -46,7 +46,8 @@ O catálogo mostra as propriedades que **existem neste caso**, lidas do índice,
 
 ### `search_documents`
 * **Propósito:** Executa consultas estruturadas no índice Apache Lucene do caso, suportando operadores booleanos, filtros de categoria, campos periciais e curingas.
-* **Exemplo de Pergunta:** *"Busque mensagens de chat que contenham o termo 'pagamento' ou 'transferência'."*
+* **Paginação:** cada resposta informa o total exato (`total_found`) e traz até 100 itens a partir de `offset`. Quando ainda há itens (`has_more`), a resposta indica o `next_offset` para pedir a página seguinte com a mesma consulta. A ordem é a do índice do caso, a mesma em todas as chamadas, e não indica relevância nem data.
+* **Exemplos de Pergunta:** *"Busque mensagens de chat que contenham o termo 'pagamento' ou 'transferência'."* · *"Mostre os próximos resultados dessa busca."*
 
 ### `get_document_metadata`
 * **Propósito:** Recupera metadados técnicos de um ou mais itens, agrupados pelos mesmos grupos de `list_properties` (`Basic`, `Communication`, `AI`, `Image`, `UFED`...), com seleção de grupos (`groups`), extração sem truncamento (`raw: true`) ou filtragem por campos (`keys`). Resultados de IA como `nudityScore` e `ocrCharCount` aparecem no modo padrão.

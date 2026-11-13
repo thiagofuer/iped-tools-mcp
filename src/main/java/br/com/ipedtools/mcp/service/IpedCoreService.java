@@ -274,9 +274,18 @@ public class IpedCoreService {
      * Executes a Lucene query against the open IPED case index.
      */
     public Map<String, Object> executeSearch(String queryText, int limit) throws IOException {
+        return executeSearch(queryText, limit, 0);
+    }
+
+    /**
+     * Executes a Lucene query and returns the page {@code [offset, offset + limit)} of the matching items, in the
+     * index order produced by IPEDSearcher (stable across calls for the same case and query).
+     */
+    public Map<String, Object> executeSearch(String queryText, int limit, int offset) throws IOException {
         checkCaseOpen();
 
         int maxLimit = Math.clamp(limit, 1, 100);
+        int start = Math.max(0, offset);
         String sanitizedQuery = prepareQuery(queryText);
 
         IPEDSearcher searcher = new IPEDSearcher(ipedSource, sanitizedQuery);
@@ -286,23 +295,25 @@ public class IpedCoreService {
         int totalFound = (allIds != null) ? allIds.length : 0;
 
         List<Map<String, Object>> items = new ArrayList<>();
-        if (allIds != null && totalFound > 0) {
-            int returnCount = Math.min(totalFound, maxLimit);
-            for (int i = 0; i < returnCount; i++) {
-                items.add(Map.of("source", sourceId, "id", allIds[i]));
-            }
+        int end = Math.min(totalFound, start + maxLimit);
+        for (int i = start; i < end; i++) {
+            items.add(Map.of("source", sourceId, "id", allIds[i]));
         }
+        boolean hasMore = start + items.size() < totalFound;
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("query", queryText);
         response.put("source_id", sourceId);
         response.put("total_found", totalFound);
+        response.put("offset", start);
         response.put("returned_count", items.size());
         response.put("limit", maxLimit);
+        response.put("has_more", hasMore);
+        if (hasMore) {
+            response.put("next_offset", start + items.size());
+        }
         response.put("items", items);
-        response.put("note", totalFound > items.size()
-                ? "Exibindo os primeiros " + items.size() + " de " + totalFound + " itens encontrados."
-                : "Todos os itens encontrados foram exibidos.");
+        response.put("note", pageNote(totalFound, start, items.size(), hasMore));
 
         List<Map<String, Object>> warnings = unknownPropertyWarnings(searcher.getQuery());
         if (totalFound == 0 && !NumericRangeSupport.extractRanges(sanitizedQuery).isEmpty()) {
@@ -369,6 +380,23 @@ public class IpedCoreService {
             warnings.add(w);
         }
         return warnings;
+    }
+
+    /** Note describing which positions were returned and how to get the next page. */
+    static String pageNote(int total, int offset, int returned, boolean hasMore) {
+        if (total == 0) {
+            return "Nenhum item encontrado.";
+        }
+        if (returned == 0) {
+            return "O offset " + offset + " está além do total de " + total + " itens encontrados; não há itens nesta página.";
+        }
+        String range = "Itens " + (offset + 1) + " a " + (offset + returned) + " de " + total + ".";
+        if (hasMore) {
+            return range + " Ainda há itens: para os próximos, chame search_documents com a mesma consulta e offset="
+                    + (offset + returned) + ". Não conclua que algo não existe antes de percorrer as páginas ou refinar a consulta.";
+        }
+        return offset == 0 ? "Todos os " + total + " itens encontrados foram exibidos."
+                : range + " Esta é a última página: todos os itens encontrados foram percorridos.";
     }
 
     /**

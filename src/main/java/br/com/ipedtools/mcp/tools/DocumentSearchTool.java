@@ -40,6 +40,16 @@ public class DocumentSearchTool {
               When a range finds nothing, the response 'warnings' field tells whether the property is absent
               from the case or gives its minimum and maximum values, so you can adjust the range.
 
+            PAGINATION (results are never silently truncated):
+              - 'total_found' is the exact number of matching items. Each call returns at most 'limit' items
+                (default 30, max 100) starting at 'offset' (default 0).
+              - When 'has_more' is true, call search_documents again with the SAME query and offset=next_offset
+                to get the following items. The last page has has_more=false and no next_offset.
+              - Items come in the index order of the case, the same in every call. The order is NOT relevance
+                or date: do not draw conclusions from an item's position.
+              - Do not conclude that something does not exist while has_more is true: read the remaining pages,
+                or narrow the query when the total is large. Report total_found, not the number of items you saw.
+
             WARNINGS: when the query names a property that does not exist in the case, 'warnings' reports it
             (type 'property_not_in_case', with similar existing names). That part of the query matches nothing,
             which is not the same as absence of evidence.
@@ -50,17 +60,19 @@ public class DocumentSearchTool {
             """
     )
     public Map<String, Object> searchDocuments(
-            @ToolArg(name = "query", description = "Lucene search query string (e.g. 'category:whatsapp AND pix', 'name:*.docx')")
+            @ToolArg(name = "query", description = "Lucene search query string (e.g. 'category:\"Instant Messages\" AND pix', 'name:*.docx')")
             String query,
-            @ToolArg(name = "limit", description = "Max document IDs to return (default 30, max 100)", required = false, defaultValue = "30")
-            int limit
+            @ToolArg(name = "limit", description = "Max document IDs to return in this page (default 30, max 100)", required = false, defaultValue = "30")
+            int limit,
+            @ToolArg(name = "offset", description = "Position of the first item to return (default 0). Use the next_offset of the previous response to read the next page.", required = false)
+            Integer offset
     ) {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
             return Map.of("error", "Nenhum caso está aberto no momento.");
         }
         try {
-            return service.executeSearch(query, limit);
+            return service.executeSearch(query, limit, offset == null ? 0 : offset);
         } catch (IOException e) {
             return Map.of("error", "Erro ao executar busca Lucene: " + e.getMessage(), "query", query);
         }
