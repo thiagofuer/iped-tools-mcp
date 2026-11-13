@@ -193,14 +193,14 @@ try {
         Write-Host (" FAIL: " + ($triageCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
-    # 9. Test list_ai_filters
-    Write-Host "[9/10] Testando list_ai_filters..." -NoNewline
-    $filtersCall = Send-RpcRequest "tools/call" @{ name = "list_ai_filters"; arguments = @{} }
-    $filtersData = $filtersCall.result.content[0].text | ConvertFrom-Json
-    if ($filtersData.filters -and $filtersData.total_filters -ge 7) {
-        Write-Host (" PASS (" + $filtersData.total_filters + " filtros de IA disponiveis)") -ForegroundColor Green
+    # 9. Test list_properties
+    Write-Host "[9/10] Testando list_properties..." -NoNewline
+    $groupsCall = Send-RpcRequest "tools/call" @{ name = "list_properties"; arguments = @{} }
+    $groupsData = $groupsCall.result.content[0].text | ConvertFrom-Json
+    if ($groupsData.groups -and $groupsData.total_properties -gt 0) {
+        Write-Host (" PASS (" + $groupsData.groups.Count + " grupos de propriedades no caso)") -ForegroundColor Green
     } else {
-        Write-Host (" FAIL: " + ($filtersCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
+        Write-Host (" FAIL: " + ($groupsCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
     # 10. Test get_item_thumbnail

@@ -62,14 +62,15 @@ public class ForensicPrompts {
             - Execute `list_sources` para identificar as fontes de dados (`source_id`), como extrações de celulares (UFED/Cellebrite), imagens forenses de disco (E01/RAW) ou diretórios analisados.
             - Identifique o proprietário do dispositivo e dados de extração via `get_device_and_owner_info`. Não faça buscas em texto livre para palavras como "proprietário" ou "dono".
 
-            ### 3. Consulta ao Dicionário de Metadados
-            - Antes de realizar buscas avançadas por metadados complexos (ex: campos de chat, GPS, EXIF), utilize `get_property_dictionary` ou `list_available_properties` para identificar o nome canônico das propriedades cadastradas no IPED.
+            ### 3. Descoberta das Propriedades do Caso
+            - Antes de buscar por metadados (campos de chat, GPS, EXIF, resultados de IA), descubra o que existe **neste** caso: `list_properties` (grupos e quantidade de propriedades) → `list_properties(group=...)` ou `list_properties(pattern=...)` (nomes, tipos, contagens e exemplos de consulta) → `describe_property` (significado, escala, mínimo/máximo ou valores mais frequentes). Use os nomes de categoria exatos de `list_categories`.
+            - Não presuma nomes de propriedades: se uma propriedade não aparece no catálogo, ela não existe no caso (o módulo que a gera pode não ter sido executado). Isso é diferente de zero itens e não é ausência de evidência.
 
             ### 4. Busca Estruturada e Recuperação
             - Utilize `search_documents` formulando consultas na sintaxe do Apache Lucene.
             - **Escape de Caracteres Lucene**: Caracteres especiais (`+`, `-`, `&`, `|`, `!`, `(`, `)`, `{`, `}`, `[`, `]`, `^`, `"`, `~`, `*`, `?`, `:`, `\\`, `/`) devem ser escapados com barra invertida `\\` se pesquisados de forma literal.
             - Utilize ferramentas especializadas quando o escopo exigir:
-              - **IA e Mídias**: `query_ai_detections` / `list_ai_filters` (armas, drogas, nudez, faces, transcrição de áudio).
+              - **Resultados de IA** (nudez, faces e idade estimada, detector de CSAM, OCR, transcrição de áudio, classificadores de mídia do UFED): consulte o grupo `AI` em `list_properties`, leia a escala com `describe_property` e pesquise com `search_documents` (ex.: `nudityScore:[650 TO *]`, `faceAge\\:labels:child`, `ocrCharCount:[1 TO *]`).
               - **Linha do Tempo**: `get_timeline` e `get_events_around_time` para correlação temporal e análise de marcos cronológicos.
               - **Contatos e Redes**: `get_top_contacts` e `get_communications_graph` para análise de vínculos e histórico de chamadas/mensagens; `get_contact_relationship` para detalhar como dois contatos se relacionam (canais, meses, grupos em comum e evidências).
                 - A direção (`incoming`/`outgoing`) vem somente de propriedades explícitas; eventos com direção `unknown` não indicam quem enviou ou iniciou a conversa e não devem ser reportados como recebidos.

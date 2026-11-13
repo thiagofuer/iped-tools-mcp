@@ -159,7 +159,7 @@ public final class NumericRangeSupport {
 
     // Leaf readers belong to the case IndexReader and must not be closed here.
     @SuppressWarnings("resource")
-    private static Number[] minMax(IndexReader reader, String field, Class<?> type) throws IOException {
+    static Number[] minMax(IndexReader reader, String field, Class<?> type) throws IOException {
         Number min = null;
         Number max = null;
         for (LeafReaderContext ctx : reader.leaves()) {

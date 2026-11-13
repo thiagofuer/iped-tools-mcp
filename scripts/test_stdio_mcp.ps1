@@ -136,36 +136,32 @@ try {
     Write-Host "[2/25] Testando tools/list..." -NoNewline
     $toolsList = Send-RpcRequest "tools/list"
     $toolCount = $toolsList.result.tools.Count
-    $expectedTools = 28
+    $expectedTools = 26
     $toolNames = $toolsList.result.tools | ForEach-Object { $_.name }
-    if ($toolCount -eq $expectedTools -and ($toolNames -contains "get_contact_relationship")) {
+    if ($toolCount -eq $expectedTools -and ($toolNames -contains "get_contact_relationship") -and ($toolNames -contains "list_properties")) {
         Write-Host (" PASS (" + $toolCount + " ferramentas registradas)") -ForegroundColor Green
     } else {
-        Write-Host (" FAIL (" + $toolCount + " ferramentas, esperado " + $expectedTools + " incluindo get_contact_relationship)") -ForegroundColor Red; exit 1
+        Write-Host (" FAIL (" + $toolCount + " ferramentas, esperado " + $expectedTools + " incluindo get_contact_relationship e list_properties)") -ForegroundColor Red; exit 1
     }
 
-    # 4. Call get_property_dictionary
-    Write-Host "[3/15] Testando call get_property_dictionary (dominio: chats)..." -NoNewline
-    $dictCall = Send-RpcRequest "tools/call" @{ name = "get_property_dictionary"; arguments = @{ domain = "chats" } }
-    $dictData = $dictCall.result.content[0].text | ConvertFrom-Json
-    if ($dictData.properties -and $dictData.properties.Count -gt 0 -and $dictData.escaping_note) {
-        Write-Host (" PASS (" + $dictData.properties.Count + " propriedades catalogadas)") -ForegroundColor Green
+    # 4. Call list_properties (group overview)
+    Write-Host "[3/25] Testando call list_properties (visao geral)..." -NoNewline
+    $groupsCall = Send-RpcRequest "tools/call" @{ name = "list_properties"; arguments = @{} }
+    $groupsData = $groupsCall.result.content[0].text | ConvertFrom-Json
+    if ($groupsData.groups -and $groupsData.groups.Count -gt 0 -and $groupsData.total_properties -gt 0) {
+        Write-Host (" PASS (" + $groupsData.groups.Count + " grupos, " + $groupsData.total_properties + " propriedades)") -ForegroundColor Green
     } else {
-        Write-Host " FAIL" -ForegroundColor Red; exit 1
+        Write-Host (" FAIL: " + ($groupsCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
-    # 5. Call list_available_properties
-    Write-Host "[4/15] Testando call list_available_properties..." -NoNewline
-    $availCall = Send-RpcRequest "tools/call" @{ name = "list_available_properties"; arguments = @{ category = "whatsapp" } }
-    $availData = $availCall.result.content[0].text | ConvertFrom-Json
-    if ($availData.distinct_properties_count -eq 0) {
-        $availCall = Send-RpcRequest "tools/call" @{ name = "list_available_properties"; arguments = @{ category = "" } }
-        $availData = $availCall.result.content[0].text | ConvertFrom-Json
-    }
-    if ($availData.properties -ne $null -and $availData.distinct_properties_count -gt 0) {
-        Write-Host (" PASS (" + $availData.distinct_properties_count + " propriedades distintas na categoria '" + $availData.category + "')") -ForegroundColor Green
+    # 5. Call list_properties (group Basic)
+    Write-Host "[4/25] Testando call list_properties (grupo Basic)..." -NoNewline
+    $basicCall = Send-RpcRequest "tools/call" @{ name = "list_properties"; arguments = @{ group = "Basic" } }
+    $basicData = $basicCall.result.content[0].text | ConvertFrom-Json
+    if ($basicData.properties -and $basicData.total -gt 0 -and $basicData.properties[0].query_example) {
+        Write-Host (" PASS (" + $basicData.total + " propriedades no grupo Basic)") -ForegroundColor Green
     } else {
-        Write-Host (" FAIL: " + ($availCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
+        Write-Host (" FAIL: " + ($basicCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
     # 6. Call get_server_status
@@ -434,24 +430,24 @@ try {
         Write-Host (" FAIL: " + ($simDocCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
-    # 25. Call list_ai_filters
-    Write-Host "[24/25] Testando call list_ai_filters..." -NoNewline
-    $filtersCall = Send-RpcRequest "tools/call" @{ name = "list_ai_filters"; arguments = @{} }
-    $filtersData = $filtersCall.result.content[0].text | ConvertFrom-Json
-    if ($filtersData.filters -and $filtersData.total_filters -ge 7) {
-        Write-Host (" PASS (" + $filtersData.total_filters + " categorias de filtros AI listadas)") -ForegroundColor Green
+    # 25. Call list_properties (group AI)
+    Write-Host "[24/25] Testando call list_properties (grupo AI)..." -NoNewline
+    $aiCall = Send-RpcRequest "tools/call" @{ name = "list_properties"; arguments = @{ group = "AI" } }
+    $aiData = $aiCall.result.content[0].text | ConvertFrom-Json
+    if (-not $aiData.error -and $aiData.group -eq "AI" -and $aiData.total -ne $null) {
+        Write-Host (" PASS (" + $aiData.total + " propriedades de IA no caso)") -ForegroundColor Green
     } else {
-        Write-Host (" FAIL: " + ($filtersCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
+        Write-Host (" FAIL: " + ($aiCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
-    # 26. Call query_ai_detections
-    Write-Host "[25/25] Testando call query_ai_detections..." -NoNewline
-    $queryAiCall = Send-RpcRequest "tools/call" @{ name = "query_ai_detections"; arguments = @{ filter_type = "faces"; limit = 5 } }
-    $queryAiData = $queryAiCall.result.content[0].text | ConvertFrom-Json
-    if ($queryAiData.filter_type -eq "faces" -and $queryAiData.total_found -ne $null) {
-        Write-Host (" PASS (Filtro: faces | Total encontrados: " + $queryAiData.total_found + ")") -ForegroundColor Green
+    # 26. Call describe_property on a property that IPED does not produce
+    Write-Host "[25/25] Testando call describe_property (propriedade ausente)..." -NoNewline
+    $descCall = Send-RpcRequest "tools/call" @{ name = "describe_property"; arguments = @{ name = "hasWeapon" } }
+    $descData = $descCall.result.content[0].text | ConvertFrom-Json
+    if ($descData.present -eq $false -and $descData.message) {
+        Write-Host (" PASS (hasWeapon reportada como ausente do caso)") -ForegroundColor Green
     } else {
-        Write-Host (" FAIL: " + ($queryAiCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
+        Write-Host (" FAIL: " + ($descCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
     Write-Host "`n==========================================================" -ForegroundColor Green

@@ -85,7 +85,13 @@ class ForensicPromptsTest {
         assertTrue(text.contains("get_case_summary"), "Deve indicar get_case_summary");
         assertTrue(text.contains("list_sources"), "Deve indicar list_sources");
         assertTrue(text.contains("get_device_and_owner_info"), "Deve orientar consulta do proprietário");
-        assertTrue(text.contains("get_property_dictionary"), "Deve orientar consulta ao dicionário");
+        assertTrue(text.contains("list_properties"), "Deve orientar a descoberta pelo catálogo de propriedades");
+        assertTrue(text.contains("describe_property"), "Deve orientar o detalhamento de propriedades");
+        assertTrue(text.contains("grupo `AI`"), "Deve orientar a busca de resultados de IA pelo grupo AI");
+        for (String removed : java.util.List.of("list_ai_filters", "query_ai_detections", "get_property_dictionary",
+                "list_available_properties")) {
+            assertFalse(text.contains(removed), "Prompt não deve citar ferramenta removida: " + removed);
+        }
         assertTrue(text.contains("search_documents"), "Deve orientar busca estruturada");
         assertTrue(text.contains("Escape de Caracteres Lucene"), "Deve conter regras de escape Lucene");
         assertTrue(text.contains("get_document_metadata"), "Deve orientar inspeção progressiva de metadados");

@@ -157,7 +157,7 @@ public class IpedCoreServiceTest {
         assertNotNull(meta.get("properties"));
         @SuppressWarnings("unchecked")
         Map<String, Object> props = (Map<String, Object>) meta.get("properties");
-        assertTrue(props.containsKey("basic") || props.containsKey("forensic"), "Deveria conter bloco semântico");
+        assertTrue(props.containsKey("Basic"), "Deveria agrupar pelos grupos do catálogo: " + props.keySet());
     }
 
     @Test
@@ -173,8 +173,8 @@ public class IpedCoreServiceTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> rawProps = (Map<String, Object>) rawMeta.get("properties");
         assertNotNull(rawProps);
-        // In raw mode, properties map is flat (not partitioned into basic/forensic/etc.)
-        assertFalse(rawProps.containsKey("basic"), "Modo raw não deve conter blocos semânticos arbitrários");
+        // In raw mode, properties map is flat (not partitioned into catalog groups)
+        assertFalse(rawProps.containsKey("Basic"), "Modo raw não deve agrupar propriedades");
         assertTrue(rawProps.containsKey("name") || rawProps.containsKey("path"), "Modo raw deve conter atributos diretos");
 
         // 2. Filtered mode with wildcard
@@ -211,51 +211,46 @@ public class IpedCoreServiceTest {
     }
 
     @Test
-    void testForensicDomainsCryptoAndAi() {
+    @EnabledIf("isCaseAvailable")
+    @SuppressWarnings("unchecked")
+    void testMetadataKeepsAiPropertiesByDefaultAndFiltersByGroup() throws Exception {
         IpedCoreService service = IpedCoreService.getInstance();
+        Map<String, Object> search = service.executeSearch("nudityScore:[1 TO *] AND ocrCharCount:[1 TO *]", 1);
+        List<Map<String, Object>> items = (List<Map<String, Object>>) search.get("items");
+        assertFalse(items.isEmpty(), "caso de teste deveria ter imagens com nudityScore e ocrCharCount");
+        int id = (int) items.getFirst().get("id");
 
-        // Crypto domain
-        Map<String, Object> cryptoDict = service.getPropertyDictionary("crypto");
-        assertNotNull(cryptoDict);
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> cryptoProps = (List<Map<String, Object>>) cryptoDict.get("properties");
-        assertNotNull(cryptoProps);
-        boolean hasHwFound = cryptoProps.stream().anyMatch(p -> "Hardware-Wallet-Found".equals(p.get("field")));
-        assertTrue(hasHwFound, "Deveria conter Hardware-Wallet-Found no domínio crypto");
+        Map<String, Object> props = (Map<String, Object>) service.getDocumentMetadata(id).get("properties");
+        Map<String, Object> ai = (Map<String, Object>) props.get("AI");
+        assertNotNull(ai, "grupo AI ausente no modo padrão: " + props.keySet());
+        assertTrue(ai.containsKey("nudityScore"), "nudityScore descartado no modo padrão");
+        assertTrue(ai.containsKey("ocrCharCount"), "ocrCharCount descartado no modo padrão");
 
-        // AI domain
-        Map<String, Object> aiDict = service.getPropertyDictionary("ai");
-        assertNotNull(aiDict);
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> aiProps = (List<Map<String, Object>>) aiDict.get("properties");
-        assertNotNull(aiProps);
-        boolean hasCsam = aiProps.stream().anyMatch(p -> "ai:csamDetector:csam".equals(p.get("field")));
-        boolean hasAge = aiProps.stream().anyMatch(p -> "faceAge:count:Child".equals(p.get("field")));
-        boolean hasNsfw = aiProps.stream().anyMatch(p -> "nsfw_nudity_score".equals(p.get("field")));
-        assertTrue(hasCsam, "Deveria conter ai:csamDetector:csam");
-        assertTrue(hasAge, "Deveria conter faceAge:count:Child");
-        assertTrue(hasNsfw, "Deveria conter nsfw_nudity_score");
+        List<Map<String, Object>> onlyAi = service.getDocumentMetadataBatch(List.of(id), false, null, List.of("ai"));
+        Map<String, Object> filtered = (Map<String, Object>) onlyAi.getFirst().get("properties");
+        assertEquals(java.util.Set.of("AI"), filtered.keySet());
+
+        List<Map<String, Object>> bad = service.getDocumentMetadataBatch(List.of(id), false, null, List.of("Inexistente"));
+        assertTrue(bad.getFirst().containsKey("error"));
     }
 
     @Test
     @EnabledIf("isCaseAvailable")
-    void testAiFiltersExpanded() {
+    @SuppressWarnings("unchecked")
+    void testSearchWarnsAboutUnknownProperty() throws Exception {
         IpedCoreService service = IpedCoreService.getInstance();
-        Map<String, Object> filters = service.listAiFilters();
-        assertNotNull(filters);
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> list = (List<Map<String, Object>>) filters.get("filters");
-        assertNotNull(list);
+        int categoryCount = (int) service.executeSearch("category:\"Instant Messages\"", 1).get("total_found");
+        Map<String, Object> res = service.executeSearch("hasWeapon:true OR category:\"Instant Messages\"", 1);
+        assertEquals(categoryCount, res.get("total_found"), "a parte válida da consulta deve continuar funcionando");
+        List<Map<String, Object>> warnings = (List<Map<String, Object>>) res.get("warnings");
+        assertNotNull(warnings, "esperava aviso sobre hasWeapon");
+        Map<String, Object> w = warnings.getFirst();
+        assertEquals("property_not_in_case", w.get("type"));
+        assertEquals("hasWeapon", w.get("property"));
+        assertTrue(((String) w.get("message")).contains("list_properties"));
 
-        boolean hasCrypto = list.stream().anyMatch(f -> "crypto_wallets".equals(f.get("filter_type")));
-        boolean hasAge = list.stream().anyMatch(f -> "age_estimation".equals(f.get("filter_type")));
-        boolean hasNsfw = list.stream().anyMatch(f -> "nsfw".equals(f.get("filter_type")));
-        boolean hasCsam = list.stream().anyMatch(f -> "csam".equals(f.get("filter_type")));
-
-        assertTrue(hasCrypto, "Deveria conter filtro crypto_wallets");
-        assertTrue(hasAge, "Deveria conter filtro age_estimation");
-        assertTrue(hasNsfw, "Deveria conter filtro nsfw");
-        assertTrue(hasCsam, "Deveria conter filtro csam");
+        Map<String, Object> ok = service.executeSearch("category:\"Instant Messages\" AND Communication\\:From:*", 1);
+        assertFalse(ok.containsKey("warnings"), "consulta só com propriedades existentes não deve ter aviso");
     }
 
     @Test
@@ -341,30 +336,6 @@ public class IpedCoreServiceTest {
             assertTrue(currTime.compareTo(prevTime) >= 0, "Eventos da janela devem estar em ordem cronológica ascendente");
             prevTime = currTime;
         }
-    }
-
-    @Test
-    void testGetPropertyDictionary() {
-        IpedCoreService service = IpedCoreService.getInstance();
-        Map<String, Object> all = service.getPropertyDictionary("all");
-        assertNotNull(all);
-        assertTrue(all.containsKey("domains"));
-        assertTrue(all.containsKey("escaping_note"));
-
-        Map<String, Object> chats = service.getPropertyDictionary("chats");
-        assertNotNull(chats);
-        assertEquals("chats", chats.get("domain"));
-        assertTrue(chats.containsKey("properties"));
-    }
-
-    @Test
-    @EnabledIf("isCaseAvailable")
-    void testListAvailableProperties() throws Exception {
-        IpedCoreService service = IpedCoreService.getInstance();
-        Map<String, Object> props = service.listAvailableProperties("chat messages");
-        assertNotNull(props);
-        assertTrue(props.containsKey("properties"));
-        assertTrue(props.containsKey("total_matching_items"));
     }
 
     @Test
@@ -536,41 +507,6 @@ public class IpedCoreServiceTest {
         assertNotNull(docSim);
         assertEquals(imageId, docSim.get("reference_id"));
         assertTrue(docSim.containsKey("total_found") || docSim.containsKey("error"));
-    }
-
-    @Test
-    @EnabledIf("isCaseAvailable")
-    void testAiDetections() throws Exception {
-        IpedCoreService service = IpedCoreService.getInstance();
-
-        // 1. List AI filters
-        Map<String, Object> filtersRes = service.listAiFilters();
-        assertNotNull(filtersRes);
-        assertTrue((int) filtersRes.get("total_filters") >= 7);
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> filters = (List<Map<String, Object>>) filtersRes.get("filters");
-        assertNotNull(filters);
-        assertFalse(filters.isEmpty());
-
-        boolean hasWeapons = false;
-        boolean hasNudity = false;
-        for (Map<String, Object> f : filters) {
-            assertNotNull(f.get("filter_type"));
-            assertNotNull(f.get("name"));
-            assertNotNull(f.get("lucene_query"));
-            assertTrue((int) f.get("count") >= 0);
-            if ("weapons".equals(f.get("filter_type"))) hasWeapons = true;
-            if ("nudity".equals(f.get("filter_type"))) hasNudity = true;
-        }
-        assertTrue(hasWeapons);
-        assertTrue(hasNudity);
-
-        // 2. Query AI detections for 'faces'
-        Map<String, Object> queryRes = service.queryAiDetections("faces", null, 10, 0);
-        assertNotNull(queryRes);
-        assertEquals("faces", queryRes.get("filter_type"));
-        assertTrue(queryRes.containsKey("total_found"));
-        assertTrue(queryRes.containsKey("items"));
     }
 
     @Test
