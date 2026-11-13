@@ -97,7 +97,7 @@ public class McpToolsTest {
     @EnabledIf("isCaseAvailable")
     void testDocumentSearchTool() {
         DocumentSearchTool tool = new DocumentSearchTool();
-        Map<String, Object> result = tool.searchDocuments("*:*", 10);
+        Map<String, Object> result = tool.searchDocuments("*:*", 10, null);
         assertNotNull(result);
         assertEquals(10, result.get("returned_count"));
         assertNotNull(result.get("items"));
@@ -154,11 +154,29 @@ public class McpToolsTest {
     @Test
     void testDocumentSearchToolDescribesNumericRanges() throws Exception {
         io.quarkiverse.mcp.server.Tool tool = DocumentSearchTool.class
-                .getMethod("searchDocuments", String.class, int.class)
+                .getMethod("searchDocuments", String.class, int.class, Integer.class)
                 .getAnnotation(io.quarkiverse.mcp.server.Tool.class);
         assertNotNull(tool);
         assertTrue(tool.description().contains("nudityScore:[650 TO *]"));
         assertTrue(tool.description().contains("decimals with a dot"));
+        for (String term : java.util.List.of("offset", "has_more", "next_offset", "total_found")) {
+            assertTrue(tool.description().contains(term), "descrição deve explicar a paginação: " + term);
+        }
+    }
+
+    @Test
+    @EnabledIf("isCaseAvailable")
+    @SuppressWarnings("unchecked")
+    void testDocumentSearchToolPaginates() {
+        DocumentSearchTool tool = new DocumentSearchTool();
+        Map<String, Object> first = tool.searchDocuments("*:*", 5, null);
+        assertEquals(true, first.get("has_more"));
+        assertEquals(5, first.get("next_offset"));
+        Map<String, Object> second = tool.searchDocuments("*:*", 5, (Integer) first.get("next_offset"));
+        assertEquals(5, second.get("offset"));
+        java.util.Set<Object> firstIds = new java.util.HashSet<>();
+        ((List<Map<String, Object>>) first.get("items")).forEach(i -> firstIds.add(i.get("id")));
+        assertTrue(((List<Map<String, Object>>) second.get("items")).stream().noneMatch(i -> firstIds.contains(i.get("id"))));
     }
 
     @Test

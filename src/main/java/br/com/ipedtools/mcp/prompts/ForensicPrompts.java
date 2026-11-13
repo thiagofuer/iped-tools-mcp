@@ -70,6 +70,7 @@ public class ForensicPrompts {
 
             ### 4. Busca Estruturada e Recuperação
             - Utilize `search_documents` formulando consultas na sintaxe do Apache Lucene.
+            - **Paginação e exaustividade**: cada resposta traz o total exato (`total_found`) e, quando ainda há itens (`has_more`), o `next_offset` para pedir a página seguinte com a mesma consulta. Não conclua que algo não existe enquanto houver páginas não lidas: percorra as páginas ou refine a consulta quando o total for grande, e relate o `total_found`, não apenas os itens que você examinou.
             - **Escape de Caracteres Lucene**: Caracteres especiais (`+`, `-`, `&`, `|`, `!`, `(`, `)`, `{`, `}`, `[`, `]`, `^`, `"`, `~`, `*`, `?`, `:`, `\\`, `/`) devem ser escapados com barra invertida `\\` se pesquisados de forma literal.
             - Utilize ferramentas especializadas quando o escopo exigir:
               - **Resultados de IA** (nudez, faces e idade estimada, detector de CSAM, OCR, transcrição de áudio, classificadores de mídia do UFED): consulte o grupo `AI` em `list_properties`, leia a escala com `describe_property` e pesquise com `search_documents` (ex.: `nudityScore:[650 TO *]`, `faceAge\\:labels:child`, `ocrCharCount:[1 TO *]`).

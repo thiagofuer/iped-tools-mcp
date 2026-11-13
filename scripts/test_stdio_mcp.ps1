@@ -210,6 +210,18 @@ try {
         Write-Host (" PASS (Query fallback retornou " + $searchData.total_found + " itens)") -ForegroundColor Green
     }
 
+    # 9b. Call search_documents second page (pagination)
+    Write-Host "[8b/25] Testando paginacao de search_documents (offset)..." -NoNewline
+    $page1 = (Send-RpcRequest "tools/call" @{ name = "search_documents"; arguments = @{ query = "*:*"; limit = 5 } }).result.content[0].text | ConvertFrom-Json
+    $page2 = (Send-RpcRequest "tools/call" @{ name = "search_documents"; arguments = @{ query = "*:*"; limit = 5; offset = $page1.next_offset } }).result.content[0].text | ConvertFrom-Json
+    $ids1 = $page1.items | ForEach-Object { $_.id }
+    $repeated = $page2.items | Where-Object { $ids1 -contains $_.id }
+    if ($page1.has_more -and $page1.next_offset -eq 5 -and $page2.offset -eq 5 -and $page2.items.Count -eq 5 -and -not $repeated -and $page2.total_found -eq $page1.total_found) {
+        Write-Host (" PASS (paginas 1 e 2 sem repeticao, total " + $page1.total_found + ")") -ForegroundColor Green
+    } else {
+        Write-Host (" FAIL: " + ($page2 | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
+    }
+
     # 10. Call get_document_metadata
     Write-Host ("[9/15] Testando call get_document_metadata (id: " + $sampleDocId + ")...") -NoNewline
     $metaCall = Send-RpcRequest "tools/call" @{ name = "get_document_metadata"; arguments = @{ doc_ids = @($sampleDocId) } }

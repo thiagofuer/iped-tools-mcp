@@ -23,6 +23,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
   - **Nova ferramenta `describe_property`:** significado, escala, mínimo e máximo (números e datas) ou valores mais frequentes (texto) e exemplos de consulta; com `query`, a distribuição é calculada só sobre os itens da consulta. Propriedade inexistente é informada como ausente (`present: false`), com sugestão de nomes parecidos, em vez de zero itens.
   - **Aviso de propriedade inexistente em `search_documents`:** `warnings` com `property_not_in_case` quando a consulta cita uma propriedade que não existe no caso.
   - **Parâmetro `groups` em `get_document_metadata`** para selecionar grupos do catálogo.
+- **Paginação em `search_documents`:** novo parâmetro `offset` e campos `has_more` e `next_offset` na resposta, para percorrer todos os itens de uma consulta em páginas de até 100. A ordem é a do índice do caso, a mesma em todas as chamadas, e a nota da resposta indica as posições exibidas e como pedir a próxima página. A descrição da ferramenta e o prompt `start_case` orientam a não concluir ausência de evidência enquanto houver páginas não lidas. Chamadas sem `offset` continuam funcionando como antes.
 - **Rastreabilidade e transparência:** até 5 `evidence_ids` por contato e por aresta (mais antigo, mais recente e amostra determinística), campos `truncated`, `total_eligible_edges`, `unlinked_events` e `unknown_direction_total`.
 
 ### Modificado

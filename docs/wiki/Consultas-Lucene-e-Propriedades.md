@@ -44,6 +44,16 @@ Módulos do IPED gravam propriedades numéricas (tipadas em `<caso>/iped/conf/me
 * `?` — Substitui exatamente um caractere: `t?ste` (encontra *teste*, *taste*).
 * `*` — Substitui zero ou mais caracteres: `prop*` (encontra *propina*, *proposta*, *propriedade*).
 
+### 7. Paginação dos Resultados
+`search_documents` nunca corta resultados em silêncio:
+* `total_found` é o total exato de itens encontrados.
+* Cada chamada traz até `limit` itens (padrão 30, máximo 100) a partir de `offset` (padrão 0).
+* Quando `has_more` é verdadeiro, a resposta traz `next_offset`. Para ler a página seguinte, repita a mesma consulta com esse valor: `search_documents(query="category:\"Instant Messages\" AND pix", offset=100, limit=100)`.
+* Na última página, `has_more` é falso e não há `next_offset`.
+* A ordem é a do índice do caso, a mesma em todas as chamadas. Ela não indica relevância nem data.
+
+Enquanto houver páginas não lidas, a IA não deve concluir que algo não existe: ela percorre as páginas ou refina a consulta quando o total é grande, e relata o `total_found`.
+
 ---
 
 ## ⚠️ Escape de Caracteres Especiais
