@@ -150,6 +150,16 @@ public class McpToolsTest {
     }
 
     @Test
+    void testDocumentSearchToolDescribesNumericRanges() throws Exception {
+        io.quarkiverse.mcp.server.Tool tool = DocumentSearchTool.class
+                .getMethod("searchDocuments", String.class, int.class)
+                .getAnnotation(io.quarkiverse.mcp.server.Tool.class);
+        assertNotNull(tool);
+        assertTrue(tool.description().contains("nudityScore:[650 TO *]"));
+        assertTrue(tool.description().contains("decimals with a dot"));
+    }
+
+    @Test
     void testPropertyDictionaryToolStatic() {
         PropertyDictionaryTool tool = new PropertyDictionaryTool();
         Map<String, Object> all = tool.getPropertyDictionary("all");
@@ -451,6 +461,8 @@ public class McpToolsTest {
             assertEquals("UTF-8", System.getProperty("stdout.encoding"));
             assertEquals("UTF-8", System.getProperty("stderr.encoding"));
             assertEquals("UTF-8", System.getProperty("stdin.encoding"));
+            // The property set at runtime is what is checked; Charset.defaultCharset() is fixed at JVM start.
+            //noinspection SystemGetProperty
             assertEquals("UTF-8", System.getProperty("file.encoding"));
 
             java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();

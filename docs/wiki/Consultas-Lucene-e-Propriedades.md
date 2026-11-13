@@ -27,7 +27,20 @@ Para campos temporais em formato ISO-8601:
 * `date:[2024-01-01 TO 2024-06-30]`
 * `created:[2024-05-01T00:00:00Z TO 2024-05-01T23:59:59Z]`
 
-### 5. Curingas (Wildcards)
+### 5. Faixas Numéricas em Propriedades do Processamento
+Módulos do IPED gravam propriedades numéricas (tipadas em `<caso>/iped/conf/metadataTypes.txt`), que aceitam faixas `[mínimo TO máximo]` (`*` deixa um lado aberto):
+* `nudityScore:[650 TO *]` — imagens com pontuação de nudez alta (escala de 0 a 1000, módulo DIE).
+* `ocrCharCount:[1 TO *]` — itens com texto reconhecido por OCR.
+* `audio\:transcriptConfidence:[0.5 TO *]` — transcrições de áudio com confiança a partir de 0,5.
+
+**Separador decimal:** escreva sempre com ponto (`0.5`). O servidor converte para o formato da localidade do caso; em português, o IPED leria `0.5` como `5`.
+
+**Quando a faixa não encontra nada,** a resposta de `search_documents` traz o campo `warnings`, que explica o motivo:
+* `numeric_range_no_results` — a propriedade existe, mas nenhum item está na faixa. O aviso informa o tipo e os valores mínimo e máximo do caso, para ajustar a faixa.
+* `property_not_in_case` — a propriedade não existe no caso (o módulo que a gera pode não ter sido executado). Zero aqui **não** significa ausência de evidência.
+* `range_on_non_numeric_property` — a propriedade é textual neste caso e a faixa é comparada como texto.
+
+### 6. Curingas (Wildcards)
 * `?` — Substitui exatamente um caractere: `t?ste` (encontra *teste*, *taste*).
 * `*` — Substitui zero ou mais caracteres: `prop*` (encontra *propina*, *proposta*, *propriedade*).
 

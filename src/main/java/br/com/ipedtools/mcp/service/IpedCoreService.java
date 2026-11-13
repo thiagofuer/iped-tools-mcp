@@ -42,6 +42,8 @@ import iped.engine.data.ItemId;
 import iped.engine.lucene.DocValuesUtil;
 import iped.engine.search.IPEDSearcher;
 import iped.engine.search.ImageSimilarityScorer;
+import iped.engine.task.index.IndexItem;
+import iped.utils.LocalizedFormat;
 import iped.engine.search.MultiSearchResult;
 import iped.engine.search.SimilarDocumentSearch;
 import iped.engine.search.SimilarFacesSearch;
@@ -176,6 +178,16 @@ public class IpedCoreService {
             LOGGER.warn("Aviso ao carregar configuráveis do IPED (ignorado em JDKs modernos sem SecurityManager): {}", t.getMessage());
         }
 
+        // The QueryBuilder caches numeric PointsConfig per case instance the first time a query is parsed,
+        // which happens inside the IPEDSource constructor before it loads metadataTypes.txt. Loading the
+        // types first makes that cache include numeric extra properties (nudityScore, ocrCharCount...),
+        // otherwise their range queries become textual and match nothing (issue #7).
+        try {
+            IndexItem.loadMetadataTypes(new File(caseDir, "iped" + File.separator + "conf"));
+        } catch (Exception e) {
+            LOGGER.warn("Falha ao pré-carregar metadataTypes.txt do caso: {}", e.getMessage());
+        }
+
         LOGGER.info("Inicializando IPEDSource e abrindo leitores Lucene...");
         this.ipedSource = new IPEDSource(caseDir);
 
@@ -303,6 +315,8 @@ public class IpedCoreService {
 
         int maxLimit = Math.clamp(limit, 1, 100);
         String sanitizedQuery = (queryText == null || queryText.isBlank()) ? "*:*" : queryText.replaceAll("/", "\\\\/");
+        sanitizedQuery = NumericRangeSupport.normalizeDecimalSeparators(sanitizedQuery,
+                field -> IndexItem.getMetadataTypes().get(field), LocalizedFormat.getNumberInstance());
 
         IPEDSearcher searcher = new IPEDSearcher(ipedSource, sanitizedQuery);
         SearchResult result = searcher.search();
@@ -328,6 +342,14 @@ public class IpedCoreService {
         response.put("note", totalFound > items.size()
                 ? "Exibindo os primeiros " + items.size() + " de " + totalFound + " itens encontrados."
                 : "Todos os itens encontrados foram exibidos.");
+
+        if (totalFound == 0 && !NumericRangeSupport.extractRanges(sanitizedQuery).isEmpty()) {
+            List<Map<String, Object>> warnings = NumericRangeSupport.zeroResultWarnings(sanitizedQuery,
+                    ipedSource.getReader(), field -> IndexItem.getMetadataTypes().get(field));
+            if (!warnings.isEmpty()) {
+                response.put("warnings", warnings);
+            }
+        }
 
         return response;
     }
@@ -434,13 +456,6 @@ public class IpedCoreService {
         result.put("properties", finalProps);
 
         return result;
-    }
-
-    /**
-     * Retrieves sanitized metadata in batch for a list of document IDs.
-     */
-    public List<Map<String, Object>> getDocumentMetadataBatch(List<Integer> itemIds) {
-        return getDocumentMetadataBatch(itemIds, false, null);
     }
 
     /**
