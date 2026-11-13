@@ -22,7 +22,9 @@ import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.SortedSetDocValues;
+import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.QueryVisitor;
 import org.apache.lucene.util.BytesRef;
 import org.apache.tika.io.TikaInputStream;
 import org.apache.tika.metadata.Metadata;
@@ -64,30 +66,12 @@ public class IpedCoreService {
     private static final Logger LOGGER = LoggerFactory.getLogger(IpedCoreService.class);
     private static IpedCoreService INSTANCE;
 
-    private static final Set<String> WHITELIST_PREFIXES = Set.of(
-            "communication:", "conversation:", "common:", "image:", "video:", "audio:",
-            "ufed:", "p2p:", "hashdb:", "meta:", "message-", "face",
-            "ai:", "nsfw", "hardware-wallet", "faceage"
-    );
-
-    private static final Set<String> EXPLICIT_ALLOWED_KEYS = Set.of(
-            "id", "name", "path", "category", "type", "ext", "size", "length",
-            "created", "modified", "accessed", "changed", "deleted", "carved", "isdir",
-            "hash", "md5", "sha-256", "sha-1", "contenttype",
-            "url", "visitdate", "downloaddate", "totalbytes", "receivedbytes", "localpath",
-            "from", "to", "cc", "bcc", "subject", "groupid", "isgroupmessage",
-            "latitude", "longitude",
-            "childpornhashhits", "sharedhashes", "shareditems", "linkeditems"
-    );
-
     private static final Set<String> BLACKLISTED_KEYS = Set.of(
             "content", "treenode", "offset", "timeout", "thumbnail", "thumbnailbase64",
             "subitem", "subitemid", "mftsequence", "filesystemid", "metaaddress",
             "parenttrackid", "containertrackid", "itemvirtualidentifier", "parentvirtualidentifier",
             "trackid", "timeeventords", "timeeventgroups", "x-reader", "ipedembeddefolder"
     );
-
-    private static final Map<String, List<Map<String, Object>>> FORENSIC_DOMAINS = initForensicDomains();
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile("[\\w.-]+@[\\w.-]+\\.\\w+");
     private static final Pattern PHONE_PATTERN = Pattern.compile("\\+?\\d{10,13}");
@@ -314,9 +298,7 @@ public class IpedCoreService {
         checkCaseOpen();
 
         int maxLimit = Math.clamp(limit, 1, 100);
-        String sanitizedQuery = (queryText == null || queryText.isBlank()) ? "*:*" : queryText.replaceAll("/", "\\\\/");
-        sanitizedQuery = NumericRangeSupport.normalizeDecimalSeparators(sanitizedQuery,
-                field -> IndexItem.getMetadataTypes().get(field), LocalizedFormat.getNumberInstance());
+        String sanitizedQuery = prepareQuery(queryText);
 
         IPEDSearcher searcher = new IPEDSearcher(ipedSource, sanitizedQuery);
         SearchResult result = searcher.search();
@@ -343,15 +325,102 @@ public class IpedCoreService {
                 ? "Exibindo os primeiros " + items.size() + " de " + totalFound + " itens encontrados."
                 : "Todos os itens encontrados foram exibidos.");
 
+        List<Map<String, Object>> warnings = unknownPropertyWarnings(searcher.getQuery());
         if (totalFound == 0 && !NumericRangeSupport.extractRanges(sanitizedQuery).isEmpty()) {
-            List<Map<String, Object>> warnings = NumericRangeSupport.zeroResultWarnings(sanitizedQuery,
-                    ipedSource.getReader(), field -> IndexItem.getMetadataTypes().get(field));
-            if (!warnings.isEmpty()) {
-                response.put("warnings", warnings);
+            Set<Object> alreadyWarned = new HashSet<>();
+            warnings.forEach(w -> alreadyWarned.add(w.get("property")));
+            for (Map<String, Object> w : NumericRangeSupport.zeroResultWarnings(sanitizedQuery,
+                    ipedSource.getReader(), field -> IndexItem.getMetadataTypes().get(field))) {
+                if (!alreadyWarned.contains(w.get("property"))) {
+                    warnings.add(w);
+                }
             }
+        }
+        if (!warnings.isEmpty()) {
+            response.put("warnings", warnings);
         }
 
         return response;
+    }
+
+    /** Field names referenced by a parsed query, including those under NOT clauses. */
+    static Set<String> queryFields(Query query) {
+        Set<String> fields = new LinkedHashSet<>();
+        if (query == null) {
+            return fields;
+        }
+        query.visit(new QueryVisitor() {
+            @Override
+            public boolean acceptField(String field) {
+                if (field != null && !field.isEmpty()) {
+                    fields.add(field);
+                }
+                return true;
+            }
+
+            @Override
+            public QueryVisitor getSubVisitor(BooleanClause.Occur occur, Query parent) {
+                return this;
+            }
+        });
+        return fields;
+    }
+
+    /**
+     * One warning per field of the query that does not exist in the case index, so that an empty or partial result
+     * is not read as absence of evidence.
+     */
+    private List<Map<String, Object>> unknownPropertyWarnings(Query query) throws IOException {
+        List<Map<String, Object>> warnings = new ArrayList<>();
+        PropertyCatalogService catalog = PropertyCatalogService.getInstance();
+        for (String field : queryFields(query)) {
+            if (catalog.fieldExists(field)) {
+                continue;
+            }
+            Map<String, Object> w = new LinkedHashMap<>();
+            w.put("type", "property_not_in_case");
+            w.put("property", field);
+            w.put("message", "A propriedade '" + field + "' não existe neste caso; essa parte da consulta não encontra "
+                    + "nada, o que não significa ausência de evidência. Use list_properties para descobrir as "
+                    + "propriedades existentes.");
+            List<String> similar = PropertyCatalogService.similarNames(field, catalog.caseFields().keySet());
+            if (!similar.isEmpty()) {
+                w.put("similar", similar);
+            }
+            warnings.add(w);
+        }
+        return warnings;
+    }
+
+    /**
+     * Applies the query preparation used by {@code search_documents}: blank becomes {@code *:*}, slashes are
+     * escaped and dot decimals of Float/Double ranges are converted to the case locale.
+     */
+    static String prepareQuery(String queryText) {
+        String q = (queryText == null || queryText.isBlank()) ? "*:*" : queryText.replaceAll("/", "\\\\/");
+        return NumericRangeSupport.normalizeDecimalSeparators(q,
+                field -> IndexItem.getMetadataTypes().get(field), LocalizedFormat.getNumberInstance());
+    }
+
+    /**
+     * Runs a query exactly as {@code search_documents} does and returns the Lucene doc IDs of every matching item.
+     */
+    public int[] searchLuceneIds(String queryText) throws IOException {
+        checkCaseOpen();
+        SearchResult result = new IPEDSearcher(ipedSource, prepareQuery(queryText)).search();
+        int[] ids = result.getIds();
+        if (ids == null) {
+            return new int[0];
+        }
+        int[] luceneIds = new int[ids.length];
+        int n = 0;
+        for (int id : ids) {
+            int luceneId = ipedSource.getLuceneId(id);
+            if (luceneId >= 0) {
+                luceneIds[n++] = luceneId;
+            }
+        }
+        return Arrays.copyOf(luceneIds, n);
     }
 
     /**
@@ -386,6 +455,14 @@ public class IpedCoreService {
      * and surgical key filtering.
      */
     public Map<String, Object> getDocumentMetadata(int itemId, boolean raw, List<String> keys) throws IOException {
+        return getDocumentMetadata(itemId, raw, keys, null);
+    }
+
+    /**
+     * Retrieves metadata for a single item ID. Standard mode groups properties by catalog group; {@code groups}
+     * (canonical group names) keeps only those groups, in both modes.
+     */
+    public Map<String, Object> getDocumentMetadata(int itemId, boolean raw, List<String> keys, Set<String> groups) throws IOException {
         checkCaseOpen();
 
         int luceneId = ipedSource.getLuceneId(itemId);
@@ -426,6 +503,9 @@ public class IpedCoreService {
                 if (keys != null && !keys.isEmpty() && !matchesAnyKeyPattern(k, keys)) {
                     continue;
                 }
+                if (groups != null && !groups.isEmpty() && !groups.contains(PropertyCatalogService.group(k))) {
+                    continue;
+                }
                 rawFiltered.put(k, entry.getValue());
             }
             finalProps = rawFiltered;
@@ -439,7 +519,7 @@ public class IpedCoreService {
                     }
                 }
             }
-            finalProps = sanitizeProperties(candidateProps);
+            finalProps = sanitizeProperties(candidateProps, groups);
         }
 
         List<String> bookmarks = ipedSource.getBookmarks().getBookmarkList(itemId);
@@ -462,15 +542,32 @@ public class IpedCoreService {
      * Retrieves metadata in batch for a list of document IDs with raw and key filtering options.
      */
     public List<Map<String, Object>> getDocumentMetadataBatch(List<Integer> itemIds, boolean raw, List<String> keys) {
+        return getDocumentMetadataBatch(itemIds, raw, keys, null);
+    }
+
+    /**
+     * Retrieves metadata in batch, optionally restricted to catalog groups (e.g. ["AI", "Image"]).
+     */
+    public List<Map<String, Object>> getDocumentMetadataBatch(List<Integer> itemIds, boolean raw, List<String> keys,
+            List<String> groups) {
         checkCaseOpen();
         List<Map<String, Object>> list = new ArrayList<>();
+        List<String> unknown = new ArrayList<>();
+        Set<String> groupSet = resolveGroups(groups, unknown);
+        if (!unknown.isEmpty()) {
+            Map<String, Object> err = new LinkedHashMap<>();
+            err.put("error", "Grupo(s) desconhecido(s): " + unknown);
+            err.put("available_groups", PropertyGroups.names());
+            list.add(err);
+            return list;
+        }
         if (itemIds == null || itemIds.isEmpty()) {
             return list;
         }
 
         for (Integer id : itemIds) {
             try {
-                list.add(getDocumentMetadata(id, raw, keys));
+                list.add(getDocumentMetadata(id, raw, keys, groupSet));
             } catch (Exception e) {
                 list.add(Map.of("id", id, "source", sourceId, "error", "Falha ao ler metadados: " + e.getMessage()));
             }
@@ -1841,187 +1938,56 @@ public class IpedCoreService {
     }
 
     // =========================================================================
-    // METADATA DICTIONARY & PROPERTY DISCOVERY
+    // METADATA GROUPING
     // =========================================================================
 
     /**
-     * Returns the forensic property dictionary for a specific domain or all domains.
-     * Supported domains: chats, browsers, emails, media, system, gps, ufed, ai, all.
+     * Groups properties by the catalog groups ({@link PropertyGroups}), dropping internal engine fields and applying
+     * the token-safety limits of {@link #sanitizeValue(Object)}. With {@code groups}, only those groups are kept.
      */
-    public Map<String, Object> getPropertyDictionary(String domain) {
-        String target = (domain == null || domain.isBlank()) ? "all" : domain.trim().toLowerCase();
-
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("escaping_note", "Campos com dois-pontos (ex: 'Communication:From') DEVEM ser escapados em consultas Lucene com barra invertida: Communication\\:From:*");
-
-        if (target.equals("all")) {
-            response.put("domains", FORENSIC_DOMAINS);
-            response.put("available_domains", new ArrayList<>(FORENSIC_DOMAINS.keySet()));
-            return response;
+    static Map<String, Object> sanitizeProperties(Map<String, Object> props, Set<String> groups) {
+        Map<String, Map<String, Object>> byGroup = new LinkedHashMap<>();
+        for (String g : PropertyGroups.names()) {
+            byGroup.put(g, new LinkedHashMap<>());
         }
-
-        if (FORENSIC_DOMAINS.containsKey(target)) {
-            response.put("domain", target);
-            response.put("properties", FORENSIC_DOMAINS.get(target));
-            response.put("available_domains", new ArrayList<>(FORENSIC_DOMAINS.keySet()));
-            return response;
-        }
-
-        response.put("error", "Domínio forense desconhecido: '" + domain + "'. Domínios válidos são: " + FORENSIC_DOMAINS.keySet());
-        response.put("available_domains", new ArrayList<>(FORENSIC_DOMAINS.keySet()));
-        return response;
-    }
-
-    /**
-     * Inspects populated metadata properties in the active case Lucene index for a given category.
-     */
-    public Map<String, Object> listAvailableProperties(String category) throws IOException {
-        checkCaseOpen();
-
-        String catClean = (category != null) ? category.trim() : "";
-        String queryStr;
-        if (catClean.isEmpty() || catClean.equalsIgnoreCase("all") || catClean.equals("*")) {
-            queryStr = "*:*";
-        } else {
-            queryStr = "category:\"" + catClean.replace("\"", "\\\"") + "\"";
-        }
-
-        IPEDSearcher searcher = new IPEDSearcher(ipedSource, queryStr);
-        SearchResult res = searcher.search();
-        int[] ids = res.getIds();
-        int totalFound = (ids != null) ? ids.length : 0;
-
-        int sampleLimit = Math.min(totalFound, 100);
-        Map<String, Integer> propCounts = new TreeMap<>();
-        Map<String, String> propSamples = new HashMap<>();
-
-        for (int i = 0; i < sampleLimit; i++) {
-            int luceneId = ipedSource.getLuceneId(ids[i]);
-            if (luceneId < 0) {
-                continue;
-            }
-
-            Document doc = ipedSource.getReader().document(luceneId);
-            for (IndexableField f : doc.getFields()) {
-                String name = f.name();
-                if (isBlacklistedKey(name)) {
-                    continue;
-                }
-                propCounts.put(name, propCounts.getOrDefault(name, 0) + 1);
-                if (!propSamples.containsKey(name)) {
-                    String val = doc.get(name);
-                    if (val != null && !val.isBlank()) {
-                        String cleanSample = val.trim();
-                        if (cleanSample.length() > 100) {
-                            cleanSample = cleanSample.substring(0, 100) + "...";
-                        }
-                        propSamples.put(name, cleanSample);
-                    }
-                }
-            }
-        }
-
-        List<Map<String, Object>> propList = new ArrayList<>();
-        for (Map.Entry<String, Integer> entry : propCounts.entrySet()) {
-            String propName = entry.getKey();
-            boolean escapeReq = propName.contains(":") || propName.contains(" ") || propName.contains("-");
-            String luceneExample = escapeReq
-                    ? propName.replace(":", "\\:").replace(" ", "\\ ") + ":*"
-                    : propName + ":*";
-
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("name", propName);
-            item.put("sample_count", entry.getValue());
-            item.put("sample_value", propSamples.getOrDefault(propName, ""));
-            item.put("escape_required", escapeReq);
-            item.put("lucene_example", luceneExample);
-            propList.add(item);
-        }
-
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("category", catClean.isEmpty() ? "all" : catClean);
-        response.put("total_matching_items", totalFound);
-        response.put("sampled_items", sampleLimit);
-        response.put("distinct_properties_count", propList.size());
-        response.put("properties", propList);
-
-        return response;
-    }
-
-    private Map<String, Object> sanitizeProperties(Map<String, Object> props) {
-        Map<String, Object> basicBlock = new LinkedHashMap<>();
-        Map<String, Object> commBlock = new LinkedHashMap<>();
-        Map<String, Object> geoBlock = new LinkedHashMap<>();
-        Map<String, Object> forensicBlock = new LinkedHashMap<>();
-        Map<String, Object> extraBlock = new LinkedHashMap<>();
-
         for (Map.Entry<String, Object> entry : props.entrySet()) {
             String key = entry.getKey();
-            if (!isAllowedKey(key)) {
+            if (isBlacklistedKey(key) || PropertyCatalogService.isInternal(key)) {
+                continue;
+            }
+            String group = PropertyCatalogService.group(key);
+            if (groups != null && !groups.isEmpty() && !groups.contains(group)) {
                 continue;
             }
             Object sanitizedVal = sanitizeValue(entry.getValue());
-            if (sanitizedVal == null) {
-                continue;
-            }
-
-            String lower = key.toLowerCase();
-
-            // 1. Geo
-            if (lower.equals("latitude") || lower.equals("longitude") || lower.startsWith("common:geo:")
-                    || lower.contains("coordinate") || lower.contains("gps")) {
-                geoBlock.put(key, sanitizedVal);
-            }
-            // 2. Communication
-            else if (lower.startsWith("communication:") || lower.startsWith("conversation:")
-                    || lower.startsWith("message-") || lower.equals("from") || lower.equals("to")
-                    || lower.equals("cc") || lower.equals("bcc") || lower.equals("subject")
-                    || lower.equals("groupid") || lower.equals("isgroupmessage")
-                    || ((lower.contains("user") || lower.contains("phone") || lower.contains("email") || lower.contains("account"))
-                    && !lower.startsWith("ufed:"))) {
-                commBlock.put(key, sanitizedVal);
-            }
-            // 3. Forensic
-            else if (lower.equals("hash") || lower.equals("md5") || lower.equals("sha-256") || lower.equals("sha-1")
-                    || lower.equals("deleted") || lower.equals("carved") || lower.equals("childpornhashhits")
-                    || lower.startsWith("hashdb:") || lower.startsWith("p2p:")
-                    || lower.startsWith("ai:") || lower.startsWith("nsfw")) {
-                forensicBlock.put(key, sanitizedVal);
-            }
-            // 4. Basic
-            else if (lower.equals("name") || lower.equals("path") || lower.equals("category")
-                    || lower.equals("type") || lower.equals("ext") || lower.equals("size")
-                    || lower.equals("length") || lower.equals("created") || lower.equals("modified")
-                    || lower.equals("accessed") || lower.equals("changed") || lower.equals("isdir")
-                    || lower.equals("contenttype") || lower.equals("url") || lower.equals("visitdate")
-                    || lower.equals("downloaddate") || lower.equals("totalbytes") || lower.equals("receivedbytes")
-                    || lower.equals("localpath")) {
-                basicBlock.put(key, sanitizedVal);
-            }
-            // 5. Extra (image:, video:, audio:, ufed:, etc.)
-            else {
-                extraBlock.put(key, sanitizedVal);
+            if (sanitizedVal != null) {
+                byGroup.computeIfAbsent(group, g -> new LinkedHashMap<>()).put(key, sanitizedVal);
             }
         }
-
         Map<String, Object> partitioned = new LinkedHashMap<>();
-        if (!basicBlock.isEmpty()) {
-            partitioned.put("basic", basicBlock);
-        }
-        if (!commBlock.isEmpty()) {
-            partitioned.put("communication", commBlock);
-        }
-        if (!geoBlock.isEmpty()) {
-            partitioned.put("geo", geoBlock);
-        }
-        if (!forensicBlock.isEmpty()) {
-            partitioned.put("forensic", forensicBlock);
-        }
-        if (!extraBlock.isEmpty()) {
-            partitioned.put("extra", extraBlock);
-        }
-
+        byGroup.forEach((g, m) -> {
+            if (!m.isEmpty()) {
+                partitioned.put(g, m);
+            }
+        });
         return partitioned;
+    }
+
+    /** Resolves group names given by the LLM (case-insensitive); unknown names are reported in {@code unknown}. */
+    static Set<String> resolveGroups(List<String> groups, List<String> unknown) {
+        if (groups == null || groups.isEmpty()) {
+            return null;
+        }
+        Set<String> resolved = new LinkedHashSet<>();
+        for (String g : groups) {
+            String r = PropertyGroups.resolve(g);
+            if (r != null) {
+                resolved.add(r);
+            } else if (g != null && !g.isBlank()) {
+                unknown.add(g);
+            }
+        }
+        return resolved;
     }
 
     public static boolean matchesAnyKeyPattern(String key, List<String> patterns) {
@@ -2043,29 +2009,11 @@ public class IpedCoreService {
         return false;
     }
 
-    private static boolean isBlacklistedKey(String key) {
+    static boolean isBlacklistedKey(String key) {
         if (key == null || key.isBlank() || key.startsWith("_")) {
             return true;
         }
         return BLACKLISTED_KEYS.contains(key.toLowerCase());
-    }
-
-    private static boolean isAllowedKey(String key) {
-        if (isBlacklistedKey(key)) {
-            return false;
-        }
-        String lower = key.toLowerCase();
-        for (String prefix : WHITELIST_PREFIXES) {
-            if (lower.startsWith(prefix)) {
-                return true;
-            }
-        }
-        if (EXPLICIT_ALLOWED_KEYS.contains(lower)) {
-            return true;
-        }
-        return lower.contains("user") || lower.contains("phone") || lower.contains("email")
-                || lower.contains("account") || lower.contains("owner") || lower.contains("author")
-                || lower.contains("coord") || lower.contains("gps") || lower.contains("exif");
     }
 
     private static Object sanitizeValue(Object val) {
@@ -2102,129 +2050,6 @@ public class IpedCoreService {
             }
             default -> val;
         };
-    }
-
-    private static Map<String, Object> propDef(String field, String type, String desc, String example, boolean escape) {
-        Map<String, Object> def = new LinkedHashMap<>();
-        def.put("field", field);
-        def.put("type", type);
-        def.put("description", desc);
-        def.put("lucene_example", example);
-        def.put("escape_required", escape);
-        return def;
-    }
-
-    private static Map<String, List<Map<String, Object>>> initForensicDomains() {
-        Map<String, List<Map<String, Object>>> domains = new LinkedHashMap<>();
-
-        // 1. Chats
-        domains.put("chats", List.of(
-                propDef("Communication:Direction", "string", "Direção do fluxo da mensagem: INCOMING (recebida), OUTGOING (enviada) ou UNKNOWN", "Communication\\:Direction:INCOMING", true),
-                propDef("Communication:From", "string", "Remetente da mensagem (número de telefone, identificador ou nome)", "Communication\\:From:*11988887777*", true),
-                propDef("Communication:To", "string", "Destinatário da mensagem (número de telefone, identificador ou nome)", "Communication\\:To:*11988887777*", true),
-                propDef("Communication:Date", "date", "Data e hora do envio ou recebimento da mensagem", "Communication\\:Date:[2023-01-01 TO 2023-12-31]", true),
-                propDef("Communication:Participants", "string", "Lista de participantes associados à mensagem ou chamada", "Communication\\:Participants:*Silva*", true),
-                propDef("Conversation:id", "string", "Identificador unívoco do chat ou thread de conversa", "Conversation\\:id:*", true),
-                propDef("Conversation:Name", "string", "Nome da conversa, contato ou grupo de bate-papo", "Conversation\\:Name:*Operacao*", true),
-                propDef("Conversation:Account", "string", "Identificador da conta local/proprietária que originou o chat", "Conversation\\:Account:*", true),
-                propDef("GroupID", "string", "Identificador do grupo de mensagens (WhatsApp, Telegram)", "GroupID:*@g.us", false),
-                propDef("isGroupMessage", "boolean", "Indica se a mensagem pertence a um grupo (true ou false)", "isGroupMessage:true", false),
-                propDef("Message-Body", "text", "Corpo do texto da mensagem instantânea ou SMS", "Message-Body:*pix*", false)
-        ));
-
-        // 2. Browsers
-        domains.put("browsers", List.of(
-                propDef("url", "string", "URL completa da página web ou recurso", "url:*banco*", false),
-                propDef("visitDate", "date", "Data e hora da visita/acesso ao site no histórico do navegador", "visitDate:[2023-01-01 TO 2023-12-31]", false),
-                propDef("downloadDate", "date", "Data e hora em que o download de um arquivo foi realizado", "downloadDate:*", false),
-                propDef("totalBytes", "integer", "Tamanho total em bytes do arquivo baixado", "totalBytes:>1048576", false),
-                propDef("receivedBytes", "integer", "Quantidade de bytes efetivamente recebidos no download", "receivedBytes:>0", false),
-                propDef("localPath", "string", "Caminho local no disco para onde o arquivo baixado foi salvo", "localPath:*Downloads*", false)
-        ));
-
-        // 3. Emails
-        domains.put("emails", List.of(
-                propDef("from", "string", "Endereço ou nome do remetente do e-mail", "from:*@governo.gov.br", false),
-                propDef("to", "string", "Endereço ou nome do destinatário principal", "to:*@gmail.com", false),
-                propDef("cc", "string", "Destinatários em cópia carbono (CC)", "cc:*", false),
-                propDef("bcc", "string", "Destinatários em cópia oculta (BCC)", "bcc:*", false),
-                propDef("subject", "string", "Assunto do e-mail indexado", "subject:*sigiloso*", false),
-                propDef("Message-Subject", "string", "Assunto do e-mail padronizado pelo parser Tika", "Message-Subject:*urgente*", false),
-                propDef("Message-IsEmailAttachment", "boolean", "Indica se o arquivo é um anexo extraído de e-mail (true/false)", "Message-IsEmailAttachment:true", false),
-                propDef("Message-AttachmentCount", "integer", "Número de arquivos anexados à mensagem de e-mail", "Message-AttachmentCount:>0", false)
-        ));
-
-        // 4. Media
-        domains.put("media", List.of(
-                propDef("image:width", "integer", "Largura da imagem em pixels", "image\\:width:>1920", true),
-                propDef("image:height", "integer", "Altura da imagem em pixels", "image\\:height:>1080", true),
-                propDef("image:make", "string", "Fabricante da câmera ou dispositivo fotográfico (EXIF)", "image\\:make:Apple", true),
-                propDef("image:model", "string", "Modelo do dispositivo fotográfico (EXIF)", "image\\:model:iPhone*", true),
-                propDef("video:duration", "string", "Duração do arquivo de vídeo", "video\\:duration:*", true),
-                propDef("audio:transcription", "text", "Transcrição fonética/textual do áudio produzida por IA (Whisper/IPED)", "audio\\:transcription:*reunião*", true),
-                propDef("audio:transcriptConfidence", "number", "Nível de confiança da transcrição fonética (0.0 a 1.0)", "audio\\:transcriptConfidence:>0.8", true),
-                propDef("face_count", "integer", "Número de faces humanas detectadas na imagem ou vídeo", "face_count:>0", false),
-                propDef("faceAge:labels", "string", "Classificação etária estimada dos rostos detectados (ex: child, adult)", "faceAge\\:labels:child", true)
-        ));
-
-        // 5. System
-        domains.put("system", List.of(
-                propDef("name", "string", "Nome do arquivo ou item com extensão", "name:*.xlsx", false),
-                propDef("path", "string", "Caminho completo de diretório dentro da imagem forense", "path:*Windows*System32*", false),
-                propDef("category", "string", "Categoria forense atribuída pelo IPED", "category:\"chat messages\"", false),
-                propDef("type", "string", "Tipo MIME do conteúdo identificado por assinatura", "type:application/pdf", false),
-                propDef("size", "integer", "Tamanho do arquivo em bytes", "size:[1048576 TO 104857600]", false),
-                propDef("created", "date", "Data de criação no sistema de arquivos", "created:[2023-01-01 TO 2023-06-30]", false),
-                propDef("modified", "date", "Data da última alteração no sistema de arquivos", "modified:[2023-01-01 TO 2023-06-30]", false),
-                propDef("accessed", "date", "Data do último acesso registrado", "accessed:*", false),
-                propDef("deleted", "boolean", "Indica se o arquivo estava marcado como deletado no sistema de arquivos", "deleted:true", false),
-                propDef("carved", "boolean", "Indica se o arquivo foi recuperado por data carving do espaço não alocado", "carved:true", false),
-                propDef("isDir", "boolean", "Indica se o item é um diretório", "isDir:false", false)
-        ));
-
-        // 6. GPS
-        domains.put("gps", List.of(
-                propDef("common:geo:locations", "coordinates", "Localizações geográficas e coordenadas (latitude, longitude, topônimos)", "common\\:geo\\:locations:*", true),
-                propDef("latitude", "number", "Latitude decimal em coordenadas WGS84", "latitude:[-23.6 TO -23.5]", false),
-                propDef("longitude", "number", "Longitude decimal em coordenadas WGS84", "longitude:[-46.7 TO -46.6]", false),
-                propDef("ufed:coordinate_id", "string", "ID de coordenadas geográficas extraído de relatórios Cellebrite UFED", "ufed\\:coordinate_id:*", true)
-        ));
-
-        // 7. UFED
-        domains.put("ufed", List.of(
-                propDef("ufed:EntryName", "string", "Nome da propriedade do dispositivo em extrações Cellebrite UFED (ex: Device Serial, IMEI)", "ufed\\:EntryName:\"Device IMEI\"", true),
-                propDef("ufed:EntryValue", "string", "Valor da propriedade do dispositivo na extração UFED", "ufed\\:EntryValue:*", true),
-                propDef("ufed:id", "string", "Identificador do registro na extração Cellebrite UFED", "ufed\\:id:*", true),
-                propDef("ufed:file_id", "string", "Identificador do arquivo de origem na extração UFED", "ufed\\:file_id:*", true),
-                propDef("ufed:jumpTargets", "string", "Alvos de hiperlink e navegação cruzada UFED", "ufed\\:jumpTargets:*", true)
-        ));
-
-        // 8. AI
-        domains.put("ai", List.of(
-                propDef("audio:transcription", "text", "Transcrição textual de mensagens de voz e arquivos de áudio por IA", "audio\\:transcription:*dinheiro*", true),
-                propDef("audio:transcriptConfidence", "number", "Nível de confiança da transcrição de áudio por IA", "audio\\:transcriptConfidence:>0.8", true),
-                propDef("face_count", "integer", "Quantidade de faces detectadas na imagem por visão computacional", "face_count:>0", false),
-                propDef("faceAge:labels", "string", "Predição de faixa etária das faces detectadas (ex: child, teen, adult)", "faceAge\\:labels:*child*", true),
-                propDef("faceAge:count:Child", "integer", "Contagem de faces classificadas na faixa etária de crianças (0-12 anos)", "faceAge\\:count\\:Child:>0", true),
-                propDef("ai:csamDetector:csam", "number", "Score de probabilidade de CSAM calculado por rede neural (0.0 a 1.0)", "ai\\:csamDetector\\:csam:>0.6", true),
-                propDef("ai:csamDetector:label", "string", "Rótulo atribuído pelo detector CSAM (csam, porn, other)", "ai\\:csamDetector\\:label:csam", true),
-                propDef("ai:csamDetector:triggerFrame", "integer", "Índice do quadro de vídeo que disparou o alerta de CSAM", "ai\\:csamDetector\\:triggerFrame:*", true),
-                propDef("nsfw_nudity_score", "number", "Pontuação percentual de nudez/conteúdo explícito via NSFWNudityDetect (0 a 100)", "nsfw_nudity_score:>50", false),
-                propDef("childPornHashHits", "integer", "Contagem de correspondências com bancos de hashes de exploração sexual infantil", "childPornHashHits:>0", false),
-                propDef("hashDb:status", "string", "Status forense no banco de hashes conhecido (ex: alert, ignore)", "hashDb\\:status:alert", true),
-                propDef("hashDb:set", "string", "Nome da base forense de hashes onde houve match", "hashDb\\:set:*", true)
-        ));
-
-        // 9. Crypto & Hardware Wallets
-        domains.put("crypto", List.of(
-                propDef("Hardware-Wallet-Found", "string", "Sinalizador booleano indicando detecção de indícios de carteira de hardware", "Hardware-Wallet-Found:true", false),
-                propDef("Hardware-Wallet-VendorID", "string", "USB Vendor ID (VID) da carteira de hardware (ex: Trezor, Ledger)", "Hardware-Wallet-VendorID:*", false),
-                propDef("Hardware-Wallet-ProductID", "string", "USB Product ID (PID) do modelo da carteira de hardware", "Hardware-Wallet-ProductID:*", false),
-                propDef("Hardware-Wallet-VendorName", "string", "Nome do fabricante da carteira de hardware de criptomoedas", "Hardware-Wallet-VendorName:*Ledger*", false),
-                propDef("Hardware-Wallet-DeviceName", "string", "Nome comercial ou modelo da carteira de hardware", "Hardware-Wallet-DeviceName:*Nano*", false)
-        ));
-
-        return Collections.unmodifiableMap(domains);
     }
 
     // =========================================================================
@@ -2556,219 +2381,4 @@ public class IpedCoreService {
             return null;
         }
     }
-
-    // =========================================================================
-    // AI DETECTIONS DISCOVERY & QUERY
-    // =========================================================================
-
-    public static class AiFilterDef {
-        public final String id;
-        public final String name;
-        public final String description;
-        public final String query;
-        public final String scoreField;
-
-        public AiFilterDef(String id, String name, String description, String query, String scoreField) {
-            this.id = id;
-            this.name = name;
-            this.description = description;
-            this.query = query;
-            this.scoreField = scoreField;
-        }
-    }
-
-    private static final Map<String, AiFilterDef> AI_FILTERS = new LinkedHashMap<>();
-    static {
-        AI_FILTERS.put("weapons", new AiFilterDef(
-                "weapons",
-                "Armas de Fogo e Munições",
-                "Itens com detecção positiva de armas de fogo ou munições por modelo de visão computacional ou categoria.",
-                "hasWeapon:true OR category:\"weapons\" OR category:\"armas\"",
-                null
-        ));
-        AI_FILTERS.put("drugs", new AiFilterDef(
-                "drugs",
-                "Drogas e Entorpecentes",
-                "Itens identificados como substâncias ilícitas ou materiais associados ao tráfico de drogas.",
-                "hasDrug:true OR category:\"drugs\" OR category:\"drogas\"",
-                null
-        ));
-        AI_FILTERS.put("nudity", new AiFilterDef(
-                "nudity",
-                "Nudez e Conteúdo Adulto",
-                "Imagens e vídeos detectados com pontuação de conteúdo explícito pelo modelo Deep Image Evaluator (DIE).",
-                "isNudity:true OR category:\"nudity\" OR nudityScore:[0.5 TO 1.0]",
-                "nudityScore"
-        ));
-        AI_FILTERS.put("faces", new AiFilterDef(
-                "faces",
-                "Faces Humanas Detectadas",
-                "Imagens e quadros de vídeo onde foram localizadas e vetorizadas faces humanas pelo FaceNet/dlib.",
-                "hasFace:true OR face_count:[1 TO *]",
-                "face_count"
-        ));
-        AI_FILTERS.put("audio_transcripts", new AiFilterDef(
-                "audio_transcripts",
-                "Transcrições de Áudio (IA)",
-                "Áudios, mensagens de voz e vídeos com transcrição fonética gerada por inteligência artificial (Whisper/Vosk).",
-                "hasAudioTranscript:true OR audio\\:transcription:*",
-                "audio:transcriptConfidence"
-        ));
-        AI_FILTERS.put("csam", new AiFilterDef(
-                "csam",
-                "Exploração Sexual Infantil (CSAM)",
-                "Arquivos com correspondência em bases de hashes forenses conhecidas de exploração infantil ou detecção por rede neural (CSAMDetector).",
-                "childPornHashHits:[1 TO *] OR hashDb\\:status:alert OR ai\\:csamDetector\\:csam:[0.6 TO 1.0] OR ai\\:csamDetector\\:label:csam",
-                "ai:csamDetector:csam"
-        ));
-        AI_FILTERS.put("crypto_wallets", new AiFilterDef(
-                "crypto_wallets",
-                "Carteiras de Hardware Cripto",
-                "Dispositivos e registros de carteiras de hardware cripto (Ledger, Trezor, KeepKey) detectados pelo SearchHardwareWallets.",
-                "Hardware-Wallet-Found:true OR bookmark:\"Possible Hardware Wallets\"",
-                null
-        ));
-        AI_FILTERS.put("age_estimation", new AiFilterDef(
-                "age_estimation",
-                "Estimativa de Faixa Etária (Crianças/Menores)",
-                "Imagens e vídeos contendo faces classificadas como crianças ou adolescentes pelo AgeEstimationTask.",
-                "faceAge\\:count\\:Child:[1 TO *] OR faceAge\\:labels:*child*",
-                "faceAge:count:Child"
-        ));
-        AI_FILTERS.put("nsfw", new AiFilterDef(
-                "nsfw",
-                "Conteúdo Explícito / Nudez (NSFW)",
-                "Imagens e vídeos detectados com conteúdo adulto pelos modelos DIE e NSFWNudityDetectTask.",
-                "isNudity:true OR category:\"nudity\" OR nudityScore:[0.5 TO 1.0] OR nsfw_nudity_score:[50 TO 100]",
-                "nsfw_nudity_score"
-        ));
-        AI_FILTERS.put("ocr", new AiFilterDef(
-                "ocr",
-                "Documentos com OCR Reconhecido",
-                "Imagens digitalizadas e documentos onde textos gráficos foram extraídos via Tesseract OCR.",
-                "hasOCR:true OR hasOcrText:true",
-                null
-        ));
-    }
-
-    /**
-     * Lists available AI detection categories in the case with counts.
-     */
-    public Map<String, Object> listAiFilters() {
-        checkCaseOpen();
-        List<Map<String, Object>> filterList = new ArrayList<>();
-        for (AiFilterDef def : AI_FILTERS.values()) {
-            Map<String, Object> fMap = new LinkedHashMap<>();
-            fMap.put("filter_type", def.id);
-            fMap.put("name", def.name);
-            fMap.put("description", def.description);
-            fMap.put("lucene_query", def.query);
-            int count = 0;
-            try {
-                IPEDSearcher s = new IPEDSearcher(ipedSource, def.query);
-                count = s.search().getLength();
-            } catch (Exception e) {
-                LOGGER.debug("Erro ao consultar contagem para filtro AI {}: {}", def.id, e.getMessage());
-            }
-            fMap.put("count", count);
-            filterList.add(fMap);
-        }
-
-        Map<String, Object> res = new LinkedHashMap<>();
-        res.put("total_filters", filterList.size());
-        res.put("filters", filterList);
-        return res;
-    }
-
-    /**
-     * Queries evidence items detected by automated AI and machine learning models.
-     */
-    public Map<String, Object> queryAiDetections(String filterType, Float minScore, int limit, int offset) throws IOException {
-        checkCaseOpen();
-        if (filterType == null || filterType.isBlank()) {
-            throw new IllegalArgumentException("filter_type é obrigatório. Tipos disponíveis: " + String.join(", ", AI_FILTERS.keySet()));
-        }
-        String cleanType = filterType.trim().toLowerCase();
-        AiFilterDef def = AI_FILTERS.get(cleanType);
-        if (def == null) {
-            throw new IllegalArgumentException("Tipo de filtro AI '" + filterType + "' inválido. Tipos disponíveis: " + String.join(", ", AI_FILTERS.keySet()));
-        }
-
-        String effectiveQuery = def.query;
-        if (minScore != null && minScore > 0 && def.scoreField != null) {
-            if ("nudityScore".equalsIgnoreCase(def.scoreField)) {
-                effectiveQuery = "nudityScore:[" + minScore + " TO 1.0]";
-            } else if ("nsfw_nudity_score".equalsIgnoreCase(def.scoreField)) {
-                float val = minScore <= 1.0f ? minScore * 100f : minScore;
-                effectiveQuery = "nsfw_nudity_score:[" + val + " TO 100] OR nudityScore:[" + (val / 100f) + " TO 1.0]";
-            } else if ("audio:transcriptConfidence".equalsIgnoreCase(def.scoreField)) {
-                effectiveQuery = "audio\\:transcriptConfidence:[" + minScore + " TO 1.0]";
-            } else if ("face_count".equalsIgnoreCase(def.scoreField)) {
-                effectiveQuery = "face_count:[" + (int) minScore.floatValue() + " TO *]";
-            } else if ("childPornHashHits".equalsIgnoreCase(def.scoreField) || "ai:csamDetector:csam".equalsIgnoreCase(def.scoreField)) {
-                float scoreVal = minScore > 1.0f ? minScore / 100f : minScore;
-                effectiveQuery = "childPornHashHits:[1 TO *] OR hashDb\\:status:alert OR ai\\:csamDetector\\:csam:[" + scoreVal + " TO 1.0]";
-            } else if ("faceAge:count:Child".equalsIgnoreCase(def.scoreField)) {
-                effectiveQuery = "faceAge\\:count\\:Child:[" + (int) minScore.floatValue() + " TO *]";
-            }
-        }
-
-        int maxLimit = limit > 0 ? Math.min(limit, 500) : 50;
-        int safeOffset = Math.max(0, offset);
-
-        SearchResult sRes;
-        try {
-            IPEDSearcher searcher = new IPEDSearcher(ipedSource, effectiveQuery);
-            sRes = searcher.search();
-        } catch (Exception e) {
-            LOGGER.debug("Filtro AI '{}' com query '{}' gerou exceção na pesquisa: {}", def.id, effectiveQuery, e.getMessage());
-            Map<String, Object> emptyRes = new LinkedHashMap<>();
-            emptyRes.put("filter_type", def.id);
-            emptyRes.put("filter_name", def.name);
-            emptyRes.put("query_applied", effectiveQuery);
-            emptyRes.put("min_score", minScore);
-            emptyRes.put("total_found", 0);
-            emptyRes.put("offset", safeOffset);
-            emptyRes.put("returned_count", 0);
-            emptyRes.put("items", List.of());
-            return emptyRes;
-        }
-
-        int totalHits = sRes.getLength();
-        int[] docIds = sRes.getIds();
-
-        List<Map<String, Object>> items = new ArrayList<>();
-        if (docIds != null && docIds.length > safeOffset) {
-            int end = Math.min(safeOffset + maxLimit, docIds.length);
-            for (int i = safeOffset; i < end; i++) {
-                int cId = docIds[i];
-                int luceneId = ipedSource.getLuceneId(cId);
-                if (luceneId < 0) continue;
-                Document doc = ipedSource.getReader().document(luceneId);
-                Map<String, Object> itemMap = buildFileEntry(cId, doc);
-                if (doc.get("nudityScore") != null) {
-                    itemMap.put("nudity_score", doc.get("nudityScore"));
-                }
-                if (doc.get("face_count") != null) {
-                    itemMap.put("face_count", doc.get("face_count"));
-                }
-                if (doc.get("audio:transcription") != null) {
-                    itemMap.put("audio_transcription", doc.get("audio:transcription"));
-                }
-                items.add(itemMap);
-            }
-        }
-
-        Map<String, Object> res = new LinkedHashMap<>();
-        res.put("filter_type", def.id);
-        res.put("filter_name", def.name);
-        res.put("query_applied", effectiveQuery);
-        res.put("min_score", minScore);
-        res.put("total_found", totalHits);
-        res.put("offset", safeOffset);
-        res.put("returned_count", items.size());
-        res.put("items", items);
-        return res;
-    }
 }
-

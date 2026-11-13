@@ -11,13 +11,14 @@ O modelo de linguagem atua como um assistente cognitivo do examinador: ele reali
 Quando o prompt oficial `/start_case` é ativado, a IA é instruída a seguir o seguinte ciclo de trabalho:
 
 ```
-[1. Status e Prontidão]  -->  [2. Reconhecimento de Fontes]  -->  [3. Dicionário de Metadados]
-      get_server_status              list_sources / get_device_info          get_property_dictionary
+[1. Status e Prontidão]  -->  [2. Reconhecimento de Fontes]  -->  [3. Propriedades do Caso]
+      get_server_status              list_sources / get_device_info          list_properties
+                                                                             describe_property
              |
              v
 [4. Busca Estruturada]   -->  [5. Inspeção Progressiva]      -->  [6. Registro e Auditoria]
       search_documents               get_metadata / get_text                 add_to_bookmark
-      query_ai_detections            get_item_thumbnail                      set_item_checked
+      get_timeline                   get_item_thumbnail                      set_item_checked
 ```
 
 ### 1. Verificação do Ambiente e Caso
@@ -26,11 +27,11 @@ A sessão sempre se inicia verificando se há um caso IPED carregado e pronto (`
 ### 2. Reconhecimento de Fontes de Evidência
 O perito e a IA identificam as mídias periciadas (`list_sources`) e os dados de proprietário e contas vinculadas (`get_device_and_owner_info`), como números de telefone, IMEI e e-mails.
 
-### 3. Consulta ao Dicionário de Metadados
-Para evitar alucinações de campos e erros de sintaxe, a IA consulta o catálogo canônico de propriedades (`get_property_dictionary` ou `list_available_properties`) antes de formular consultas específicas sobre chats, EXIF ou sistemas de arquivos.
+### 3. Descoberta das Propriedades do Caso
+Para evitar alucinações de campos e erros de sintaxe, a IA descobre as propriedades que existem **neste** caso antes de formular consultas sobre chats, EXIF, sistemas de arquivos ou resultados de IA: `list_properties` mostra os grupos e as propriedades com contagens exatas, e `describe_property` explica o significado, a escala e os valores de cada uma. Uma propriedade que não aparece no catálogo não existe no caso (o módulo que a gera pode não ter sido executado), o que é diferente de zero itens.
 
 ### 4. Busca Estruturada e Recuperação
-Execução de pesquisas com sintaxe Apache Lucene (`search_documents`), filtros de redes neurais (`query_ai_detections`), correlação temporal (`get_timeline`, `get_events_around_time`) ou análise de vínculos interpessoais (`get_communications_graph`, `get_top_contacts`).
+Execução de pesquisas com sintaxe Apache Lucene (`search_documents`), inclusive sobre os resultados de IA do grupo `AI` (ex.: `nudityScore:[650 TO *]`, `faceAge\:labels:child`), correlação temporal (`get_timeline`, `get_events_around_time`) ou análise de vínculos interpessoais (`get_communications_graph`, `get_top_contacts`).
 
 ### 5. Inspeção Progressiva de Conteúdo
 Para economizar tokens e evitar estouro de contexto:

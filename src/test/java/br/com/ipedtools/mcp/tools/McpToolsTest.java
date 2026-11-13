@@ -107,13 +107,13 @@ public class McpToolsTest {
         DocumentMetadataTool tool = new DocumentMetadataTool();
 
         // 1. Standard mode
-        List<Map<String, Object>> meta = tool.getDocumentMetadata(List.of(1, 2), false, null, "");
+        List<Map<String, Object>> meta = tool.getDocumentMetadata(List.of(1, 2), false, null, null, "");
         assertNotNull(meta);
         assertEquals(2, meta.size());
         assertFalse(meta.getFirst().containsKey("raw"));
 
         // 2. Raw mode with key filtering
-        List<Map<String, Object>> rawMeta = tool.getDocumentMetadata(List.of(1), true, List.of("name"), "");
+        List<Map<String, Object>> rawMeta = tool.getDocumentMetadata(List.of(1), true, List.of("name"), null, "");
         assertNotNull(rawMeta);
         assertEquals(1, rawMeta.size());
         assertEquals(Boolean.TRUE, rawMeta.getFirst().get("raw"));
@@ -160,32 +160,92 @@ public class McpToolsTest {
     }
 
     @Test
-    void testPropertyDictionaryToolStatic() {
-        PropertyDictionaryTool tool = new PropertyDictionaryTool();
-        Map<String, Object> all = tool.getPropertyDictionary("all");
-        assertNotNull(all);
-        assertTrue(all.containsKey("domains"));
-        assertTrue(all.containsKey("escaping_note"));
+    void testPropertyCatalogToolsAreRegistered() throws Exception {
+        io.quarkiverse.mcp.server.Tool list = PropertyCatalogTool.class
+                .getMethod("listProperties", String.class, String.class, String.class)
+                .getAnnotation(io.quarkiverse.mcp.server.Tool.class);
+        io.quarkiverse.mcp.server.Tool describe = PropertyCatalogTool.class
+                .getMethod("describeProperty", String.class, String.class, Integer.class)
+                .getAnnotation(io.quarkiverse.mcp.server.Tool.class);
+        assertEquals("list_properties", list.name());
+        assertEquals("describe_property", describe.name());
+        assertTrue(list.description().contains("describe_property(name=\"nudityScore\")"), "deve mostrar o fluxo de descoberta");
+        assertTrue(list.description().contains("search_documents"), "deve terminar o fluxo em search_documents");
+        assertTrue(list.description().contains("faceAge\\:labels:child"), "deve mostrar o escape de dois-pontos");
+        assertTrue(describe.description().contains("audio\\:transcriptConfidence:[0.5 TO *]"), "deve mostrar o escape");
+    }
 
-        Map<String, Object> chats = tool.getPropertyDictionary("chats");
-        assertNotNull(chats);
-        assertEquals("chats", chats.get("domain"));
-        assertTrue(chats.containsKey("properties"));
-
-        Map<String, Object> crypto = tool.getPropertyDictionary("crypto");
-        assertNotNull(crypto);
-        assertEquals("crypto", crypto.get("domain"));
-        assertTrue(crypto.containsKey("properties"));
+    @Test
+    void testToolCatalogHas26ToolsAndNoRemovedOnes() throws Exception {
+        // Tool classes are read from the main output directory (target/classes), where PropertyCatalogTool lives.
+        File root = new File(PropertyCatalogTool.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+        File dir = new File(root, "br/com/ipedtools/mcp/tools");
+        java.util.Set<String> names = new java.util.TreeSet<>();
+        File[] classes = dir.listFiles((d, n) -> n.endsWith(".class") && !n.contains("$"));
+        assertNotNull(classes);
+        for (File f : classes) {
+            String cls = "br.com.ipedtools.mcp.tools." + f.getName().replace(".class", "");
+            for (java.lang.reflect.Method m : Class.forName(cls).getDeclaredMethods()) {
+                io.quarkiverse.mcp.server.Tool t = m.getAnnotation(io.quarkiverse.mcp.server.Tool.class);
+                if (t != null) {
+                    names.add(t.name());
+                }
+            }
+        }
+        assertEquals(26, names.size(), "ferramentas MCP: " + names);
+        for (String removed : List.of("list_ai_filters", "query_ai_detections", "get_property_dictionary", "list_available_properties")) {
+            assertFalse(names.contains(removed), "ferramenta removida ainda exposta: " + removed);
+        }
+        assertTrue(names.containsAll(List.of("list_properties", "describe_property")));
     }
 
     @Test
     @EnabledIf("isCaseAvailable")
-    void testListAvailableProperties() {
-        PropertyDictionaryTool tool = new PropertyDictionaryTool();
-        Map<String, Object> props = tool.listAvailableProperties("chat messages");
-        assertNotNull(props);
-        assertTrue(props.containsKey("properties"));
-        assertTrue(props.containsKey("total_matching_items"));
+    @SuppressWarnings("unchecked")
+    void testListPropertiesTool() {
+        PropertyCatalogTool tool = new PropertyCatalogTool();
+
+        Map<String, Object> overview = tool.listProperties(null, null, null);
+        assertFalse(overview.containsKey("error"), String.valueOf(overview.get("error")));
+        List<Map<String, Object>> groups = (List<Map<String, Object>>) overview.get("groups");
+        assertNotNull(groups);
+        assertTrue((int) overview.get("total_properties") > 0);
+        for (Map<String, Object> g : groups) {
+            assertTrue(g.keySet().containsAll(List.of("name", "description", "property_count")), "formato do grupo: " + g);
+        }
+
+        Map<String, Object> ai = tool.listProperties("ai", null, null);
+        assertEquals("AI", ai.get("group"));
+        List<Map<String, Object>> props = (List<Map<String, Object>>) ai.get("properties");
+        assertFalse(props.isEmpty());
+        assertTrue(ai.containsKey("total") && ai.containsKey("truncated"));
+        for (Map<String, Object> p : props) {
+            assertTrue(p.keySet().containsAll(List.of("name", "group", "type", "item_count", "curated", "query_example")),
+                    "formato da propriedade: " + p);
+        }
+
+        Map<String, Object> bad = tool.listProperties("Inexistente", null, null);
+        assertTrue(bad.containsKey("error"));
+        assertNotNull(bad.get("available_groups"));
+    }
+
+    @Test
+    @EnabledIf("isCaseAvailable")
+    void testDescribePropertyTool() {
+        PropertyCatalogTool tool = new PropertyCatalogTool();
+
+        Map<String, Object> d = tool.describeProperty("nudityScore", null, null);
+        for (String key : List.of("name", "present", "group", "type", "item_count", "stats", "query_examples")) {
+            assertTrue(d.containsKey(key), "describe_property sem '" + key + "': " + d);
+        }
+        assertEquals(true, d.get("present"));
+
+        Map<String, Object> absent = tool.describeProperty("hasWeapon", null, null);
+        assertEquals(false, absent.get("present"));
+        assertTrue(absent.containsKey("similar"));
+
+        Map<String, Object> missingName = tool.describeProperty(" ", null, null);
+        assertTrue(missingName.containsKey("error"));
     }
 
     @Test
@@ -404,45 +464,6 @@ public class McpToolsTest {
         Map<String, Object> docRes = tool.searchSimilarDocuments(imageId, 50, 10);
         assertNotNull(docRes);
         assertEquals(imageId, docRes.get("reference_id"));
-    }
-
-    @Test
-    @EnabledIf("isCaseAvailable")
-    void testAiDetectionTool() {
-        AiDetectionTool tool = new AiDetectionTool();
-
-        // 1. List filters
-        Map<String, Object> filters = tool.listAiFilters();
-        assertNotNull(filters);
-        assertFalse(filters.containsKey("error"));
-        assertTrue((int) filters.get("total_filters") >= 10);
-
-        // 2. Query detections
-        Map<String, Object> detections = tool.queryAiDetections("faces", null, 10, 0);
-        assertNotNull(detections);
-        assertFalse(detections.containsKey("error"));
-        assertEquals("faces", detections.get("filter_type"));
-
-        // 3. Query new python task filters
-        Map<String, Object> crypto = tool.queryAiDetections("crypto_wallets", null, 10, 0);
-        assertNotNull(crypto);
-        assertFalse(crypto.containsKey("error"));
-        assertEquals("crypto_wallets", crypto.get("filter_type"));
-
-        Map<String, Object> age = tool.queryAiDetections("age_estimation", null, 10, 0);
-        assertNotNull(age);
-        assertFalse(age.containsKey("error"));
-        assertEquals("age_estimation", age.get("filter_type"));
-
-        Map<String, Object> nsfw = tool.queryAiDetections("nsfw", null, 10, 0);
-        assertNotNull(nsfw);
-        assertFalse(nsfw.containsKey("error"));
-        assertEquals("nsfw", nsfw.get("filter_type"));
-
-        Map<String, Object> csam = tool.queryAiDetections("csam", null, 10, 0);
-        assertNotNull(csam);
-        assertFalse(csam.containsKey("error"));
-        assertEquals("csam", csam.get("filter_type"));
     }
 
     @Test

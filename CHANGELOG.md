@@ -16,13 +16,28 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
   - Identidade das partes pelas subpropriedades estruturadas `Communication:From/To:id|name|phoneNumber` antes do parsing de texto, normalização de telefones com libphonenumber, e-mails em minúsculas, união de aliases e descarte de remetentes de sistema (`System Message`, `status@broadcast`).
   - Mensagens de grupo vinculadas ao nó de grupo (o `Communication:To:id` do chat não vira pessoa).
   - Diagnósticos de cobertura em todas as respostas (`events_analyzed`, direção explícita, canal resolvido e data).
-- **Nova ferramenta MCP `get_contact_relationship`:** detalha a relação entre dois contatos (totais, canais, direções, histograma mensal, grupos em comum e `evidence_ids`), devolvendo `candidates` quando a referência é ambígua. O servidor passa a expor 28 ferramentas.
+- **Nova ferramenta MCP `get_contact_relationship`:** detalha a relação entre dois contatos (totais, canais, direções, histograma mensal, grupos em comum e `evidence_ids`), devolvendo `candidates` quando a referência é ambígua.
 - **Filtros `channel`, `start_date` e `end_date`** em `get_top_contacts`, `get_communications_graph` e `get_contact_relationship`; `include_mermaid` opcional em `get_communications_graph`.
+- **Catálogo de propriedades do caso (issue #2):** as propriedades passam a vir do índice do caso, com contagem exata de itens, tipo (`metadataTypes.txt`) e grupo (prefixos do IPED mais o grupo `AI`), junto com a semântica curada das propriedades conhecidas do IPED (significado, escala, valores e exemplos de consulta). Os nomes curados são verificados por teste contra as constantes do IPED.
+  - **Nova ferramenta `list_properties`:** grupos do caso e, com `group` ou `pattern`, as propriedades com tipo, contagem, descrição e exemplo de consulta escapado; `category` restringe as contagens à categoria.
+  - **Nova ferramenta `describe_property`:** significado, escala, mínimo e máximo (números e datas) ou valores mais frequentes (texto) e exemplos de consulta; com `query`, a distribuição é calculada só sobre os itens da consulta. Propriedade inexistente é informada como ausente (`present: false`), com sugestão de nomes parecidos, em vez de zero itens.
+  - **Aviso de propriedade inexistente em `search_documents`:** `warnings` com `property_not_in_case` quando a consulta cita uma propriedade que não existe no caso.
+  - **Parâmetro `groups` em `get_document_metadata`** para selecionar grupos do catálogo.
 - **Rastreabilidade e transparência:** até 5 `evidence_ids` por contato e por aresta (mais antigo, mais recente e amostra determinística), campos `truncated`, `total_eligible_edges`, `unlinked_events` e `unknown_direction_total`.
 
 ### Modificado
 - **BREAKING — `get_communications_graph`:** o nó sintético `Dispositivo_Local` foi removido; o lado local de cada evento com direção explícita passa a ser o nó `local:<canal>` (`type: LOCAL_ENDPOINT`, `identity_resolved: false`) com os identificadores locais observados. Os nós passam a ter `type` (`ACCOUNT`, `GROUP`, `LOCAL_ENDPOINT`) e os ids são chaves canônicas (ex.: `tel:15550101181`).
 - **BREAKING — `channels`:** passa a conter o aplicativo real (ex.: `Viber`) em vez de rótulos genéricos (`chat messages`, `calls`).
+- **BREAKING — `get_document_metadata`:** os blocos `basic`, `communication`, `geo`, `forensic` e `extra` dão lugar aos grupos do catálogo (`Basic`, `Communication`, `AI`, `Image`, `UFED`...). A lista de permissões manual foi removida: `nudityScore`, `nudityClass`, `ocrCharCount`, `Regex:*`, `language:*`, `pdf:*` e `office:*` deixam de ser descartados no modo padrão.
+- **BREAKING — ferramentas removidas (issue #2):** `list_ai_filters`, `query_ai_detections`, `get_property_dictionary` e `list_available_properties`. Consultavam propriedades que o IPED não grava (`hasWeapon`, `hasDrug`, `isNudity`, `hasFace`, `hasOCR`), usavam a escala errada de `nudityScore`, listavam nomes divergentes (`Message-AttachmentCount` em vez de `Message:AttachmentCount`) e amostravam só os 100 primeiros itens. O servidor passa a expor 26 ferramentas.
+
+  | Ferramenta removida | Como fazer agora |
+  |---|---|
+  | `list_ai_filters` | `list_properties(group="AI")` |
+  | `query_ai_detections` | `describe_property` para a escala e `search_documents` com a propriedade (ex.: `nudityScore:[650 TO *]`, `faceAge\:labels:child`, `ufed\:mediaClasses:Weapons`) |
+  | `get_property_dictionary` | `list_properties(group=...)` ou `list_properties(pattern=...)` e `describe_property(name=...)` |
+  | `list_available_properties` | `list_properties(category=...)`, com contagens exatas sobre todos os itens da categoria |
+- **`search_documents` e prompt `start_case`:** deixam de listar nomes fixos de categorias e filtros de IA e orientam a descoberta por `list_categories`, `list_properties` e `describe_property`.
 - **`get_top_contacts` e `get_communications_graph` não usam mais `get_device_and_owner_info`, `ufed:PhoneOwner` nem `Conversation:Account`:** nenhuma identidade é rotulada como dono do aparelho.
 
 ### Corrigido

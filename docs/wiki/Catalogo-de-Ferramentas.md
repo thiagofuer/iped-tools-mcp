@@ -1,6 +1,6 @@
-# Catálogo de Ferramentas Forenses (28 MCP Tools)
+# Catálogo de Ferramentas Forenses (26 MCP Tools)
 
-O **IPED Tools MCP** expõe 28 ferramentas periciais especializadas agrupadas em 9 domínios operacionais. Abaixo está a referência completa de cada ferramenta, seus objetivos e exemplos práticos de perguntas em português que o examinador pode fazer no chat.
+O **IPED Tools MCP** expõe 26 ferramentas periciais especializadas agrupadas em 8 domínios operacionais. Abaixo está a referência completa de cada ferramenta, seus objetivos e exemplos práticos de perguntas em português que o examinador pode fazer no chat.
 
 ---
 
@@ -28,15 +28,17 @@ O **IPED Tools MCP** expõe 28 ferramentas periciais especializadas agrupadas em
 
 ---
 
-## 2. Dicionário e Descoberta de Metadados
+## 2. Catálogo de Propriedades do Caso
 
-### `get_property_dictionary`
-* **Propósito:** Retorna o catálogo canônico de metadados do IPED agrupados por domínios (`chats`, `browsers`, `emails`, `media`, `system`, `gps`, `ufed`, `ai`, `crypto`), informando tipos de dados e sintaxes de consulta.
-* **Exemplo de Pergunta:** *"Quais propriedades de geolocalização e GPS estão disponíveis para busca?"*
+O catálogo mostra as propriedades que **existem neste caso**, lidas do índice, com contagens exatas. A descoberta segue o fluxo `list_properties` → `describe_property` → `search_documents`. Os grupos seguem as colunas do IPED (Basic, Communication, Image, UFED, Regex...) mais o grupo **AI**, que reúne os resultados dos módulos de IA (nudez, faces e idade, detector de CSAM, OCR, transcrição de áudio, classes de mídia do UFED). Detalhes em [Consultas Lucene e Propriedades](Consultas-Lucene-e-Propriedades).
 
-### `list_available_properties`
-* **Propósito:** Descobre dinamicamente os nomes exatos das propriedades que de fato foram indexadas para uma categoria específica presente no caso.
-* **Exemplo de Pergunta:** *"Quais metadados específicos foram extraídos para a categoria 'whatsapp'?"*
+### `list_properties`
+* **Propósito:** Sem parâmetros, lista os grupos de propriedades presentes no caso e quantas propriedades cada um tem. Com `group` ou `pattern`, lista as propriedades com tipo, quantidade exata de itens, descrição (quando curada) e um exemplo de consulta já escapado. Com `category`, as contagens ficam restritas à categoria.
+* **Exemplos de Pergunta:** *"Quais resultados de inteligência artificial existem neste caso?"* · *"Quais propriedades de comunicação existem nas mensagens instantâneas?"*
+
+### `describe_property`
+* **Propósito:** Detalha uma propriedade: significado, escala ou unidade, quantidade de itens, mínimo e máximo (números e datas) ou valores mais frequentes (texto) e exemplos de consulta. Com `query`, calcula a distribuição apenas sobre os itens da consulta. Quando a propriedade não existe no caso, diz isso explicitamente e sugere nomes parecidos.
+* **Exemplos de Pergunta:** *"O que significa nudityScore e qual a faixa de valores neste caso?"* · *"Quais faixas etárias foram estimadas nas imagens da categoria Other Images?"*
 
 ---
 
@@ -47,7 +49,7 @@ O **IPED Tools MCP** expõe 28 ferramentas periciais especializadas agrupadas em
 * **Exemplo de Pergunta:** *"Busque mensagens de chat que contenham o termo 'pagamento' ou 'transferência'."*
 
 ### `get_document_metadata`
-* **Propósito:** Recupera metadados técnicos de um ou mais itens, com agrupamento semântico (`basic`, `communication`, `geo`, `forensic`, `extra`), extração sem truncamento (`raw: true`) ou filtragem por campos (`keys`).
+* **Propósito:** Recupera metadados técnicos de um ou mais itens, agrupados pelos mesmos grupos de `list_properties` (`Basic`, `Communication`, `AI`, `Image`, `UFED`...), com seleção de grupos (`groups`), extração sem truncamento (`raw: true`) ou filtragem por campos (`keys`). Resultados de IA como `nudityScore` e `ocrCharCount` aparecem no modo padrão.
 * **Exemplo de Pergunta:** *"Mostre todos os metadados técnicos e dados forenses do item ID 15420."*
 
 ### `get_document_text`
@@ -153,15 +155,3 @@ As três ferramentas acima usam o mesmo modelo de eventos, derivado somente das 
 ### `search_similar_documents`
 * **Propósito:** Encontra documentos textualmente semelhantes ao arquivo de referência utilizando o algoritmo Lucene MoreLikeThis.
 * **Exemplo de Pergunta:** *"Busque relatórios ou minutas com conteúdo semelhante ao documento ID 8900."*
-
----
-
-## 9. Filtros de Inteligência Artificial e Reconhecimento
-
-### `list_ai_filters`
-* **Propósito:** Lista as categorias de detecções neurais e de IA computadas pelo IPED disponíveis no caso (armas, drogas, nudez, faces, transcrições de áudio, CSAM, carteiras cripto, estimativa de idade).
-* **Exemplo de Pergunta:** *"Quais filtros de IA e modelos de visão computacional foram processados neste caso?"*
-
-### `query_ai_detections`
-* **Propósito:** Consulta itens classificados por filtros de redes neurais específicos com pontuações de confiança e limiares de detecção.
-* **Exemplo de Pergunta:** *"Mostre as fotos classificadas pelo filtro de armas com confiança acima de 80%."*

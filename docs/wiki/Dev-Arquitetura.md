@@ -33,7 +33,7 @@ graph TD
         subgraph MCP_Layer ["Modo Headless STDIO (Quarkus MCP Engine)"]
             StdioHandler["STDIO Transport (stdin / stdout)"]
             McpDispatcher["Quarkus MCP Dispatcher"]
-            Tools["28 Ferramentas Forenses (@Tool)"]
+            Tools["26 Ferramentas Forenses (@Tool)"]
         end
 
         subgraph Core_Service ["Camada de Serviço Forense"]
