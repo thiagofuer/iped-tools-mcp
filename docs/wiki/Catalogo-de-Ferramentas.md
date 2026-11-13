@@ -72,9 +72,11 @@ O catálogo mostra as propriedades que **existem neste caso**, lidas do índice,
 
 ## 4. Inteligência de Comunicações e Dispositivos
 
-### `get_device_and_owner_info`
-* **Propósito:** Extrai informações do proprietário do dispositivo periciado, contas vinculadas, identificadores de hardware (IMEI), números de telefone e e-mails associados.
-* **Exemplo de Pergunta:** *"Quem é o proprietário identificado deste celular e quais são seus números de telefone e IMEI?"*
+### `get_device_and_accounts`
+* **Propósito:** Devolve os identificadores **registrados** na evidência, cada um com a origem: entradas de informações do aparelho (IMEI, IMSI, ICCID, MSISDN, modelo), telefones, e-mails, IDs de mensageiro e usernames das contas de usuário (contas do Cellebrite/UFED e contas decodificadas pelo IPED, como WhatsApp e Telegram), além de perfis de usuário e hives do registro em computadores. Cada identificador informa os itens de origem e quantos apps o sustentam.
+* **O que ela não faz:** não aponta o dono do aparelho. Valores achados por expressão regular ou em nomes de arquivo não entram. A conclusão sobre quem usa o aparelho é da IA e do perito, comparando as fontes: um telefone presente em várias contas independentes pesa mais que um valor isolado, e contas de outras pessoas podem estar logadas no mesmo aparelho.
+* **Sem identificadores estruturados:** em mídias como cartões de memória, a resposta diz isso explicitamente e sugere examinar EXIF, pastas e conteúdo.
+* **Exemplos de Pergunta:** *"Quais números de telefone e contas estão registrados neste celular, e em quantos aplicativos cada um aparece?"* · *"Qual é o IMEI e o modelo do aparelho?"*
 
 ### `get_top_contacts`
 * **Propósito:** Gera o ranking dos interlocutores mais frequentes em mensagens, chamadas e e-mails, com contagens por direção, por canal e por mês, primeira e última interação, dias ativos e `evidence_ids`.

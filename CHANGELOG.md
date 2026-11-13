@@ -37,10 +37,22 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
   | `query_ai_detections` | `describe_property` para a escala e `search_documents` com a propriedade (ex.: `nudityScore:[650 TO *]`, `faceAge\:labels:child`, `ufed\:mediaClasses:Weapons`) |
   | `get_property_dictionary` | `list_properties(group=...)` ou `list_properties(pattern=...)` e `describe_property(name=...)` |
   | `list_available_properties` | `list_properties(category=...)`, com contagens exatas sobre todos os itens da categoria |
+- **BREAKING — `get_device_and_owner_info` substituída por `get_device_and_accounts` (issue #3):** a ferramenta devolve só identificadores registrados pela extração e pelos parsers do IPED, cada um com a origem (item, app, propriedade e tipo de fonte) e a quantidade de apps e itens que o sustentam. São eles: entradas de informações do aparelho (IMEI, IMSI, ICCID, MSISDN, modelo), telefones, e-mails, IDs de mensageiro e usernames das contas de usuário, e perfis de usuário e hives do registro em computadores. Nenhum valor é rotulado como do dono, e mídias sem identificadores estruturados recebem resposta explícita com sugestões. O total de ferramentas continua 26.
+
+  | Campo removido | Onde está agora |
+  |---|---|
+  | `likely_owners`, `likely_owner_names` | Não há substituto: o servidor não aponta o dono. Compare `account_identifiers` (ordenados por `app_count`) e cite os `item_id`. |
+  | `owner_phone_numbers`, `owner_emails` | `account_identifiers.phone` e `account_identifiers.email`, com as fontes de cada valor |
+  | `primary_accounts`, `user_accounts` | `sources` de cada identificador (item, app e propriedade) |
+  | `device_properties` | `device_information` (`name`, `value`, `item_id`) |
+  | `user_profile_dirs` | `user_profiles` (com `item_id`) |
+  | `system_info` (`registered_owner`, `computer_name`...) | Removido: o IPED não grava essas propriedades. Leia os hives listados em `registry_hives` com `get_document_text`. |
+- **`list_properties` com o filtro `identity`:** a semântica curada marca as propriedades de identificação (`phoneNumber`, `userAccount`, `userName`, `emailAddress`, `ufed:PhoneNumber`, `ufed:Username`, `ufed:UserID`, `ufed:EmailAddress`, `ufed:EntryName`, `ufed:EntryValue`); cada propriedade listada informa a marca, e `list_properties(identity=true)` lista só essas.
 - **`search_documents` e prompt `start_case`:** deixam de listar nomes fixos de categorias e filtros de IA e orientam a descoberta por `list_categories`, `list_properties` e `describe_property`.
 - **`get_top_contacts` e `get_communications_graph` não usam mais `get_device_and_owner_info`, `ufed:PhoneOwner` nem `Conversation:Account`:** nenhuma identidade é rotulada como dono do aparelho.
 
 ### Corrigido
+- **Telefone do dono tirado de regex (issue #3):** a ferramenta de identificação do aparelho apontava como telefone do dono o primeiro valor de `Regex:PHONE` de arquivos de configuração e trazia valores sem sentido (IDs de usuário do Android, pastas de apps) como prováveis donos. Agora só contas estruturadas e informações do aparelho são fonte, e a conclusão sobre quem usa o aparelho fica com quem analisa.
 - **Faixas em propriedades numéricas do processamento (issue #7):** consultas como `nudityScore:[500 TO 1000]`, `ocrCharCount:[1 TO *]` e `audio\:transcriptConfidence:[0.5 TO *]` retornavam 0. Os tipos de `metadataTypes.txt` agora são carregados antes da abertura do índice, e as faixas viram consultas numéricas. Limites decimais escritos com ponto (`0.5`) são convertidos para a localidade do caso. Quando uma faixa não encontra itens, `search_documents` devolve `warnings` dizendo se a propriedade não existe no caso, se é textual ou quais são seus valores mínimo e máximo.
 - **Direção das comunicações (issue #4):** `"OUTGOING".contains("IN")` fazia toda mensagem enviada ser contada também como recebida. A direção agora vem somente de `Communication:Direction` ou `ufed:Direction` (comparação exata); chamadas UFED passam a ter direção, e eventos sem direção explícita ficam como `unknown` em vez de serem tratados como recebidos.
 

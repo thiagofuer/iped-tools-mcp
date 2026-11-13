@@ -60,7 +60,9 @@ public class ForensicPrompts {
 
             ### 2. Reconhecimento de Fontes de Evidência
             - Execute `list_sources` para identificar as fontes de dados (`source_id`), como extrações de celulares (UFED/Cellebrite), imagens forenses de disco (E01/RAW) ou diretórios analisados.
-            - Identifique o proprietário do dispositivo e dados de extração via `get_device_and_owner_info`. Não faça buscas em texto livre para palavras como "proprietário" ou "dono".
+            - Levante os identificadores registrados do aparelho e das contas com `get_device_and_accounts`. A ferramenta não aponta o dono: ela devolve telefones, e-mails, usernames e dados do aparelho com a origem de cada um.
+            - Para concluir quem usa o aparelho, compare as fontes: um identificador sustentado por vários apps independentes pesa mais que um valor isolado, e contas de outras pessoas podem estar logadas no mesmo aparelho. Confirme com `list_properties(identity=true)` e `describe_property`, cite os `item_id` das fontes e nunca afirme o dono a partir de um único valor.
+            - Não faça buscas em texto livre para palavras como "proprietário" ou "dono".
 
             ### 3. Descoberta das Propriedades do Caso
             - Antes de buscar por metadados (campos de chat, GPS, EXIF, resultados de IA), descubra o que existe **neste** caso: `list_properties` (grupos e quantidade de propriedades) → `list_properties(group=...)` ou `list_properties(pattern=...)` (nomes, tipos, contagens e exemplos de consulta) → `describe_property` (significado, escala, mínimo/máximo ou valores mais frequentes). Use os nomes de categoria exatos de `list_categories`.

@@ -84,7 +84,11 @@ class ForensicPromptsTest {
         assertTrue(text.contains("get_server_status"), "Deve orientar início com get_server_status");
         assertTrue(text.contains("get_case_summary"), "Deve indicar get_case_summary");
         assertTrue(text.contains("list_sources"), "Deve indicar list_sources");
-        assertTrue(text.contains("get_device_and_owner_info"), "Deve orientar consulta do proprietário");
+        assertTrue(text.contains("get_device_and_accounts"), "Deve orientar o levantamento dos identificadores");
+        assertTrue(text.contains("compare as fontes"), "Deve orientar a comparação das fontes");
+        assertTrue(text.contains("cite os `item_id`"), "Deve orientar a citação dos itens de origem");
+        assertTrue(text.contains("\"proprietário\" ou \"dono\""), "Deve manter a proibição de busca por dono em texto livre");
+        assertFalse(text.contains("get_device_and_owner_info"), "Prompt não deve citar a ferramenta removida");
         assertTrue(text.contains("list_properties"), "Deve orientar a descoberta pelo catálogo de propriedades");
         assertTrue(text.contains("describe_property"), "Deve orientar o detalhamento de propriedades");
         assertTrue(text.contains("grupo `AI`"), "Deve orientar a busca de resultados de IA pelo grupo AI");

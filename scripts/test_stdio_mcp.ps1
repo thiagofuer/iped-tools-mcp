@@ -184,16 +184,16 @@ try {
         Write-Host " FAIL" -ForegroundColor Red; exit 1
     }
 
-    # 8. Call get_device_and_owner_info
-    Write-Host "[7/15] Testando call get_device_and_owner_info..." -NoNewline
-    $ownerCall = Send-RpcRequest "tools/call" @{ name = "get_device_and_owner_info"; arguments = @{} }
-    $ownerData = $ownerCall.result.content[0].text | ConvertFrom-Json
-    if ($ownerData.likely_owner_names.Count -gt 0 -or $ownerData.owner_phone_numbers.Count -gt 0) {
-        $ownerStr = ($ownerData.likely_owner_names -join ", ")
-        $phoneStr = ($ownerData.owner_phone_numbers -join ", ")
-        Write-Host (" PASS (Proprietario: " + $ownerStr + " | Fone: " + $phoneStr + ")") -ForegroundColor Green
+    # 8. Call get_device_and_accounts
+    Write-Host "[7/25] Testando call get_device_and_accounts..." -NoNewline
+    $accCall = Send-RpcRequest "tools/call" @{ name = "get_device_and_accounts"; arguments = @{} }
+    $accText = $accCall.result.content[0].text
+    $accData = $accText | ConvertFrom-Json
+    $hasOwnerKey = $accText -match '"[a-z_]*owner[a-z_]*"\s*:'
+    if ($accData.evidences -and $accData.note -and -not $hasOwnerKey) {
+        Write-Host (" PASS (tipo: " + $accData.evidence_type + ", " + $accData.total_evidences + " evidencia(s), sem campos de dono)") -ForegroundColor Green
     } else {
-        Write-Host " PASS (Sem proprietario explicito)" -ForegroundColor Yellow
+        Write-Host (" FAIL: " + ($accCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
     # 9. Call search_documents

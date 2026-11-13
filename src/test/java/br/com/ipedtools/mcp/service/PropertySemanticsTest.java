@@ -74,6 +74,13 @@ class PropertySemanticsTest {
                 ExtraProperties.IMAGE_META_PREFIX + "Width", ExtraProperties.IMAGE_META_PREFIX + "Height",
                 ExtraProperties.VIDEO_META_PREFIX + "Width", ExtraProperties.VIDEO_META_PREFIX + "Height"));
 
+        // UFDR XML fields written by iped.engine.datasource.UfedXmlReader with ExtraProperties.UFED_META_PREFIX:
+        // UserAccount/Contact (PhoneNumber, UserID, EmailAddress, Username; also read by GraphTask) and
+        // DeviceInfoEntry (EntryName, EntryValue)
+        for (String f : List.of("PhoneNumber", "Username", "UserID", "EmailAddress", "EntryName", "EntryValue")) {
+            REFERENCE_NAMES.add(ExtraProperties.UFED_META_PREFIX + f);
+        }
+
         // iped-app/resources/scripts/tasks/AgeEstimationTask.py
         REFERENCE_NAMES.addAll(List.of("faceAge:scores", "faceAge:estimationStatus"));
         REFERENCE_PATTERNS.addAll(List.of("faceAge:count:*", "faceAge:maxScore:*"));
@@ -109,7 +116,7 @@ class PropertySemanticsTest {
     }
 
     private static PropertySemantics.Entry entry(String name) {
-        return new PropertySemantics.Entry(name, null, null, "x", null, null, null, List.of());
+        return new PropertySemantics.Entry(name, null, null, "x", null, null, null, List.of(), null);
     }
 
     @Test
@@ -150,10 +157,21 @@ class PropertySemanticsTest {
     }
 
     @Test
+    void identityPropertiesAreMarked() {
+        PropertySemantics semantics = PropertySemantics.load();
+        List<String> identity = semantics.entries().stream().filter(PropertySemantics.Entry::isIdentity)
+                .map(PropertySemantics.Entry::key).sorted().toList();
+        assertEquals(List.of("emailAddress", "phoneNumber", "ufed:EmailAddress", "ufed:EntryName", "ufed:EntryValue",
+                "ufed:PhoneNumber", "ufed:UserID", "ufed:Username", "userAccount", "userName"), identity);
+        assertTrue(semantics.isIdentity("ufed:PhoneNumber"));
+        assertFalse(semantics.isIdentity("nudityScore"));
+    }
+
+    @Test
     void mostSpecificPatternWins() {
         PropertySemantics semantics = new PropertySemantics(new ArrayList<>(List.of(
-                new PropertySemantics.Entry(null, "ufed:*", null, "geral", null, null, null, List.of("a")),
-                new PropertySemantics.Entry(null, "ufed:mediaClassScore:*", null, "score", null, null, null, List.of("b")))));
+                new PropertySemantics.Entry(null, "ufed:*", null, "geral", null, null, null, List.of("a"), null),
+                new PropertySemantics.Entry(null, "ufed:mediaClassScore:*", null, "score", null, null, null, List.of("b"), null))));
         assertEquals("score", semantics.find("ufed:mediaClassScore:Weapons").description());
         assertEquals("geral", semantics.find("ufed:id").description());
     }

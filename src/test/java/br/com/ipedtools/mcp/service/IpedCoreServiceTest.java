@@ -363,29 +363,23 @@ public class IpedCoreServiceTest {
 
     @Test
     @EnabledIf("isCaseAvailable")
-    void testDeviceAndOwnerInfo() {
-        IpedCoreService service = IpedCoreService.getInstance();
-        Map<String, Object> ownerInfo = service.getDeviceAndOwnerInfo();
-        assertNotNull(ownerInfo);
-        assertFalse(ownerInfo.containsKey("error"), "Não deveria retornar erro");
-        assertTrue(ownerInfo.containsKey("device_properties"));
-        assertTrue(ownerInfo.containsKey("likely_owner_names"));
-        assertTrue(ownerInfo.containsKey("evidence_type"), "Deveria conter evidence_type");
-        assertTrue(ownerInfo.containsKey("system_info"), "Deveria conter system_info");
-        assertTrue(ownerInfo.containsKey("user_profile_dirs"), "Deveria conter user_profile_dirs");
-        assertTrue(ownerInfo.containsKey("user_accounts"), "Deveria conter user_accounts");
-        assertTrue(ownerInfo.containsKey("evidences"), "Deveria conter array de evidences");
-        assertTrue(ownerInfo.containsKey("total_evidences"), "Deveria conter contagem total_evidences");
-        assertNotNull(ownerInfo.get("evidence_type"));
-
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> evidences = (List<Map<String, Object>>) ownerInfo.get("evidences");
-        assertNotNull(evidences);
+    @SuppressWarnings("unchecked")
+    void testDeviceAndAccountsFormat() throws Exception {
+        Map<String, Object> res = DeviceAccountsService.getInstance().getDeviceAndAccounts();
+        assertNotNull(res.get("note"), "Deveria explicar que o servidor não aponta o dono");
+        assertNotNull(res.get("evidence_type"));
+        List<Map<String, Object>> evidences = (List<Map<String, Object>>) res.get("evidences");
         assertFalse(evidences.isEmpty(), "Deveria retornar ao menos 1 container de evidência");
         for (Map<String, Object> ev : evidences) {
-            assertTrue(ev.containsKey("name"), "Evidência deve ter name");
-            assertTrue(ev.containsKey("type"), "Evidência deve ter type");
-            assertTrue(ev.containsKey("likely_owners"), "Evidência deve ter likely_owners");
+            for (String key : List.of("name", "type", "device_information", "account_identifiers", "user_profiles", "registry_hives")) {
+                assertTrue(ev.containsKey(key), "Evidência sem '" + key + "': " + ev.keySet());
+            }
+            for (String key : ev.keySet()) {
+                assertFalse(key.toLowerCase().contains("owner"), "Chave com 'owner' na evidência: " + key);
+            }
+        }
+        for (String key : res.keySet()) {
+            assertFalse(key.toLowerCase().contains("owner"), "Chave com 'owner' na resposta: " + key);
         }
     }
 

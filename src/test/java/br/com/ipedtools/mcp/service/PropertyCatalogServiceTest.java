@@ -210,6 +210,45 @@ public class PropertyCatalogServiceTest {
         assertTrue(((List<?>) d.get("query_examples")).contains("nudityScore:[650 TO *]"));
     }
 
+    // ---- identity flag -----------------------------------------------------------------------------------------
+
+    static boolean isFatCaseAvailable() {
+        return TestCaseResolver.isCaseAvailable() && TestCaseResolver.isLabeledCaseAvailable(TestCaseResolver.LABEL_FAT);
+    }
+
+    @Test
+    @EnabledIf("isCaseAvailable")
+    void identityFilterListsOnlyIdentityProperties() throws Exception {
+        Map<String, Object> res = catalog().listProperties(null, null, null, true);
+        List<Map<String, Object>> props = list(res, "properties");
+        List<Object> names = props.stream().map(p -> p.get("name")).toList();
+        assertTrue(names.containsAll(List.of("ufed:PhoneNumber", "phoneNumber")), "propriedades de identidade: " + names);
+        assertTrue(props.stream().allMatch(p -> Boolean.TRUE.equals(p.get("identity"))), "só propriedades marcadas: " + names);
+        assertNull(res.get("groups"), "com identity=true a resposta lista propriedades, não grupos");
+    }
+
+    @Test
+    @EnabledIf("isCaseAvailable")
+    void identityFlagIsShownInGroupListing() throws Exception {
+        List<Map<String, Object>> ufed = list(catalog().listProperties("UFED", null, null), "properties");
+        Map<String, Object> phone = ufed.stream().filter(p -> "ufed:PhoneNumber".equals(p.get("name"))).findFirst().orElseThrow();
+        assertEquals(true, phone.get("identity"));
+        assertTrue(ufed.stream().anyMatch(p -> Boolean.FALSE.equals(p.get("identity"))), "deveria haver propriedades UFED sem a marca");
+    }
+
+    @Test
+    @EnabledIf("isFatCaseAvailable")
+    void caseWithoutIdentityPropertiesReturnsEmptyListWithNote() throws Exception {
+        try {
+            IpedCoreService.getInstance().openCase(TestCaseResolver.getLabeledCaseDir(TestCaseResolver.LABEL_FAT));
+            Map<String, Object> res = catalog().listProperties(null, null, null, true);
+            assertTrue(list(res, "properties").isEmpty());
+            assertNotNull(res.get("note"));
+        } finally {
+            IpedCoreService.getInstance().openCase(TestCaseResolver.getPrimaryCaseDir());
+        }
+    }
+
     @Test
     @EnabledIf("isCaseAvailable")
     void groupOverviewHasAiGroup() throws Exception {

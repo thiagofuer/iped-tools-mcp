@@ -12,7 +12,7 @@ Quando o prompt oficial `/start_case` é ativado, a IA é instruída a seguir o 
 
 ```
 [1. Status e Prontidão]  -->  [2. Reconhecimento de Fontes]  -->  [3. Propriedades do Caso]
-      get_server_status              list_sources / get_device_info          list_properties
+      get_server_status              list_sources / get_device_and_accounts  list_properties
                                                                              describe_property
              |
              v
@@ -25,7 +25,7 @@ Quando o prompt oficial `/start_case` é ativado, a IA é instruída a seguir o 
 A sessão sempre se inicia verificando se há um caso IPED carregado e pronto (`get_server_status`), seguido da análise volumétrica do acervo (`get_case_summary`).
 
 ### 2. Reconhecimento de Fontes de Evidência
-O perito e a IA identificam as mídias periciadas (`list_sources`) e os dados de proprietário e contas vinculadas (`get_device_and_owner_info`), como números de telefone, IMEI e e-mails.
+O perito e a IA identificam as mídias periciadas (`list_sources`) e levantam os identificadores registrados do aparelho e das contas (`get_device_and_accounts`), como números de telefone, IMEI e e-mails, cada um com os itens de origem. O servidor não aponta o dono: para concluir quem usa o aparelho, a IA compara as fontes (identificadores sustentados por vários aplicativos pesam mais), aprofunda com `list_properties(identity=true)` e `describe_property` e cita os itens que sustentam a conclusão.
 
 ### 3. Descoberta das Propriedades do Caso
 Para evitar alucinações de campos e erros de sintaxe, a IA descobre as propriedades que existem **neste** caso antes de formular consultas sobre chats, EXIF, sistemas de arquivos ou resultados de IA: `list_properties` mostra os grupos e as propriedades com contagens exatas, e `describe_property` explica o significado, a escala e os valores de cada uma. Uma propriedade que não aparece no catálogo não existe no caso (o módulo que a gera pode não ter sido executado), o que é diferente de zero itens.

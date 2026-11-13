@@ -80,15 +80,17 @@ public class McpToolsTest {
 
     @Test
     @EnabledIf("isCaseAvailable")
-    void testDeviceOwnerTool() {
-        DeviceOwnerTool tool = new DeviceOwnerTool();
-        Map<String, Object> owner = tool.getDeviceAndOwnerInfo("");
-        assertNotNull(owner);
-        assertFalse(owner.containsKey("error"));
-        assertTrue(owner.containsKey("likely_owner_names"));
-        assertTrue(owner.containsKey("evidence_type"));
-        assertTrue(owner.containsKey("system_info"));
-        assertTrue(owner.containsKey("user_profile_dirs"));
+    @SuppressWarnings("unchecked")
+    void testDeviceAccountsTool() {
+        DeviceAccountsTool tool = new DeviceAccountsTool();
+        Map<String, Object> res = tool.getDeviceAndAccounts("");
+        assertNotNull(res);
+        assertFalse(res.containsKey("error"), String.valueOf(res.get("error")));
+        assertTrue(res.containsKey("note"));
+        assertTrue(res.containsKey("evidence_type"));
+        List<Map<String, Object>> evidences = (List<Map<String, Object>>) res.get("evidences");
+        assertTrue(evidences.getFirst().containsKey("account_identifiers"));
+        assertFalse(res.keySet().stream().anyMatch(k -> k.toLowerCase().contains("owner")));
     }
 
     @Test
@@ -162,7 +164,7 @@ public class McpToolsTest {
     @Test
     void testPropertyCatalogToolsAreRegistered() throws Exception {
         io.quarkiverse.mcp.server.Tool list = PropertyCatalogTool.class
-                .getMethod("listProperties", String.class, String.class, String.class)
+                .getMethod("listProperties", String.class, String.class, String.class, Boolean.class)
                 .getAnnotation(io.quarkiverse.mcp.server.Tool.class);
         io.quarkiverse.mcp.server.Tool describe = PropertyCatalogTool.class
                 .getMethod("describeProperty", String.class, String.class, Integer.class)
@@ -205,7 +207,7 @@ public class McpToolsTest {
     void testListPropertiesTool() {
         PropertyCatalogTool tool = new PropertyCatalogTool();
 
-        Map<String, Object> overview = tool.listProperties(null, null, null);
+        Map<String, Object> overview = tool.listProperties(null, null, null, null);
         assertFalse(overview.containsKey("error"), String.valueOf(overview.get("error")));
         List<Map<String, Object>> groups = (List<Map<String, Object>>) overview.get("groups");
         assertNotNull(groups);
@@ -214,7 +216,7 @@ public class McpToolsTest {
             assertTrue(g.keySet().containsAll(List.of("name", "description", "property_count")), "formato do grupo: " + g);
         }
 
-        Map<String, Object> ai = tool.listProperties("ai", null, null);
+        Map<String, Object> ai = tool.listProperties("ai", null, null, null);
         assertEquals("AI", ai.get("group"));
         List<Map<String, Object>> props = (List<Map<String, Object>>) ai.get("properties");
         assertFalse(props.isEmpty());
@@ -224,7 +226,7 @@ public class McpToolsTest {
                     "formato da propriedade: " + p);
         }
 
-        Map<String, Object> bad = tool.listProperties("Inexistente", null, null);
+        Map<String, Object> bad = tool.listProperties("Inexistente", null, null, null);
         assertTrue(bad.containsKey("error"));
         assertNotNull(bad.get("available_groups"));
     }

@@ -11,6 +11,10 @@ import java.util.Properties;
  * 2. Environment variable: IPED_TEST_CASE_PATH
  * 3. Local properties file: local-test.properties (or test-case.properties) in project root
  * 4. Fallback: null (enabling graceful test skips without failure)
+ *
+ * <p>Besides the primary and secondary cases, optional labeled cases can be configured as
+ * {@code iped.test.case.<label>.path} (e.g. {@code ios}, {@code fat}), with environment variable
+ * {@code IPED_TEST_CASE_<LABEL>_PATH}. Tests that need them are skipped when the label is not configured.
  */
 public final class TestCaseResolver {
 
@@ -21,6 +25,12 @@ public final class TestCaseResolver {
     public static final String LOCAL_PROPS_FILE = "local-test.properties";
     public static final String FALLBACK_PROPS_FILE = "test-case.properties";
 
+    /** Label of the optional iOS extraction test case. */
+    public static final String LABEL_IOS = "ios";
+    /** Label of the optional FAT file system test case. */
+    public static final String LABEL_FAT = "fat";
+
+    private static Properties fileProperties;
     private static File primaryCaseDir;
     private static File secondaryCaseDir;
     private static boolean initialized = false;
@@ -34,6 +44,7 @@ public final class TestCaseResolver {
         initialized = true;
 
         Properties fileProps = loadLocalProperties();
+        fileProperties = fileProps;
 
         String primaryPath = resolvePath(SYS_PROP_PRIMARY, ENV_VAR_PRIMARY, fileProps);
         if (primaryPath != null && !primaryPath.isBlank()) {
@@ -114,5 +125,23 @@ public final class TestCaseResolver {
         return secondaryCaseDir != null
                 && secondaryCaseDir.exists()
                 && new File(secondaryCaseDir, "iped/index").exists();
+    }
+
+    static String labeledPropertyName(String label) {
+        return "iped.test.case." + label + ".path";
+    }
+
+    /** Directory of a labeled test case, or null when it is not configured. */
+    public static File getLabeledCaseDir(String label) {
+        initialize();
+        String envVar = "IPED_TEST_CASE_" + label.toUpperCase(java.util.Locale.ROOT) + "_PATH";
+        String path = resolvePath(labeledPropertyName(label), envVar, fileProperties);
+        return path == null || path.isBlank() ? null : new File(path.trim());
+    }
+
+    /** True when the labeled case is configured and holds an IPED index. */
+    public static boolean isLabeledCaseAvailable(String label) {
+        File dir = getLabeledCaseDir(label);
+        return dir != null && dir.exists() && new File(dir, "iped/index").exists();
     }
 }
