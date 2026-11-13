@@ -71,6 +71,7 @@ Cada caso tem um conjunto próprio de propriedades: depende da versão do IPED, 
 list_properties()                          -> grupos do caso e quantas propriedades cada um tem
 list_properties(group="AI")                -> propriedades do grupo, com tipo, contagem exata e exemplo de consulta
 list_properties(pattern="faceAge*")        -> propriedades cujo nome casa com o curinga
+list_properties(identity=true)             -> propriedades de identificação (telefones, usernames, e-mails, IDs de conta e de aparelho)
 describe_property(name="nudityScore")      -> significado, escala, mínimo/máximo ou valores mais frequentes
 search_documents(query="nudityScore:[650 TO *]")
 ```

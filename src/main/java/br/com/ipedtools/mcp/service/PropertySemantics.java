@@ -31,7 +31,13 @@ public final class PropertySemantics {
             String scale,
             String unit,
             @JsonProperty("known_values") List<String> knownValues,
-            @JsonProperty("query_examples") List<String> queryExamples) {
+            @JsonProperty("query_examples") List<String> queryExamples,
+            Boolean identity) {
+
+        /** True when the property identifies an account or a device (phone, username, e-mail, IDs). */
+        public boolean isIdentity() {
+            return Boolean.TRUE.equals(identity);
+        }
 
         /** Name or pattern, for messages. */
         public String key() {
@@ -61,6 +67,9 @@ public final class PropertySemantics {
             }
             if (pattern != null) {
                 m.put("curated_pattern", pattern);
+            }
+            if (isIdentity()) {
+                m.put("identity", true);
             }
             return m;
         }
@@ -142,6 +151,12 @@ public final class PropertySemantics {
             }
         }
         return null;
+    }
+
+    /** True when the curated entry of a property marks it as an identity property. */
+    public boolean isIdentity(String property) {
+        Entry e = find(property);
+        return e != null && e.isIdentity();
     }
 
     /** Curated group override for a property, or null. */

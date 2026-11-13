@@ -45,8 +45,8 @@ public class DocumentSearchTool {
             which is not the same as absence of evidence.
 
             CRITICAL WARNING:
-            - To identify who owns the device, DO NOT search for 'proprietario' or 'dono';
-              call 'get_device_and_owner_info' instead!
+            - To identify who uses or owns the device, DO NOT search for 'proprietario' or 'dono';
+              call 'get_device_and_accounts' and compare the recorded identifiers and their sources instead!
             """
     )
     public Map<String, Object> searchDocuments(

@@ -317,6 +317,7 @@ public final class PropertyCatalogService {
         m.put("type", f.type());
         m.put("item_count", count);
         m.put("curated", sem != null);
+        m.put("identity", sem != null && sem.isIdentity());
         if (sem != null) {
             m.put("description", sem.description());
         }
@@ -338,6 +339,15 @@ public final class PropertyCatalogService {
      * {@code group} or {@code pattern}, the matching properties. {@code category} restricts counts to that category.
      */
     public Map<String, Object> listProperties(String group, String pattern, String category) throws IOException {
+        return listProperties(group, pattern, category, false);
+    }
+
+    /**
+     * {@code list_properties} with the identity filter: when {@code identityOnly} is true, only properties marked as
+     * identity in the curated semantics (phones, usernames, e-mails, account and device IDs) are listed.
+     */
+    public Map<String, Object> listProperties(String group, String pattern, String category, boolean identityOnly)
+            throws IOException {
         Map<String, CaseField> fields = caseFields();
         String groupName = null;
         if (group != null && !group.isBlank()) {
@@ -364,7 +374,7 @@ public final class PropertyCatalogService {
             fields.values().forEach(f -> counts.put(f.name(), f.itemCount()));
         }
 
-        if (groupName == null && !hasPattern) {
+        if (groupName == null && !hasPattern && !identityOnly) {
             Map<String, Integer> perGroup = new LinkedHashMap<>();
             for (String g : PropertyGroups.names()) {
                 perGroup.put(g, 0);
@@ -402,6 +412,9 @@ public final class PropertyCatalogService {
             if (groupName != null && !groupName.equals(f.group())) {
                 continue;
             }
+            if (identityOnly && !PropertySemantics.get().isIdentity(f.name())) {
+                continue;
+            }
             if (hasPattern && !matchesPattern(f.name(), pattern)) {
                 continue;
             }
@@ -415,6 +428,13 @@ public final class PropertyCatalogService {
         }
         if (hasPattern) {
             response.put("pattern", pattern);
+        }
+        if (identityOnly) {
+            response.put("identity", true);
+            if (total == 0) {
+                response.put("note", "O caso não tem propriedades estruturadas de identificação (telefones, usernames, "
+                        + "e-mails, IDs de conta ou de aparelho). Examine EXIF, pastas e conteúdo.");
+            }
         }
         response.put("total", total);
         response.put("truncated", total > MAX_LISTED);

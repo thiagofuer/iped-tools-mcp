@@ -14,3 +14,9 @@ iped.test.case.path=C:/casos_forenses/caso_operacao_01
 # 2. Caminho absoluto de um segundo caso IPED para testes de troca a quente (open_case)
 # (Opcional - se omitido, os testes utilizarão o caso primário)
 iped.test.secondary_case.path=C:/casos_forenses/caso_operacao_02
+
+# 3. Casos rotulados usados por testes de integração específicos
+# (Opcionais - os testes que dependem deles são ignorados quando o caminho não está configurado)
+# Extração de iPhone (Cellebrite/UFED) e imagem FAT de cartão de memória, sem contas de usuário
+iped.test.case.ios.path=C:/casos_forenses/caso_operacao_ios
+iped.test.case.fat.path=C:/casos_forenses/caso_operacao_cartao_sd

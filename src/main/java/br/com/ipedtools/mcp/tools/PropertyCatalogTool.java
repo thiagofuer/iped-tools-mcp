@@ -22,6 +22,7 @@ public class PropertyCatalogTool {
               2. list_properties(group="AI")            -> properties of a group: name, type, item count, description, query example
                  list_properties(pattern="faceAge*")    -> properties whose name matches a wildcard (case-insensitive)
                  list_properties(group="Communication", category="Instant Messages") -> counts restricted to a category
+                 list_properties(identity=true)         -> identifier properties (phones, usernames, e-mails, account/device IDs)
               3. describe_property(name="nudityScore")  -> meaning, scale, min/max or most frequent values, query examples
               4. search_documents(query="nudityScore:[650 TO *]")
 
@@ -43,14 +44,16 @@ public class PropertyCatalogTool {
             @ToolArg(name = "pattern", description = "Optional property name wildcard, case-insensitive (e.g. 'ufed:mediaClass*', '*Date*'). Without '*' it matches names containing the text.", required = false)
             String pattern,
             @ToolArg(name = "category", description = "Optional exact category name from list_categories; counts then refer only to items of that category.", required = false)
-            String category
+            String category,
+            @ToolArg(name = "identity", description = "When true, lists only identity properties (phones, usernames, e-mails, account and device IDs) present in the case.", required = false)
+            Boolean identity
     ) {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
             return Map.of("error", "Nenhum caso do IPED está aberto no momento.");
         }
         try {
-            return PropertyCatalogService.getInstance().listProperties(group, pattern, category);
+            return PropertyCatalogService.getInstance().listProperties(group, pattern, category, Boolean.TRUE.equals(identity));
         } catch (Exception e) {
             return Map.of("error", "Falha ao listar propriedades: " + e.getMessage());
         }
