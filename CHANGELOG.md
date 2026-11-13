@@ -26,6 +26,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 - **`get_top_contacts` e `get_communications_graph` não usam mais `get_device_and_owner_info`, `ufed:PhoneOwner` nem `Conversation:Account`:** nenhuma identidade é rotulada como dono do aparelho.
 
 ### Corrigido
+- **Faixas em propriedades numéricas do processamento (issue #7):** consultas como `nudityScore:[500 TO 1000]`, `ocrCharCount:[1 TO *]` e `audio\:transcriptConfidence:[0.5 TO *]` retornavam 0. Os tipos de `metadataTypes.txt` agora são carregados antes da abertura do índice, e as faixas viram consultas numéricas. Limites decimais escritos com ponto (`0.5`) são convertidos para a localidade do caso. Quando uma faixa não encontra itens, `search_documents` devolve `warnings` dizendo se a propriedade não existe no caso, se é textual ou quais são seus valores mínimo e máximo.
 - **Direção das comunicações (issue #4):** `"OUTGOING".contains("IN")` fazia toda mensagem enviada ser contada também como recebida. A direção agora vem somente de `Communication:Direction` ou `ufed:Direction` (comparação exata); chamadas UFED passam a ter direção, e eventos sem direção explícita ficam como `unknown` em vez de serem tratados como recebidos.
 
 ---
@@ -114,3 +115,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
   - `README.md` detalhado com arquitetura, catálogo de ferramentas e guia de uso com Claude Desktop.
   - `CONTRIBUTING.md` formalizando o modelo GitFlow tradicional, regras SemVer e fluxo de PRs.
   - Bateria de testes de integração automatizados (`scripts/test_stdio_mcp.ps1` com 25 testes do protocolo e `scripts/test_native_exe.ps1` para o binário nativo).
+
+[Unreleased]: https://github.com/thiagofuer/iped-tools-mcp/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/thiagofuer/iped-tools-mcp/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/thiagofuer/iped-tools-mcp/releases/tag/v1.0.0

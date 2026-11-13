@@ -57,14 +57,22 @@ public class DocumentSearchTool {
               - 'name:*.pdf AND size:>1000000'                  -> PDF files larger than 1MB
               - 'category:"internet history" AND url:*banco*'   -> Browser history matching URLs with 'banco'
               - 'hash:d41d8cd98f00b204e9800998ecf8427e'        -> Lookup by exact MD5 hash
-            
+
+            NUMERIC RANGES ON PROCESSING PROPERTIES:
+              - 'nudityScore:[650 TO *]'                        -> Images scored as likely nudity (scale 0-1000)
+              - 'ocrCharCount:[1 TO *]'                         -> Items with OCR-recognized text
+              - 'audio\\:transcriptConfidence:[0.5 TO *]'      -> Transcriptions with confidence >= 0.5
+              Always write decimals with a dot (0.5); the server converts it for the case locale.
+              When a range finds nothing, the response 'warnings' field tells whether the property is absent
+              from the case or gives its minimum and maximum values, so you can adjust the range.
+
             CRITICAL WARNING:
             - To identify who owns the device, DO NOT search for 'proprietario' or 'dono';
               call 'get_device_and_owner_info' instead!
             """
     )
     public Map<String, Object> searchDocuments(
-            @ToolArg(name = "query", description = "Lucene search query string (e.g. 'category:whatsapp AND pix', 'name:*.docx')", required = true)
+            @ToolArg(name = "query", description = "Lucene search query string (e.g. 'category:whatsapp AND pix', 'name:*.docx')")
             String query,
             @ToolArg(name = "limit", description = "Max document IDs to return (default 30, max 100)", required = false, defaultValue = "30")
             int limit
