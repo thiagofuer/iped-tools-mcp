@@ -34,8 +34,15 @@ public class BookmarkTools {
             Adds one or more evidence items to an IPED bookmark (tag) for inclusion in the forensic investigation report (laudo pericial).
             If the bookmark does not already exist, it is automatically created in IPED.
             
+            WRITES TO THE CASE: ALWAYS ASK FIRST.
+            - Never call this tool on your own initiative. Before calling it, show the user the items (ID and name)
+              and the bookmark name, and wait for the user's explicit confirmation. A confirmation covers only the
+              batch shown; a new batch needs a new confirmation.
+            - The bookmark name is the one the user chooses. You may suggest a name, but never use or add words that
+              identify AI or LLM authorship (e.g. "IA", "LLM", "Claude", "GPT", "automatico").
+
             WHEN TO USE:
-            - Use this tool whenever the user instructs to bookmark, flag, mark, or save an evidence item.
+            - When the user asks to bookmark, flag or save evidence items, after the confirmation above.
               Examples:
                 * 'Adicione esse documento aos marcadores'
                 * 'Marque esse arquivo como Prova Principal'

@@ -20,9 +20,12 @@ public class TriageTool {
             - Mirrors the checkbox column ('Marcado/Checked') in IPED Desktop.
             - Persists the selection state immediately to the case metadata, ensuring it is visible in IPED Desktop and included when generating official reports or exports.
             
-            FORENSIC WORKFLOW GUIDANCE:
-            - When relevant, incriminating, or evidentiary items are discovered during an investigation (e.g. fraudulent contracts, chat logs, illicit photos), call this tool with checked=true to flag them for the final forensic report.
-            - If an item was previously marked in error, call this tool with checked=false to uncheck it.
+            WRITES TO THE CASE: ALWAYS ASK FIRST.
+            - Never call this tool on your own initiative. Before calling it, show the user the items (ID and name)
+              and the new state (checked or unchecked), and wait for the user's explicit confirmation.
+              A confirmation covers only the batch shown; a new batch needs a new confirmation.
+            - If you find items that seem relevant, suggest marking them and let the user decide.
+            - Use checked=false to uncheck an item marked in error, also after the user confirms.
             """
     )
     public Map<String, Object> setItemChecked(

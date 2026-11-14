@@ -36,11 +36,13 @@ Ao iniciar uma sessão de análise no terminal com:
 claude
 ```
 
-O Claude Code carregará automaticamente as ferramentas MCP disponíveis. Para orientar o agente no contexto forense do caso aberto, você pode digitar:
+O Claude Code carregará automaticamente as ferramentas MCP disponíveis. Os prompts MCP aparecem como comandos de barra no formato `/mcp__<servidor>__<prompt>`. Para orientar o agente no contexto forense do caso aberto, acione:
 
 ```text
-/mcp prompt start_case
+/mcp__iped__start_case
 ```
+
+(digite `/` e procure por `start_case` na lista de comandos para confirmar o nome exato na sua instalação).
 
 Ou simplesmente perguntar diretamente:
 > *"Qual é o caso atualmente carregado no IPED e quantas evidências foram indexadas?"*

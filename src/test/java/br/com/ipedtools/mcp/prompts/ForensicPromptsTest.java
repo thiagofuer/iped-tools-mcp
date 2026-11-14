@@ -157,4 +157,132 @@ class ForensicPromptsTest {
         assertTrue(text.contains("Português do Brasil"), "Deve referenciar Português do Brasil para usuários em português");
         assertTrue(text.contains("Inglês"), "Deve permitir resposta em inglês quando o examinador falar em inglês");
     }
+
+    private String defaultPrompt() {
+        return prompts.buildStartCasePrompt(null, null);
+    }
+
+    /** Text of the sensitive content check (section 2.1 of the prompt). */
+    static String sensitiveCheckSection(String prompt) {
+        int start = prompt.indexOf("#### 2.1");
+        int end = prompt.indexOf("#### 2.2");
+        assertTrue(start >= 0 && end > start, "o prompt deve ter a seção 2.1 antes da 2.2");
+        return prompt.substring(start, end);
+    }
+
+    /** Property names cited in the check: fields of the backticked queries and describe_property names. */
+    static java.util.Set<String> checkedPropertyNames(String section) {
+        java.util.Set<String> names = new java.util.LinkedHashSet<>();
+        java.util.regex.Matcher q = java.util.regex.Pattern.compile("`((?:[A-Za-z_]|\\\\:)+):[^`]*`").matcher(section);
+        while (q.find()) {
+            names.add(q.group(1).replace("\\:", ":"));
+        }
+        java.util.regex.Matcher d = java.util.regex.Pattern.compile("describe_property\\(name=\"([^\"]+)\"\\)").matcher(section);
+        while (d.find()) {
+            names.add(d.group(1));
+        }
+        return names;
+    }
+
+    /** Names that have no curated semantics (so are not known IPED properties). */
+    static java.util.List<String> unknownNames(java.util.Set<String> names) {
+        br.com.ipedtools.mcp.service.PropertySemantics semantics = br.com.ipedtools.mcp.service.PropertySemantics.get();
+        return names.stream().filter(n -> semantics.find(n) == null).toList();
+    }
+
+    @Test
+    void testConductSectionComesBeforeSourcesStep() {
+        String text = defaultPrompt();
+        int conduct = text.indexOf("### 2. Regras de Conduta");
+        int sources = text.indexOf("### 3. Reconhecimento de Fontes");
+        assertTrue(conduct > 0 && sources > conduct, "a conduta deve vir antes do reconhecimento das fontes");
+        assertTrue(text.indexOf("get_case_summary") < conduct, "a checagem vem depois da verificação do caso");
+        assertTrue(text.contains("Na dúvida, aja como modelo em nuvem"), "deve tratar a dúvida como nuvem");
+        assertTrue(text.contains("concordância expressa do usuário"), "deve exigir consentimento na nuvem");
+        assertTrue(text.contains("só pode chamar ferramentas que não trazem conteúdo de itens"),
+                "deve limitar as chamadas antes do aceite");
+    }
+
+    @Test
+    void testSensitiveContentCheck() {
+        String section = sensitiveCheckSection(defaultPrompt());
+        for (String expected : java.util.List.of("childPornHashHits:[1 TO *]", "ai\\:csamDetector\\:label:csam",
+                "describe_property(name=\"hashDb:status\")", "nudityScore:[650 TO *]", "nsfw_nudity_score:[70 TO *]",
+                "limit=1", "total_found", "list_properties(group=\"AI\")", "list_properties(group=\"HashDB\")")) {
+            assertTrue(section.contains(expected), "checagem sem: " + expected);
+        }
+        assertTrue(section.contains("\"não verificado\""), "propriedade ausente deve ser 'não verificado'");
+        assertTrue(section.contains("Nunca relate isso como zero"));
+        assertTrue(section.contains("não abra itens, não peça miniaturas"), "a checagem não pode abrir itens");
+    }
+
+    @Test
+    void testCheckedPropertiesExistInCuratedSemantics() {
+        java.util.Set<String> names = checkedPropertyNames(sensitiveCheckSection(defaultPrompt()));
+        assertEquals(java.util.Set.of("childPornHashHits", "ai:csamDetector:label", "hashDb:status", "nudityScore",
+                "nsfw_nudity_score"), names);
+        assertEquals(java.util.List.of(), unknownNames(names), "propriedades da checagem sem semântica curada");
+    }
+
+    @Test
+    void testUnknownPropertyInCheckIsDetected() {
+        String fake = "#### 2.1\n- Nudez: `hasNudity:true`\n- `nudityScore:[650 TO *]`\n#### 2.2";
+        assertEquals(java.util.List.of("hasNudity"), unknownNames(checkedPropertyNames(sensitiveCheckSection(fake))));
+    }
+
+    @Test
+    void testAlertAndSessionAcceptance() {
+        String text = defaultPrompt();
+        assertTrue(text.contains("termos de uso do provedor"), "deve citar os termos de uso do provedor");
+        assertTrue(text.contains("Pare e só prossiga"), "deve pausar até a concordância");
+        assertTrue(text.contains("O aceite vale para esta conversa"), "aceite por sessão");
+        assertTrue(text.contains("Uma nova sessão (nova conversa) sempre exige um novo aceite"));
+        assertTrue(text.contains("Ao trocar de caso com `open_case`, faça uma nova checagem"));
+        assertTrue(text.contains("Prosseguir é decisão do usuário"), "modelo local: decisão do usuário");
+    }
+
+    /** Server instructions as Quarkus reads them from application.properties (UTF-8). */
+    static String serverInstructions() throws java.io.IOException {
+        java.util.Properties props = new java.util.Properties();
+        try (java.io.Reader r = new java.io.InputStreamReader(
+                ForensicPromptsTest.class.getResourceAsStream("/application.properties"),
+                java.nio.charset.StandardCharsets.UTF_8)) {
+            props.load(r);
+        }
+        String text = props.getProperty("quarkus.mcp.server.server-info.instructions");
+        assertNotNull(text, "application.properties deve definir quarkus.mcp.server.server-info.instructions");
+        return text;
+    }
+
+    @Test
+    void testServerInstructionsStateTheFourRules() throws Exception {
+        String instructions = serverInstructions();
+        assertTrue(instructions.contains("start_case"), "deve recomendar o prompt start_case");
+        // 1. sensitive content check, with the same signals as the prompt
+        assertTrue(instructions.contains("\"não verificado\", nunca zero"));
+        java.util.Set<String> promptSignals = checkedPropertyNames(sensitiveCheckSection(defaultPrompt()));
+        for (String signal : promptSignals) {
+            assertTrue(instructions.contains(signal), "instructions sem o sinal da checagem: " + signal);
+        }
+        // 2. cloud consent
+        assertTrue(instructions.contains("ou na dúvida"));
+        assertTrue(instructions.contains("concordância expressa do usuário"));
+        // 3. per-session acceptance
+        assertTrue(instructions.contains("Aceite por sessão"));
+        // 4. writes
+        assertTrue(instructions.contains("add_to_bookmark") && instructions.contains("set_item_checked"));
+        assertTrue(instructions.contains("confirmação expressa do usuário"));
+        assertTrue(instructions.contains("sem indicar autoria de IA"));
+        assertTrue(instructions.contains("\n2. Modelo em nuvem"), "as regras devem vir em linhas separadas");
+    }
+
+    @Test
+    void testWritesRequireConfirmation() {
+        String text = defaultPrompt();
+        assertTrue(text.contains("Nunca escreva no caso por iniciativa própria"));
+        assertTrue(text.contains("aguarde a confirmação expressa"));
+        assertTrue(text.contains("não use nem acrescente termos que indiquem autoria de IA"));
+        assertFalse(text.contains("adicione-os aos marcadores oficiais usando `add_to_bookmark`"),
+                "não pode restar a orientação de marcar sem perguntar");
+    }
 }
