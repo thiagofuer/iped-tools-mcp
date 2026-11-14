@@ -65,7 +65,7 @@ O `start_case` é um **prompt MCP**: quem o insere na conversa é o cliente, qua
 
 > ⚠️ **Não digite `start_case` como texto comum** (nem peça "execute o prompt start_case"). Assim a mensagem chega à IA como um pedido qualquer, e a metodologia e as regras de conduta não entram na conversa.
 
-Mesmo sem o `start_case`, o servidor envia ao cliente, na conexão, um resumo das regras de conduta (as *instructions* do protocolo MCP). Cada cliente decide se repassa esse texto à IA, por isso acionar o `start_case` continua sendo o caminho recomendado.
+Mesmo sem o `start_case`, o servidor envia ao cliente, na conexão, um resumo das regras de conduta (as *instructions* do protocolo MCP). Cada cliente decide se repassa esse texto à IA. Nos clientes testados, só o Claude Code o repassa. O chat do Claude Desktop e o LM Studio não repassam: neles, só a regra de confirmar escritas chega à IA, pelas descrições das ferramentas. Por isso, acione o `start_case` pelo menu de prompts. Se o cliente não tiver esse menu, peça explicitamente a checagem de conteúdo sensível antes de analisar itens.
 
 ### Parâmetros Opcionais:
 * `investigation_target`: Tema ou foco específico da investigação (ex: *"mensagens entre o suspeito A e o suspeito B"*).
