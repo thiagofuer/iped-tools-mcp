@@ -46,7 +46,7 @@ Configurar o IPED Tools MCP com seu aplicativo de IA favorito leva menos de 2 mi
 2. **Abra o Configurador Gráfico:** Dê um duplo-clique em `IPED-Tools-MCP.exe` na Área de Trabalho ou no diretório extraído.
 3. **Selecione o Caso IPED:** Clique em **"Selecionar Caso IPED..."** e aponte para a pasta raiz de um caso pericial indexado.
 4. **Copie a Configuração (1-Click):** Escolha o seu aplicativo de IA no menu suspenso (Claude Desktop, Cursor, Antigravity ou LM Studio) e clique em **"📋 Copiar Configuração para a Área de Transferência"**.
-5. **Inicie a Investigação:** Cole a configuração no seu aplicativo de IA. No chat, digite o prompt `/start_case` para ativar a metodologia pericial anti-alucinação.
+5. **Inicie a Investigação:** Cole a configuração no seu aplicativo de IA. Para ativar a metodologia pericial e as regras de conduta, acione o prompt `start_case` pelo menu de prompts do seu cliente (no Claude Desktop, menu **+** da caixa de mensagem → `iped` → `start_case`). Digitado como texto comum, o prompt não é acionado.
 
 > 💡 **Nota:** Graças à sincronização dinâmica de caso ativo, você só precisa configurar seu cliente de IA **uma única vez** (com o argumento `--stdio`). Trocas de caso na interface gráfica ou via comando `open_case` no chat são refletidas automaticamente.
 

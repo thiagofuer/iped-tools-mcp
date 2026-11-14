@@ -6,41 +6,51 @@ O modelo de linguagem atua como um assistente cognitivo do examinador: ele reali
 
 ---
 
-## 🧭 Metodologia em 6 Etapas
+## 🧭 Metodologia em 7 Etapas
 
-Quando o prompt oficial `/start_case` é ativado, a IA é instruída a seguir o seguinte ciclo de trabalho:
+Quando o prompt oficial `start_case` é acionado, a IA é instruída a seguir o seguinte ciclo de trabalho:
 
 ```
-[1. Status e Prontidão]  -->  [2. Reconhecimento de Fontes]  -->  [3. Propriedades do Caso]
-      get_server_status              list_sources / get_device_and_accounts  list_properties
-                                                                             describe_property
+[1. Status e Prontidão]  -->  [2. Regras de Conduta]          -->  [3. Reconhecimento de Fontes]
+      get_server_status        checagem de conteúdo sensível        list_sources
+      get_case_summary         alerta, consentimento e aceite       get_device_and_accounts
              |
              v
-[4. Busca Estruturada]   -->  [5. Inspeção Progressiva]      -->  [6. Registro e Auditoria]
-      search_documents               get_metadata / get_text                 add_to_bookmark
-      get_timeline                   get_item_thumbnail                      set_item_checked
+[4. Propriedades do Caso] --> [5. Busca Estruturada] --> [6. Inspeção Progressiva] --> [7. Registro com Confirmação]
+      list_properties           search_documents          get_metadata / get_text       add_to_bookmark
+      describe_property         get_timeline              get_item_thumbnail            set_item_checked
 ```
 
 ### 1. Verificação do Ambiente e Caso
 A sessão sempre se inicia verificando se há um caso IPED carregado e pronto (`get_server_status`), seguido da análise volumétrica do acervo (`get_case_summary`).
 
-### 2. Reconhecimento de Fontes de Evidência
+### 2. Regras de Conduta
+Antes de analisar qualquer item, a IA cumpre quatro regras:
+
+* **Checagem de conteúdo sensível, só com contagens.** A IA confere com `list_properties` quais sinais existem no caso e conta, com `search_documents(limit=1)`, os itens sinalizados como CSAM (hash, detector de CSAM e base de hashes) e como nudez (DIE e NSFW). Um sinal cuja propriedade não existe no caso é relatado como **não verificado**, nunca como zero. A checagem não abre itens nem miniaturas.
+* **Alerta e consentimento.** A IA apresenta as contagens. Se roda num provedor de nuvem, ou não sabe onde roda, ela avisa que prosseguir envia texto, metadados e imagens do caso ao provedor, e que conteúdo sinalizado pode violar os termos de uso dele; só continua com a concordância expressa do perito. Num modelo local, prosseguir também é decisão do perito.
+* **Aceite por sessão.** O aceite vale para a conversa atual. Ao trocar de caso com `open_case`, ou numa nova conversa, a IA pede de novo.
+* **Confirmação de escritas.** Antes de criar marcadores ou marcar itens, a IA mostra o que vai fazer e aguarda a confirmação do perito (etapa 7).
+
+Essas regras orientam a IA; o servidor não bloqueia chamadas. Por isso o perito continua revisando os marcadores no IPED Desktop.
+
+### 3. Reconhecimento de Fontes de Evidência
 O perito e a IA identificam as mídias periciadas (`list_sources`) e levantam os identificadores registrados do aparelho e das contas (`get_device_and_accounts`), como números de telefone, IMEI e e-mails, cada um com os itens de origem. O servidor não aponta o dono: para concluir quem usa o aparelho, a IA compara as fontes (identificadores sustentados por vários aplicativos pesam mais), aprofunda com `list_properties(identity=true)` e `describe_property` e cita os itens que sustentam a conclusão.
 
-### 3. Descoberta das Propriedades do Caso
+### 4. Descoberta das Propriedades do Caso
 Para evitar alucinações de campos e erros de sintaxe, a IA descobre as propriedades que existem **neste** caso antes de formular consultas sobre chats, EXIF, sistemas de arquivos ou resultados de IA: `list_properties` mostra os grupos e as propriedades com contagens exatas, e `describe_property` explica o significado, a escala e os valores de cada uma. Uma propriedade que não aparece no catálogo não existe no caso (o módulo que a gera pode não ter sido executado), o que é diferente de zero itens.
 
-### 4. Busca Estruturada e Recuperação
+### 5. Busca Estruturada e Recuperação
 Execução de pesquisas com sintaxe Apache Lucene (`search_documents`), inclusive sobre os resultados de IA do grupo `AI` (ex.: `nudityScore:[650 TO *]`, `faceAge\:labels:child`), correlação temporal (`get_timeline`, `get_events_around_time`) ou análise de vínculos interpessoais (`get_communications_graph`, `get_top_contacts`).
 
-### 5. Inspeção Progressiva de Conteúdo
+### 6. Inspeção Progressiva de Conteúdo
 Para economizar tokens e evitar estouro de contexto:
 * Primeiro, inspecionam-se os metadados forenses sumarizados (`get_document_metadata`).
 * Se houver relevância, extrai-se o texto paginado (`get_document_text`).
 * Para mídias visuais, obtém-se a miniatura gráfica em Base64 JPEG (`get_item_thumbnail`).
 
-### 6. Marcação e Registro Pericial
-Itens de valor probatório são associados a marcadores periciais (`add_to_bookmark`) ou sinalizados na triagem pericial (`set_item_checked`).
+### 7. Registro Pericial com Confirmação
+A IA nunca escreve no caso por iniciativa própria. Quando encontra itens de valor probatório, ela sugere registrá-los. Antes de associá-los a um marcador (`add_to_bookmark`) ou marcá-los na triagem (`set_item_checked`), mostra os itens e o nome do marcador e aguarda a confirmação do perito. O nome do marcador é o que o perito escolher, sem termos que indiquem autoria de IA.
 
 ---
 
@@ -49,9 +59,13 @@ Itens de valor probatório são associados a marcadores periciais (`add_to_bookm
 O servidor disponibiliza através da especificação MCP o prompt canônico `start_case`.
 
 ### Como acionar no cliente:
-* **No Claude Desktop ou Claude Code:** Digite `/start_case` ou selecione o prompt no menu de integrações.
-* **No LM Studio ou Cursor:** Peça no chat:
-  > *"Execute o prompt start_case com foco em 'fraude em notas fiscais'"*
+O `start_case` é um **prompt MCP**: quem o insere na conversa é o cliente, quando você o escolhe na interface. A IA não consegue acioná-lo sozinha.
+* **No Claude Desktop:** abra o menu **+** da caixa de mensagem, escolha o servidor `iped` e selecione `start_case`. Preencha os parâmetros opcionais e envie. O texto do prompt aparece anexado à mensagem antes do envio.
+* **Em outros clientes:** use o menu ou a lista de prompts MCP do cliente, se ele oferecer.
+
+> ⚠️ **Não digite `start_case` como texto comum** (nem peça "execute o prompt start_case"). Assim a mensagem chega à IA como um pedido qualquer, e a metodologia e as regras de conduta não entram na conversa.
+
+Mesmo sem o `start_case`, o servidor envia ao cliente, na conexão, um resumo das regras de conduta (as *instructions* do protocolo MCP). Cada cliente decide se repassa esse texto à IA, por isso acionar o `start_case` continua sendo o caminho recomendado.
 
 ### Parâmetros Opcionais:
 * `investigation_target`: Tema ou foco específico da investigação (ex: *"mensagens entre o suspeito A e o suspeito B"*).
@@ -66,9 +80,9 @@ O prompt instrui a IA a iniciar respondendo em **Português do Brasil (pt-BR)** 
 
 O trabalho realizado pela IA não fica isolado no chat:
 
-1. A IA encontra uma evidência crítica e executa:
+1. A IA encontra uma evidência crítica, mostra ao perito o item e o nome do marcador e, com a confirmação dele, executa:
    ```json
-   add_to_bookmark(item_ids=[10425], bookmark_name="Evidências Relevantes - Operação")
+   add_to_bookmark(doc_ids=[10425], bookmark_name="Evidências Relevantes - Operação")
    set_item_checked(item_id=10425, checked=true)
    ```
 2. O servidor salva o estado diretamente no arquivo `iped/bookmarks.iped` do caso.

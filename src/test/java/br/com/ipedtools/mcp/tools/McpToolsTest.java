@@ -180,6 +180,26 @@ public class McpToolsTest {
     }
 
     @Test
+    void testWriteToolsRequireUserConfirmation() throws Exception {
+        io.quarkiverse.mcp.server.Tool bookmark = BookmarkTools.class
+                .getMethod("addToBookmark", String.class, List.class)
+                .getAnnotation(io.quarkiverse.mcp.server.Tool.class);
+        io.quarkiverse.mcp.server.Tool checked = TriageTool.class
+                .getMethod("setItemChecked", int.class, Boolean.class)
+                .getAnnotation(io.quarkiverse.mcp.server.Tool.class);
+        for (io.quarkiverse.mcp.server.Tool t : List.of(bookmark, checked)) {
+            assertTrue(t.description().contains("ALWAYS ASK FIRST"), t.name() + " deve exigir pergunta antes");
+            assertTrue(t.description().contains("explicit confirmation"), t.name() + " deve exigir confirmação expressa");
+            assertTrue(t.description().contains("Never call this tool on your own initiative"), t.name());
+            assertFalse(t.description().contains("are discovered during an investigation"),
+                    t.name() + " não pode orientar marcar por iniciativa própria");
+        }
+        String normalized = String.join(" ", bookmark.description().split("\\s+"));
+        assertTrue(normalized.contains("never use or add words that identify AI or LLM authorship"),
+                "add_to_bookmark deve proibir identificar IA no nome do marcador");
+    }
+
+    @Test
     void testPropertyCatalogToolsAreRegistered() throws Exception {
         io.quarkiverse.mcp.server.Tool list = PropertyCatalogTool.class
                 .getMethod("listProperties", String.class, String.class, String.class, Boolean.class)

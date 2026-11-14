@@ -78,4 +78,6 @@ Se você preferir travar a inicialização sempre em um caso pericial específic
 1. Salve o arquivo `claude_desktop_config.json`.
 2. Reinicie o Claude Desktop completamente (fechando e reabrindo o aplicativo).
 3. No canto inferior da barra de digitação do Claude, você verá o ícone de ferramentas MCP indicando que o servidor `iped` está ativo com as 26 ferramentas periciais disponíveis.
-4. Digite a saudação pericial ou chame o prompt `/start_case` para iniciar a análise probatória com rigor metodológico.
+4. Para iniciar a análise com a metodologia pericial, abra o menu **+** da caixa de mensagem, escolha o servidor `iped` e selecione o prompt `start_case`. Preencha os parâmetros opcionais (`case_path`, `investigation_target`) e envie. O texto do prompt aparece anexado à mensagem antes do envio.
+
+> ⚠️ Digitar `start_case` como texto comum não aciona o prompt: a mensagem chega à IA como um pedido qualquer, sem a metodologia e sem as regras de conduta. Veja [Fluxo de Investigação](Fluxo-de-Investigacao).
