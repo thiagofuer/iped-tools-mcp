@@ -1,6 +1,6 @@
-# Catálogo de Ferramentas Forenses (26 MCP Tools)
+# Catálogo de Ferramentas Forenses (30 MCP Tools)
 
-O **IPED Tools MCP** expõe 26 ferramentas periciais especializadas agrupadas em 8 domínios operacionais. Abaixo está a referência completa de cada ferramenta, seus objetivos e exemplos práticos de perguntas em português que o examinador pode fazer no chat.
+O **IPED Tools MCP** expõe 30 ferramentas periciais especializadas agrupadas em 8 domínios operacionais. Abaixo está a referência completa de cada ferramenta, seus objetivos e exemplos práticos de perguntas em português que o examinador pode fazer no chat.
 
 ---
 
@@ -62,12 +62,31 @@ O catálogo mostra as propriedades que **existem neste caso**, lidas do índice,
 * **Exemplo de Pergunta:** *"Quais tipos de evidência foram classificados e quantos itens cada categoria possui?"*
 
 ### `list_bookmarks`
-* **Propósito:** Lista todos os marcadores periciais existentes no arquivo `bookmarks.iped` do caso e o quantitativo de itens marcados.
-* **Exemplo de Pergunta:** *"Quais marcadores periciais já foram criados neste caso?"*
+* **Propósito:** Lista os marcadores periciais do caso (`bookmarks.iped`) com nome, quantidade de itens, comentário e cor (`#RRGGBB`, ou vazio quando o marcador não tem cor). Também devolve `unused_standard_colors`, as cores da paleta padrão do IPED que nenhum marcador usa, para a IA sugerir uma cor.
+* **Exemplo de Pergunta:** *"Quais marcadores periciais já foram criados neste caso e quantos itens tem cada um?"*
+
+### `list_bookmark_items`
+* **Propósito:** Lista os itens de um marcador (ID, nome, caminho e categoria) em ordem de ID, paginados com `offset`, `total_found`, `has_more` e `next_offset`. Somente leitura.
+* **Exemplo de Pergunta:** *"Quais itens estão no marcador 'Contratos Suspeitos'?"*
 
 ### `add_to_bookmark`
-* **Propósito:** Adiciona um ou mais itens a um marcador pericial existente ou cria um novo marcador de auditoria no caso.
-* **Exemplo de Pergunta:** *"Adicione os itens 1250 e 1251 ao marcador 'Contratos Suspeitos'."*
+* **Propósito:** Adiciona um ou mais itens a um marcador existente ou cria o marcador, opcionalmente com cor e comentário. A resposta informa se o marcador foi criado e lista os IDs que não existem no caso. Cor e comentário só valem na criação; para alterar um marcador existente, use `update_bookmark`.
+* **Cor:** a cor é escolha do perito. A IA pode sugerir uma cor livre da paleta, que entra na confirmação. Sem escolha, o marcador é criado sem cor e o IPED Desktop o exibe na cor padrão (lilás).
+* **Exemplo de Pergunta:** *"Adicione os itens 1250 e 1251 ao marcador 'Contratos Suspeitos', em vermelho, com o comentário 'Minutas enviadas ao fornecedor'."*
+
+### `remove_from_bookmark`
+* **Propósito:** Remove itens de um marcador. O marcador continua existindo, mesmo vazio, e os itens continuam no caso com os demais marcadores e a seleção inalterados. A resposta lista os IDs que não estavam no marcador.
+* **Exemplo de Pergunta:** *"Tire o item 1251 do marcador 'Contratos Suspeitos'; ele foi incluído por engano."*
+
+### `update_bookmark`
+* **Propósito:** Renomeia um marcador e altera a cor ou o comentário, mantendo os itens. Um novo nome igual a outro marcador (sem diferenciar maiúsculas) é recusado. Comentário vazio limpa o comentário.
+* **Exemplo de Pergunta:** *"Renomeie o marcador 'Contratos Suspeitos' para 'Contratos Fraudulentos' e mude a cor para azul."*
+
+### `delete_bookmark`
+* **Propósito:** Exclui um marcador com nome, cor e comentário. Os itens continuam no caso, com os demais marcadores e a seleção inalterados. A resposta informa quantos itens o marcador tinha.
+* **Exemplo de Pergunta:** *"Exclua o marcador 'Rascunho de Triagem'."*
+
+> ✍️ **Confirmação de escritas:** antes de `add_to_bookmark`, `remove_from_bookmark`, `update_bookmark`, `delete_bookmark` ou `set_item_checked`, a IA mostra o que vai mudar e aguarda a confirmação do perito. Na remoção e na exclusão, ela mostra o que sai do marcador e avisa que a mudança não pode ser desfeita pelo MCP.
 
 ---
 

@@ -441,7 +441,7 @@ public class MainWindow extends JFrame {
 
                         int totalItems = service.getTotalIndexedItems();
                         int totalCats = service.listCategories().size();
-                        int totalBms = service.listBookmarks().size();
+                        int totalBms = service.listBookmarkNames().size();
 
                         itemsCountLabel.setText("• Itens indexados: " + numberFormat.format(totalItems));
                         categoriesCountLabel.setText("• Categorias encontradas: " + numberFormat.format(totalCats));

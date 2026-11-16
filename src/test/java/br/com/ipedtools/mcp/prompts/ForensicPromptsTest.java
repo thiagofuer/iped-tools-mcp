@@ -270,7 +270,11 @@ class ForensicPromptsTest {
         // 3. per-session acceptance
         assertTrue(instructions.contains("Aceite por sessão"));
         // 4. writes
-        assertTrue(instructions.contains("add_to_bookmark") && instructions.contains("set_item_checked"));
+        for (String tool : java.util.List.of("add_to_bookmark", "remove_from_bookmark", "update_bookmark",
+                "delete_bookmark", "set_item_checked")) {
+            assertTrue(instructions.contains(tool), "instructions sem a escrita " + tool);
+        }
+        assertTrue(instructions.contains("cor e comentário"), "instructions devem incluir a cor na confirmação");
         assertTrue(instructions.contains("confirmação expressa do usuário"));
         assertTrue(instructions.contains("sem indicar autoria de IA"));
         assertTrue(instructions.contains("\n2. Modelo em nuvem"), "as regras devem vir em linhas separadas");
@@ -282,6 +286,11 @@ class ForensicPromptsTest {
         assertTrue(text.contains("Nunca escreva no caso por iniciativa própria"));
         assertTrue(text.contains("aguarde a confirmação expressa"));
         assertTrue(text.contains("não use nem acrescente termos que indiquem autoria de IA"));
+        for (String tool : java.util.List.of("remove_from_bookmark", "update_bookmark", "delete_bookmark")) {
+            assertTrue(text.contains(tool), "prompt sem a escrita " + tool);
+        }
+        assertTrue(text.contains("A cor é escolha do usuário"), "prompt deve deixar a cor com o usuário");
+        assertTrue(text.contains("não pode ser desfeita pelo MCP"));
         assertFalse(text.contains("adicione-os aos marcadores oficiais usando `add_to_bookmark`"),
                 "não pode restar a orientação de marcar sem perguntar");
     }
