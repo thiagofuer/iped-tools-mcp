@@ -142,10 +142,14 @@ try {
     $statusData = $statusCall.result.content[0].text | ConvertFrom-Json
     $sourcesCall = Send-RpcRequest "tools/call" @{ name = "list_sources"; arguments = @{} }
     $sourcesJson = ($sourcesCall | ConvertTo-Json -Depth 6 -Compress)
-    $expectedBm = "Per$([char]0x00ED)cia IA"
+    # Marcador de teste com acentuacao UTF-8: incluido e excluido em seguida, deixando o caso como estava
+    $expectedBm = "Confer$([char]0x00EA)ncia de Teste"
     $bmUtf8Call = Send-RpcRequest "tools/call" @{ name = "add_to_bookmark"; arguments = @{ bookmark_name = $expectedBm; doc_ids = @(1) } }
     $bmUtf8Text = $bmUtf8Call.result.content[0].text
-    if ($statusData.connected -and $statusData.case_open -and -not (Get-VersionMismatch -Reported $statusData.server_version -Expected $ExpectedVersion) -and -not $sourcesJson.Contains([char]0xFFFD) -and $bmUtf8Text.Contains($expectedBm) -and -not $bmUtf8Text.Contains([char]0xFFFD)) {
+    $bmUtf8Data = $bmUtf8Text | ConvertFrom-Json
+    $bmDelCall = Send-RpcRequest "tools/call" @{ name = "delete_bookmark"; arguments = @{ bookmark_name = $expectedBm } }
+    $bmDelData = $bmDelCall.result.content[0].text | ConvertFrom-Json
+    if ($statusData.connected -and $statusData.case_open -and -not (Get-VersionMismatch -Reported $statusData.server_version -Expected $ExpectedVersion) -and -not $sourcesJson.Contains([char]0xFFFD) -and $bmUtf8Data.bookmark.name -eq $expectedBm -and -not $bmUtf8Text.Contains([char]0xFFFD) -and $bmDelData.success) {
         Write-Host (" PASS (Versao: " + $statusData.server_version + " | Fonte: " + $statusData.case_source_id + " | UTF-8 integro)") -ForegroundColor Green
     } else {
         Write-Host " FAIL (Status invalido ou corrupcao UTF-8 U+FFFD)" -ForegroundColor Red; exit 1

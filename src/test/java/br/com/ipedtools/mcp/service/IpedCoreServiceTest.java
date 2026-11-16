@@ -347,7 +347,7 @@ public class IpedCoreServiceTest {
         assertFalse(categories.isEmpty(), "Deveria listar categorias");
         assertTrue(categories.contains("whatsapp") || categories.contains("contacts") || categories.contains("audios"));
 
-        List<String> bookmarks = service.listBookmarks();
+        List<String> bookmarks = service.listBookmarkNames();
         assertNotNull(bookmarks);
     }
 
@@ -359,6 +359,8 @@ public class IpedCoreServiceTest {
         assertNotNull(summary);
         assertTrue((int) summary.get("total_indexed_items") > 0);
         assertTrue((int) summary.get("total_categories_count") > 0);
+        assertEquals(service.listBookmarkNames(), summary.get("bookmarks"), "resumo mantém a lista de nomes");
+        assertEquals(service.listBookmarkNames().size(), summary.get("total_bookmarks_count"));
     }
 
     @Test

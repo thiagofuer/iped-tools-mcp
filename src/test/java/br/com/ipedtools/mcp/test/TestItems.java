@@ -87,6 +87,16 @@ public final class TestItems {
         return childAndParent;
     }
 
+    /** The first {@code n} item IDs of the case in index order (fewer if the case is smaller). */
+    public static List<Integer> anyIds(int n) {
+        int[] ids = candidates("*:*");
+        List<Integer> result = new java.util.ArrayList<>();
+        for (int i = 0; i < ids.length && result.size() < n; i++) {
+            result.add(ids[i]);
+        }
+        return result;
+    }
+
     private static int[] candidates(String query) {
         try {
             int[] ids = new IPEDSearcher(IpedCoreService.getInstance().getSource(), query).search().getIds();

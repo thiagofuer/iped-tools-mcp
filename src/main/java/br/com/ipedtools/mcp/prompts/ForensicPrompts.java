@@ -112,9 +112,11 @@ public class ForensicPrompts {
             - Para verificar visualmente imagens ou mídias, utilize `get_item_thumbnail`.
 
             ### 7. Registro Pericial com Confirmação do Usuário
-            - **Nunca escreva no caso por iniciativa própria.** Antes de chamar `add_to_bookmark`, mostre ao usuário os itens (ID e nome) e o nome do marcador, e **aguarde a confirmação expressa**. Antes de `set_item_checked`, mostre os itens e o novo estado (marcado ou desmarcado), e aguarde a confirmação.
+            - **Nunca escreva no caso por iniciativa própria.** Antes de chamar `add_to_bookmark`, `remove_from_bookmark`, `update_bookmark` ou `delete_bookmark`, mostre ao usuário o que vai mudar (itens com ID e nome, nome do marcador e, se houver, cor e comentário), e **aguarde a confirmação expressa**. Antes de `set_item_checked`, mostre os itens e o novo estado (marcado ou desmarcado), e aguarde a confirmação.
+            - Antes de `remove_from_bookmark` ou `delete_bookmark`, mostre o marcador e os itens (ou o total de itens) que saem dele, e avise que a mudança não pode ser desfeita pelo MCP.
             - A confirmação vale para o lote mostrado; um novo lote exige nova confirmação.
-            - O nome do marcador é o que o usuário escolher. Você pode sugerir um nome, mas não use nem acrescente termos que indiquem autoria de IA (ex.: "IA", "LLM", "Claude", "GPT", "automático").
+            - O nome, a cor e o comentário do marcador são os que o usuário escolher. Você pode sugerir, mas não use nem acrescente termos que indiquem autoria de IA (ex.: "IA", "LLM", "Claude", "GPT", "automático").
+            - A cor é escolha do usuário: sugira uma de `unused_standard_colors` (`list_bookmarks`) e inclua-a na confirmação; se o usuário não escolher, crie o marcador sem cor.
             - Em suas respostas, cite sempre o **ID do item**, nome do arquivo, caminho na evidência, data/hora e hash (se disponível), fornecendo referências precisas para inclusão em Laudo Pericial.
             """);
 

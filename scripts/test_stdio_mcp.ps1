@@ -145,7 +145,7 @@ try {
     Write-Host "[2/25] Testando tools/list..." -NoNewline
     $toolsList = Send-RpcRequest "tools/list"
     $toolCount = $toolsList.result.tools.Count
-    $expectedTools = 26
+    $expectedTools = 30
     $toolNames = $toolsList.result.tools | ForEach-Object { $_.name }
     if ($toolCount -eq $expectedTools -and ($toolNames -contains "get_contact_relationship") -and ($toolNames -contains "list_properties")) {
         Write-Host (" PASS (" + $toolCount + " ferramentas registradas)") -ForegroundColor Green
@@ -262,22 +262,30 @@ try {
     $catsCall = Send-RpcRequest "tools/call" @{ name = "list_categories"; arguments = @{} }
     $catsCount = $catsCall.result.content.Count
     $bmsCall = Send-RpcRequest "tools/call" @{ name = "list_bookmarks"; arguments = @{} }
-    $bmsCount = $bmsCall.result.content.Count
+    $bmsCount = ($bmsCall.result.content[0].text | ConvertFrom-Json).total
     if ($catsCount -gt 0 -and -not $sourcesJson.Contains([char]0xFFFD)) {
         Write-Host (" PASS (" + $catsCount + " categorias, " + $bmsCount + " marcadores, UTF-8 integro)") -ForegroundColor Green
     } else {
         Write-Host " FAIL (Categorias vazias ou corrupcao UTF-8 U+FFFD em list_sources)" -ForegroundColor Red; exit 1
     }
 
-    # 13. Call add_to_bookmark (com acentuacao UTF-8)
-    $expectedBm = "Per$([char]0x00ED)cia IA"
-    Write-Host ("[12/15] Testando call add_to_bookmark (UTF-8 '" + $expectedBm + "')...") -NoNewline
-    $addBmCall = Send-RpcRequest "tools/call" @{ name = "add_to_bookmark"; arguments = @{ bookmark_name = $expectedBm; doc_ids = @($sampleDocId) } }
+    # 13. Marcador de teste (acentuacao UTF-8): incluir, listar itens e excluir, deixando o caso como estava
+    $expectedBm = "Confer$([char]0x00EA)ncia de Teste"
+    Write-Host ("[12/15] Testando add_to_bookmark, list_bookmark_items e delete_bookmark (UTF-8 '" + $expectedBm + "')...") -NoNewline
+    $addBmCall = Send-RpcRequest "tools/call" @{ name = "add_to_bookmark"; arguments = @{ bookmark_name = $expectedBm; doc_ids = @([int]$sampleDocId) } }
     $addBmText = $addBmCall.result.content[0].text
-    if ($addBmText -match "Sucesso" -and $addBmText.Contains($expectedBm) -and -not $addBmText.Contains([char]0xFFFD)) {
-        Write-Host (" PASS (" + $addBmText + ")") -ForegroundColor Green
+    $addBmData = $addBmText | ConvertFrom-Json
+    $bmItemsCall = Send-RpcRequest "tools/call" @{ name = "list_bookmark_items"; arguments = @{ bookmark_name = $expectedBm } }
+    $bmItemsData = $bmItemsCall.result.content[0].text | ConvertFrom-Json
+    $delBmCall = Send-RpcRequest "tools/call" @{ name = "delete_bookmark"; arguments = @{ bookmark_name = $expectedBm } }
+    $delBmData = $delBmCall.result.content[0].text | ConvertFrom-Json
+    $bmsAfterCall = Send-RpcRequest "tools/call" @{ name = "list_bookmarks"; arguments = @{} }
+    $bmsAfter = ($bmsAfterCall.result.content[0].text | ConvertFrom-Json).bookmarks | ForEach-Object { $_.name }
+    $bmLeft = @($bmsAfter) -contains $expectedBm
+    if ($addBmData.success -and $addBmData.bookmark.name -eq $expectedBm -and -not $addBmText.Contains([char]0xFFFD) -and $bmItemsData.total_found -ge 1 -and $delBmData.success -and -not $bmLeft) {
+        Write-Host (" PASS (" + $addBmData.message + " | itens: " + $bmItemsData.total_found + " | excluido ao final)") -ForegroundColor Green
     } else {
-        Write-Host (" FAIL (" + $addBmText + ")") -ForegroundColor Red; exit 1
+        Write-Host (" FAIL (add: " + $addBmText + " | itens: " + $bmItemsCall.result.content[0].text + " | delete: " + $delBmCall.result.content[0].text + ")") -ForegroundColor Red; exit 1
     }
 
     # 14. Call get_item_relations

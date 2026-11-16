@@ -37,6 +37,7 @@ import iped.data.IItem;
 import iped.data.IItemId;
 import iped.engine.config.Configuration;
 import iped.engine.config.ConfigurationManager;
+import iped.engine.data.BitmapBookmarks;
 import iped.engine.data.IPEDMultiSource;
 import iped.engine.data.IPEDSource;
 import iped.engine.data.ItemId;
@@ -658,7 +659,8 @@ public class IpedCoreService {
         return categories != null ? categories : List.of();
     }
 
-    public List<String> listBookmarks() {
+    /** Names of the bookmarks of the open case, used by the case summary. */
+    public List<String> listBookmarkNames() {
         checkCaseOpen();
         Map<Integer, String> map = ipedSource.getBookmarks().getBookmarkMap();
         if (map == null || map.isEmpty()) {
@@ -667,45 +669,82 @@ public class IpedCoreService {
         return new ArrayList<>(map.values());
     }
 
-    public synchronized String addBookmark(String bookmarkName, List<Integer> docIds) {
+    /** The case bookmark state file ({@code <case>/iped/bookmarks.iped}). */
+    public synchronized File getBookmarksStateFile() {
         checkCaseOpen();
-        if (bookmarkName == null || bookmarkName.isBlank()) {
-            return "Erro: O nome do marcador não pode ser vazio.";
-        }
-        if (docIds == null || docIds.isEmpty()) {
-            return "Erro: Nenhum ID de documento fornecido para adicionar ao marcador.";
-        }
+        return new File(caseDirectory, IPEDSource.MODULE_DIR + "/" + BitmapBookmarks.STATEFILENAME);
+    }
 
+    /**
+     * Reloads the bookmark state from the case file, so that an operation starts from what is on disk (for
+     * example, changes saved by IPED Desktop). Does nothing when the file does not exist yet.
+     */
+    public synchronized void reloadBookmarks() throws IOException {
+        File stateFile = getBookmarksStateFile();
+        if (!stateFile.isFile()) {
+            return;
+        }
         try {
-            int bmId = ipedSource.getBookmarks().newBookmark(bookmarkName);
-            ipedSource.getBookmarks().addBookmark(docIds, bmId);
-            ipedSource.getBookmarks().saveState(true);
-            return "Sucesso: " + docIds.size() + " documento(s) adicionado(s) ao marcador '" + bookmarkName + "'.";
-        } catch (Exception e) {
-            LOGGER.error("Erro ao adicionar aos marcadores: {}", e.getMessage(), e);
-            return "Falha ao adicionar aos marcadores: " + e.getMessage();
+            ipedSource.getBookmarks().loadState(stateFile);
+        } catch (ClassNotFoundException e) {
+            throw new IOException("Formato de " + stateFile.getName() + " não reconhecido: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Saves the bookmark state to the case file before returning. Unlike {@code IBookmarks.saveState(boolean)},
+     * a failure is reported instead of being redirected to a temporary file: the state is written to a temporary
+     * file in the same folder and moved over {@code bookmarks.iped}, and on failure the in-memory state is reloaded
+     * from the unchanged file.
+     */
+    public synchronized void saveBookmarks() throws IOException {
+        File stateFile = getBookmarksStateFile();
+        File dir = stateFile.getParentFile();
+        java.nio.file.Path tmp = null;
+        try {
+            if (stateFile.exists() && !java.nio.file.Files.isWritable(stateFile.toPath())) {
+                throw new IOException("sem permissão de escrita em " + stateFile.getAbsolutePath());
+            }
+            if (dir == null || !java.nio.file.Files.isWritable(dir.toPath())) {
+                throw new IOException("sem permissão de escrita na pasta " + dir);
+            }
+            tmp = java.nio.file.Files.createTempFile(dir.toPath(), "bookmarks", ".tmp");
+            ipedSource.getBookmarks().saveState(tmp.toFile(), true);
+            try {
+                java.nio.file.Files.move(tmp, stateFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                java.nio.file.Files.move(tmp, stateFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException e) {
+            if (tmp != null) {
+                java.nio.file.Files.deleteIfExists(tmp);
+            }
+            try {
+                reloadBookmarks();
+            } catch (IOException reloadError) {
+                LOGGER.warn("Falha ao recarregar marcadores após erro de gravação: {}", reloadError.getMessage());
+            }
+            throw new IOException("Falha ao gravar " + stateFile.getName() + ": " + e.getMessage(), e);
         }
     }
 
     /**
      * Flags or unflags an item as checked (selected) in the IPED case state database,
      * mirroring the checkmark column in IPED Desktop.
-     * Persists the updated state immediately to disk.
+     * Persists the updated state to the case bookmark file before returning.
      */
     public synchronized Map<String, Object> setItemChecked(int itemId, boolean checked) throws IOException {
         checkCaseOpen();
-        int luceneId = ipedSource.getLuceneId(itemId);
+        int luceneId = safeGetLuceneId(itemId);
         if (luceneId < 0) {
             throw new IllegalArgumentException("Item ID não encontrado no caso aberto: " + itemId);
         }
 
+        reloadBookmarks();
         boolean previousState = ipedSource.getBookmarks().isChecked(itemId);
         ipedSource.getBookmarks().setChecked(checked, itemId);
-        try {
-            ipedSource.getBookmarks().saveState(true);
-        } catch (Exception e) {
-            LOGGER.warn("Aviso ao persistir estado de seleção do item {}: {}", itemId, e.getMessage());
-        }
+        saveBookmarks();
 
         Document doc = ipedSource.getReader().document(luceneId);
         String name = doc.get("name") != null ? doc.get("name") : "";
@@ -745,7 +784,7 @@ public class IpedCoreService {
         summary.put("total_categories_count", categories.size());
         summary.put("top_categories", categories.stream().limit(20).collect(Collectors.toList()));
 
-        List<String> bookmarks = listBookmarks();
+        List<String> bookmarks = listBookmarkNames();
         summary.put("total_bookmarks_count", bookmarks.size());
         summary.put("bookmarks", bookmarks);
         summary.put("note", "Caso indexado e pronto para consultas forenses via IA.");

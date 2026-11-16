@@ -30,7 +30,7 @@ Antes de analisar qualquer item, a IA cumpre quatro regras:
 * **Checagem de conteúdo sensível, só com contagens.** A IA confere com `list_properties` quais sinais existem no caso e conta, com `search_documents(limit=1)`, os itens sinalizados como CSAM (hash, detector de CSAM e base de hashes) e como nudez (DIE e NSFW). Um sinal cuja propriedade não existe no caso é relatado como **não verificado**, nunca como zero. A checagem não abre itens nem miniaturas.
 * **Alerta e consentimento.** A IA apresenta as contagens. Se roda num provedor de nuvem, ou não sabe onde roda, ela avisa que prosseguir envia texto, metadados e imagens do caso ao provedor, e que conteúdo sinalizado pode violar os termos de uso dele; só continua com a concordância expressa do perito. Num modelo local, prosseguir também é decisão do perito.
 * **Aceite por sessão.** O aceite vale para a conversa atual. Ao trocar de caso com `open_case`, ou numa nova conversa, a IA pede de novo.
-* **Confirmação de escritas.** Antes de criar marcadores ou marcar itens, a IA mostra o que vai fazer e aguarda a confirmação do perito (etapa 7).
+* **Confirmação de escritas.** Antes de criar, alterar ou excluir marcadores, ou marcar itens, a IA mostra o que vai fazer e aguarda a confirmação do perito (etapa 7).
 
 Essas regras orientam a IA; o servidor não bloqueia chamadas. Por isso o perito continua revisando os marcadores no IPED Desktop.
 
@@ -50,7 +50,9 @@ Para economizar tokens e evitar estouro de contexto:
 * Para mídias visuais, obtém-se a miniatura gráfica em Base64 JPEG (`get_item_thumbnail`).
 
 ### 7. Registro Pericial com Confirmação
-A IA nunca escreve no caso por iniciativa própria. Quando encontra itens de valor probatório, ela sugere registrá-los. Antes de associá-los a um marcador (`add_to_bookmark`) ou marcá-los na triagem (`set_item_checked`), mostra os itens e o nome do marcador e aguarda a confirmação do perito. O nome do marcador é o que o perito escolher, sem termos que indiquem autoria de IA.
+A IA nunca escreve no caso por iniciativa própria. Quando encontra itens de valor probatório, ela sugere registrá-los. Antes de associá-los a um marcador (`add_to_bookmark`) ou marcá-los na triagem (`set_item_checked`), mostra os itens e o nome do marcador e aguarda a confirmação do perito. O nome, a cor e o comentário do marcador são os que o perito escolher, sem termos que indiquem autoria de IA. Para a cor, a IA pode sugerir uma cor livre da paleta do IPED (`list_bookmarks`); sem escolha, o marcador é criado sem cor.
+
+O registro pode ser corrigido pelo chat, sempre com confirmação: `list_bookmark_items` mostra o que está num marcador, `remove_from_bookmark` tira itens incluídos por engano, `update_bookmark` muda nome, cor ou comentário, e `delete_bookmark` exclui o marcador. Na remoção e na exclusão, a IA mostra o que sai e avisa que a mudança não pode ser desfeita pelo MCP.
 
 ---
 
@@ -82,9 +84,9 @@ O trabalho realizado pela IA não fica isolado no chat:
 
 1. A IA encontra uma evidência crítica, mostra ao perito o item e o nome do marcador e, com a confirmação dele, executa:
    ```json
-   add_to_bookmark(doc_ids=[10425], bookmark_name="Evidências Relevantes - Operação")
+   add_to_bookmark(doc_ids=[10425], bookmark_name="Evidências Relevantes - Operação", color="#CF000F")
    set_item_checked(item_id=10425, checked=true)
    ```
-2. O servidor salva o estado diretamente no arquivo `iped/bookmarks.iped` do caso.
-3. Ao abrir o caso no **IPED Desktop oficial**, o perito verá a evidência imediatamente marcada na árvore de marcadores e com o checkbox de conferência selecionado.
+2. O servidor salva o estado diretamente no arquivo `iped/bookmarks.iped` do caso antes de responder.
+3. Ao abrir o caso no **IPED Desktop oficial**, o perito verá a evidência marcada na árvore de marcadores, na cor escolhida, e com o checkbox de conferência selecionado. Se o IPED Desktop já estava com o caso aberto, feche e reabra o caso para ver as mudanças feitas pelo chat.
 4. O perito realiza a revisão humana, confere a cadeia de custódia e exporta o laudo oficial em HTML ou PDF com total segurança jurídica.
