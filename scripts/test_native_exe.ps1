@@ -23,6 +23,11 @@ if (-not $CasePath -or -not (Test-Path $CasePath)) {
 }
 $CasePath = (Resolve-Path $CasePath).Path
 
+# A versao esperada vem somente do pom.xml
+$projectRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot "version.ps1")
+$ExpectedVersion = Get-PomVersion -ProjectRoot $projectRoot
+
 # Resolução dinâmica do caso secundário para teste de troca (open_case)
 if (-not $SecondaryCasePath) {
     if ($env:IPED_TEST_SECONDARY_CASE_PATH -and (Test-Path $env:IPED_TEST_SECONDARY_CASE_PATH)) {
@@ -51,11 +56,13 @@ $resolvedExe = (Resolve-Path $ExePath).Path
 # Teste prévio: flag --version
 Write-Host "[0/10] Testando flag '--version' no executavel..." -NoNewline
 $verOutput = (& $resolvedExe --version | Out-String)
-if ($verOutput -match "IPED Tools MCP v1\.\d+\.\d+" -and $verOutput -match "ipedtools\.com\.br") {
+$verMismatch = "saida sem 'IPED Tools MCP v<versao>'"
+if ($verOutput -match "IPED Tools MCP v(\S+)") { $verMismatch = Get-VersionMismatch -Reported $matches[1] -Expected $ExpectedVersion }
+if (-not $verMismatch -and $verOutput -match "ipedtools\.com\.br") {
     $firstLine = ($verOutput -split "`r?`n")[0]
     Write-Host (" PASS (" + $firstLine + ")") -ForegroundColor Green
 } else {
-    Write-Host " FAIL: $verOutput" -ForegroundColor Red; exit 1
+    Write-Host " FAIL: $verMismatch | $verOutput" -ForegroundColor Red; exit 1
 }
 
 $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -68,6 +75,9 @@ $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
 $psi.UseShellExecute = $false
 $psi.CreateNoWindow = $true
 
+# O .NET Framework cria o StandardInput com a codificacao do console; se ela for
+# UTF-8 com BOM, o BOM vai antes da primeira mensagem e o JSON chega invalido.
+[Console]::InputEncoding = New-Object System.Text.UTF8Encoding($false)
 $proc = [System.Diagnostics.Process]::Start($psi)
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $writer = New-Object System.IO.StreamWriter($proc.StandardInput.BaseStream, $utf8NoBom)
@@ -110,7 +120,7 @@ try {
         capabilities = @{}
         clientInfo = @{ name = "exe-test"; version = "1.0" }
     }
-    if ($init.result.serverInfo.name -eq "iped-tools-mcp" -and $init.result.serverInfo.version -like "1.0.1*") {
+    if ($init.result.serverInfo.name -eq "iped-tools-mcp" -and -not (Get-VersionMismatch -Reported $init.result.serverInfo.version -Expected $ExpectedVersion)) {
         Write-Host (" PASS (versao: " + $init.result.serverInfo.version + ")") -ForegroundColor Green
     } else {
         Write-Host " FAIL" -ForegroundColor Red; exit 1
@@ -135,7 +145,7 @@ try {
     $expectedBm = "Per$([char]0x00ED)cia IA"
     $bmUtf8Call = Send-RpcRequest "tools/call" @{ name = "add_to_bookmark"; arguments = @{ bookmark_name = $expectedBm; doc_ids = @(1) } }
     $bmUtf8Text = $bmUtf8Call.result.content[0].text
-    if ($statusData.connected -and $statusData.case_open -and $statusData.server_version -like "1.0.1*" -and -not $sourcesJson.Contains([char]0xFFFD) -and $bmUtf8Text.Contains($expectedBm) -and -not $bmUtf8Text.Contains([char]0xFFFD)) {
+    if ($statusData.connected -and $statusData.case_open -and -not (Get-VersionMismatch -Reported $statusData.server_version -Expected $ExpectedVersion) -and -not $sourcesJson.Contains([char]0xFFFD) -and $bmUtf8Text.Contains($expectedBm) -and -not $bmUtf8Text.Contains([char]0xFFFD)) {
         Write-Host (" PASS (Versao: " + $statusData.server_version + " | Fonte: " + $statusData.case_source_id + " | UTF-8 integro)") -ForegroundColor Green
     } else {
         Write-Host " FAIL (Status invalido ou corrupcao UTF-8 U+FFFD)" -ForegroundColor Red; exit 1

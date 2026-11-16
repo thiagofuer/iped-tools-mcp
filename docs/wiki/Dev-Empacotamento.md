@@ -6,15 +6,18 @@ O **IPED Tools MCP** é distribuído sem dependências externas de Java no host.
 
 ## 📦 1. Geração do Pacote Portátil (`.zip`)
 
-O script `scripts/package_app.ps1` orquestra a compilação Maven, o download do runtime Java embutido e a montagem da estrutura nativa:
+O script `scripts/package_app.ps1` gera o runtime Java embutido e monta a estrutura nativa a partir do jar já compilado. Compile antes:
 
 ```powershell
+mvn -DskipTests clean package
 powershell -ExecutionPolicy Bypass -File scripts\package_app.ps1
 ```
 
+A versão vem somente da `<version>` do `pom.xml`; os scripts não aceitam versão por parâmetro. O script empacota apenas `target/iped-tools-mcp-<versão>-runner.jar` da versão do pom e para com erro se esse jar não existir, mesmo que haja jars de outras versões em `target/`. Nos nomes abaixo, `<versão>` é a versão do pom.
+
 ### Artefatos Gerados:
 * `dist/IPED-Tools-MCP/` — Diretório com o executável e bibliotecas descompactadas.
-* `dist/IPED-Tools-MCP-1.0.1-windows-x64-portable.zip` — Pacote portátil compactado.
+* `dist/IPED-Tools-MCP-<versão>-windows-x64-portable.zip` — Pacote portátil compactado.
 * `dist/SHA256SUMS.txt` — Manifesto de hashes criptográficos SHA-256 gerado automaticamente.
 
 ---
@@ -29,7 +32,7 @@ powershell -ExecutionPolicy Bypass -File scripts\package_msi.ps1
 
 ### Pré-requisitos do Instalador:
 * **WiX Toolset v3.11:** O script verifica e utiliza automaticamente o WiX Toolset localizado em `tools/wix311/` no próprio repositório.
-* **Artefato Gerado:** `dist/IPED-Tools-MCP-1.0.1.msi` e atualização do `dist/SHA256SUMS.txt`.
+* **Artefato Gerado:** `dist/IPED-Tools-MCP-<versão>.msi` e atualização do `dist/SHA256SUMS.txt`.
 
 ---
 

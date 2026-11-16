@@ -23,13 +23,16 @@ if (-not $CasePath -or -not (Test-Path $CasePath)) {
 }
 $CasePath = (Resolve-Path $CasePath).Path
 
-if (-not $JarPath -or -not (Test-Path $JarPath)) {
-    $candidates = Get-ChildItem -Path "target" -Filter "iped-tools-mcp-*-runner.jar" -File
-    if ($candidates -and $candidates.Count -gt 0) {
-        $JarPath = $candidates[0].FullName
-    } else {
-        $JarPath = "target\iped-tools-mcp-1.0.1-runner.jar"
-    }
+# A versao esperada vem somente do pom.xml
+$projectRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot "version.ps1")
+$ExpectedVersion = Get-PomVersion -ProjectRoot $projectRoot
+
+if (-not $JarPath) {
+    $JarPath = Get-RunnerJarPath -ProjectRoot $projectRoot -Version $ExpectedVersion
+} elseif (-not (Test-Path $JarPath)) {
+    Write-Host "ERRO: JAR informado nao existe: $JarPath" -ForegroundColor Red
+    exit 1
 }
 
 Write-Host "==========================================================" -ForegroundColor Cyan
@@ -44,11 +47,13 @@ if (-not (Test-Path $JavaPath)) {
 
 # Teste prévio: flag --version
 Write-Host "[0/26] Testando flag '--version'..." -NoNewline
-$verOutput = & $JavaPath -jar $JarPath --version
-if ($verOutput -match "IPED Tools MCP v1\.\d+\.\d+" -and $verOutput -match "ipedtools\.com\.br") {
-    Write-Host (" PASS (" + $verOutput[0] + ")") -ForegroundColor Green
+$verOutput = (& $JavaPath -jar $JarPath --version | Out-String)
+$verMismatch = "saida sem 'IPED Tools MCP v<versao>'"
+if ($verOutput -match "IPED Tools MCP v(\S+)") { $verMismatch = Get-VersionMismatch -Reported $matches[1] -Expected $ExpectedVersion }
+if (-not $verMismatch -and $verOutput -match "ipedtools\.com\.br") {
+    Write-Host (" PASS (" + ($verOutput -split "`r?`n")[0] + ")") -ForegroundColor Green
 } else {
-    Write-Host " FAIL: $verOutput" -ForegroundColor Red; exit 1
+    Write-Host " FAIL: $verMismatch | $verOutput" -ForegroundColor Red; exit 1
 }
 
 $jvmArgs = @(
@@ -80,6 +85,9 @@ $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
 $psi.UseShellExecute = $false
 $psi.CreateNoWindow = $true
 
+# O .NET Framework cria o StandardInput com a codificacao do console; se ela for
+# UTF-8 com BOM, o BOM vai antes da primeira mensagem e o JSON chega invalido.
+[Console]::InputEncoding = New-Object System.Text.UTF8Encoding($false)
 $proc = [System.Diagnostics.Process]::Start($psi)
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $writer = New-Object System.IO.StreamWriter($proc.StandardInput.BaseStream, $utf8NoBom)
@@ -123,10 +131,11 @@ try {
         capabilities = @{}
         clientInfo = @{ name = "mcp-test-suite"; version = "1.0" }
     }
-    if ($init.result.serverInfo.name -eq "iped-tools-mcp" -and $init.result.serverInfo.version -like "1.0.1*") {
+    $initMismatch = Get-VersionMismatch -Reported $init.result.serverInfo.version -Expected $ExpectedVersion
+    if ($init.result.serverInfo.name -eq "iped-tools-mcp" -and -not $initMismatch) {
         Write-Host (" PASS (versao: " + $init.result.serverInfo.version + ")") -ForegroundColor Green
     } else {
-        Write-Host (" FAIL (esperava v1.0.1*, obteve " + $init.result.serverInfo.version + ")") -ForegroundColor Red; exit 1
+        Write-Host (" FAIL (" + $initMismatch + ")") -ForegroundColor Red; exit 1
     }
 
     # 2. Handshake Initialized Notification
@@ -168,7 +177,7 @@ try {
     Write-Host "[5/15] Testando call get_server_status..." -NoNewline
     $statusCall = Send-RpcRequest "tools/call" @{ name = "get_server_status"; arguments = @{} }
     $statusData = $statusCall.result.content[0].text | ConvertFrom-Json
-    if ($statusData.connected -and $statusData.case_open -and $statusData.server_version -like "1.0.1*") {
+    if ($statusData.connected -and $statusData.case_open -and -not (Get-VersionMismatch -Reported $statusData.server_version -Expected $ExpectedVersion)) {
         Write-Host (" PASS (Versao: " + $statusData.server_version + " | Fonte: " + $statusData.case_source_id + ")") -ForegroundColor Green
     } else {
         Write-Host " FAIL" -ForegroundColor Red; exit 1

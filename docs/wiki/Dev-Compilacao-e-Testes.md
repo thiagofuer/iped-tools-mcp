@@ -23,9 +23,9 @@ Para compilar o artefato JVM executável com todas as dependências Quarkus e IP
 mvn clean package -DskipTests
 ```
 
-O artefato compilado é gerado em:
+O artefato compilado é gerado em (`<versão>` é a `<version>` do `pom.xml`):
 ```text
-target/iped-tools-mcp-1.0.1-runner.jar
+target/iped-tools-mcp-<versão>-runner.jar
 ```
 
 ---

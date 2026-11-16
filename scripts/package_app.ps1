@@ -1,6 +1,5 @@
 param(
-    [string]$JdkPath = "C:\Program Files\Java\jdk-21.0.12",
-    [string]$Version = ""
+    [string]$JdkPath = "C:\Program Files\Java\jdk-21.0.12"
 )
 
 $ErrorActionPreference = "Stop"
@@ -8,21 +7,10 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $projectRoot
 
-# Resolver versao dinamicamente do pom.xml se nao informada
-if (-not $Version) {
-    try {
-        $pomXml = [xml](Get-Content (Join-Path $projectRoot "pom.xml"))
-        $Version = $pomXml.project.version
-    } catch {
-        $Version = "1.0.1"
-    }
-}
-
-# jpackage exige formato de versao estritamente numerico (ex: 1.0.0), sem sufixos como -SNAPSHOT
-$numericVersion = ($Version -replace '-.*$', '').Trim()
-if (-not ($numericVersion -match '^\d+(\.\d+)*$')) {
-    $numericVersion = "1.0.1"
-}
+# A versao vem somente do pom.xml (sem parametro e sem valor de reserva)
+. (Join-Path $PSScriptRoot "version.ps1")
+$Version = Get-PomVersion -ProjectRoot $projectRoot
+$numericVersion = Get-NumericVersion -Version $Version
 
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host " IPED Tools MCP - Pipeline de Empacotamento Nativo Windows" -ForegroundColor Cyan
@@ -74,19 +62,8 @@ $inputDir = Join-Path $projectRoot "target\package-input"
 if (Test-Path $inputDir) { Remove-Item -Recurse -Force $inputDir }
 New-Item -ItemType Directory -Path $inputDir | Out-Null
 
-$expectedJar = Join-Path $projectRoot "target\iped-tools-mcp-$Version-runner.jar"
-if (Test-Path $expectedJar) {
-    $runnerJar = $expectedJar
-    $runnerJarName = "iped-tools-mcp-$Version-runner.jar"
-} else {
-    $candidates = Get-ChildItem -Path (Join-Path $projectRoot "target") -Filter "iped-tools-mcp-*-runner.jar" -File
-    if ($candidates -and $candidates.Count -gt 0) {
-        $runnerJar = $candidates[0].FullName
-        $runnerJarName = $candidates[0].Name
-    } else {
-        throw "Runner JAR não encontrado em target\. Execute 'mvn package -DskipTests' primeiro."
-    }
-}
+$runnerJar = Get-RunnerJarPath -ProjectRoot $projectRoot -Version $Version
+$runnerJarName = Split-Path -Leaf $runnerJar
 Write-Host "  -> Utilizando runner JAR: $runnerJarName" -ForegroundColor Cyan
 Copy-Item $runnerJar -Destination (Join-Path $inputDir $runnerJarName)
 
