@@ -8,7 +8,7 @@ O IPED Tools MCP oferece duas modalidades de distribuição para Windows: o **In
 
 Ideal para estações de trabalho e gabinetes de perícia.
 
-1. Baixe o arquivo `IPED-Tools-MCP-1.0.1.msi` do portal oficial [www.mcp.ipedtools.com.br](https://www.mcp.ipedtools.com.br).
+1. Baixe o arquivo `IPED-Tools-MCP-<versão>.msi` do portal oficial [www.mcp.ipedtools.com.br](https://www.mcp.ipedtools.com.br). `<versão>` é o número da versão publicada (ex.: `X.Y.Z`); use o nome exato do arquivo que aparece no portal.
 2. Execute o instalador com privilégios de administrador.
 3. Siga o assistente de instalação padrão do Windows.
 4. Por padrão, o executável é instalado em:
@@ -23,7 +23,7 @@ Ideal para estações de trabalho e gabinetes de perícia.
 
 Indicado para execução direta sem necessidade de privilégios de administrador, pendrives ou unidades externas de perícia.
 
-1. Baixe o arquivo `IPED-Tools-MCP-1.0.1-windows-x64-portable.zip` do portal oficial.
+1. Baixe o arquivo `IPED-Tools-MCP-<versão>-windows-x64-portable.zip` do portal oficial.
 2. Descompacte o arquivo `.zip` na pasta de sua preferência (exemplo: `C:\Ferramentas\IPED-Tools-MCP\`).
 3. A estrutura da pasta extraída conterá:
    * `IPED-Tools-MCP.exe` — Executável principal unificado (GUI e MCP STDIO).
@@ -42,10 +42,10 @@ Para confirmar se a instalação foi bem-sucedida, abra o Prompt de Comando (`cm
 
 *(Ou utilize o caminho da sua pasta portátil, por exemplo: `"C:\Ferramentas\IPED-Tools-MCP\IPED-Tools-MCP.exe" --version`)*
 
-A saída esperada deve exibir a versão instalada, data do build e runtime Java:
+A saída esperada deve exibir a versão instalada (no lugar de `X.Y.Z`), a data do build e o runtime Java:
 
 ```text
-IPED Tools MCP v1.0.1 (build 2026-10-10, Java 21, IPED Core 4.4.0)
+IPED Tools MCP vX.Y.Z (build AAAA-MM-DD hh:mm:ss, Java 21, IPED Core X.Y.Z)
 Website: https://www.mcp.ipedtools.com.br
 Codigo-fonte: https://github.com/thiagofuer/iped-tools-mcp
 Licenca: GPLv3 / Open Source

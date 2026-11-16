@@ -5,7 +5,9 @@ import java.util.Properties;
 
 /**
  * Centralized application metadata and runtime version provider.
- * Reads version properties generated during the Maven build lifecycle.
+ * The version is declared only in pom.xml and reaches the runtime through
+ * the Maven-filtered /version.properties resource. A build whose resources
+ * were not filtered reports {@link #DEV_VERSION} instead of a release number.
  */
 public final class VersionInfo {
 
@@ -15,33 +17,41 @@ public final class VersionInfo {
     public static final String GITHUB_REPO = "https://github.com/thiagofuer/iped-tools-mcp";
     public static final String LICENSE = "GPLv3 / Open Source";
 
-    private static String version = "1.0.1";
-    private static String buildTimestamp = "2026-09-29";
-    private static String ipedVersion = "4.4.0";
+    /** Version reported when version.properties was not filtered by Maven. */
+    public static final String DEV_VERSION = "dev";
+    /** Build date and IPED version reported when version.properties was not filtered. */
+    public static final String UNKNOWN = "desconhecida";
+
+    private static final String version;
+    private static final String buildTimestamp;
+    private static final String ipedVersion;
 
     static {
+        Properties props = new Properties();
         try (InputStream is = VersionInfo.class.getResourceAsStream("/version.properties")) {
             if (is != null) {
-                Properties props = new Properties();
                 props.load(is);
-                String ver = props.getProperty("application.version");
-                if (ver != null && !ver.isBlank() && !ver.startsWith("${")) {
-                    version = ver.trim();
-                }
-                String bTime = props.getProperty("application.build.timestamp");
-                if (bTime != null && !bTime.isBlank() && !bTime.startsWith("${")) {
-                    buildTimestamp = bTime.trim();
-                }
-                String ipedVer = props.getProperty("iped.core.version");
-                if (ipedVer != null && !ipedVer.isBlank() && !ipedVer.startsWith("${")) {
-                    ipedVersion = ipedVer.trim();
-                }
             }
         } catch (Exception ignored) {
         }
+        version = resolve(props, "application.version", DEV_VERSION);
+        buildTimestamp = resolve(props, "application.build.timestamp", UNKNOWN);
+        ipedVersion = resolve(props, "iped.core.version", UNKNOWN);
     }
 
     private VersionInfo() {
+    }
+
+    /**
+     * Returns the filtered value of a property, or the given fallback when the
+     * property is missing, blank or still holds an unfiltered Maven placeholder.
+     */
+    static String resolve(Properties props, String key, String fallback) {
+        String value = props.getProperty(key);
+        if (value == null || value.isBlank() || value.contains("${")) {
+            return fallback;
+        }
+        return value.trim();
     }
 
     public static String getVersion() {

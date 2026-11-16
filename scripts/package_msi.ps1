@@ -1,6 +1,5 @@
 param(
-    [string]$JdkPath = "C:\Program Files\Java\jdk-21.0.12",
-    [string]$Version = ""
+    [string]$JdkPath = "C:\Program Files\Java\jdk-21.0.12"
 )
 
 $ErrorActionPreference = "Stop"
@@ -8,21 +7,10 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $projectRoot
 
-# Resolver versao dinamicamente do pom.xml se nao informada
-if (-not $Version) {
-    try {
-        $pomXml = [xml](Get-Content (Join-Path $projectRoot "pom.xml"))
-        $Version = $pomXml.project.version
-    } catch {
-        $Version = "1.0.1"
-    }
-}
-
-# jpackage exige formato de versao estritamente numerico (ex: 1.0.0), sem sufixos como -SNAPSHOT
-$numericVersion = ($Version -replace '-.*$', '').Trim()
-if (-not ($numericVersion -match '^\d+(\.\d+)*$')) {
-    $numericVersion = "1.0.1"
-}
+# A versao vem somente do pom.xml (sem parametro e sem valor de reserva)
+. (Join-Path $PSScriptRoot "version.ps1")
+$Version = Get-PomVersion -ProjectRoot $projectRoot
+$numericVersion = Get-NumericVersion -Version $Version
 
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host " IPED Tools MCP - Gerador de Instalador Windows (.msi)" -ForegroundColor Cyan
@@ -97,7 +85,7 @@ $appExe = Join-Path $appImageDir "IPED-Tools-MCP.exe"
 # 2. Verificar integridade da imagem da aplicacao (app-image)
 if (-not (Test-Path $appExe)) {
     Write-Host "[1/2] Imagem da aplicação não encontrada em $appImageDir. Executando scripts\package_app.ps1..." -ForegroundColor Yellow
-    & (Join-Path $PSScriptRoot "package_app.ps1") -JdkPath $JdkPath -Version $Version
+    & (Join-Path $PSScriptRoot "package_app.ps1") -JdkPath $JdkPath
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $appExe)) {
         throw "Falha ao gerar imagem da aplicação via package_app.ps1."
     }

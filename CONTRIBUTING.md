@@ -61,6 +61,14 @@ O projeto adota a convenção de **Versionamento Semântico** no formato `MAJOR.
 - O arquivo [`pom.xml`](pom.xml) é a **única fonte da verdade** para a versão do produto.
 - Em desenvolvimento contínuo na branch `develop`, a versão deve conter o sufixo `-SNAPSHOT` (ex: `1.1.0-SNAPSHOT`).
 - Nas branches `release/*` ou `hotfix/*`, o sufixo `-SNAPSHOT` é removido (ex: `1.0.0`) antes da compilação e do merge final em `main`.
+- O número da versão não é repetido em nenhum outro arquivo: o código lê a versão do `version.properties` gerado pelo Maven, os scripts de empacotamento e de teste leem o `pom.xml`, a wiki usa `<versão>` nos exemplos e o badge do README mostra a última tag `vX.Y.Z`.
+- Para trocar a versão, altere somente o `pom.xml`:
+
+  ```bash
+  mvn versions:set "-DnewVersion=X.Y.Z" "-DgenerateBackupPoms=false"
+  ```
+
+  As aspas são necessárias no PowerShell, que separa no primeiro ponto um argumento como `-DnewVersion=1.1.0`. Depois recompile (`mvn clean package`). Uma build feita fora do Maven, sem a filtragem dos recursos, informa a versão `dev`.
 
 ---
 

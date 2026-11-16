@@ -10,9 +10,9 @@ Todos os binários oficiais, executáveis e instaladores do IPED Tools MCP são 
 
 👉 **[https://www.mcp.ipedtools.com.br](https://www.mcp.ipedtools.com.br)**
 
-Pacotes disponíveis para download:
-1. **Instalador Oficial Windows (`.msi`):** `IPED-Tools-MCP-1.0.1.msi` (recomendado para computadores de trabalho e estações periciais fixas).
-2. **Pacote Portátil (`.zip`):** `IPED-Tools-MCP-1.0.1-windows-x64-portable.zip` (ideal para execução a partir de unidades externas ou ambientes sem privilégios de administrador).
+Pacotes disponíveis para download (nos exemplos abaixo, `<versão>` representa o número da versão, como `X.Y.Z`; use o nome exato do arquivo publicado no portal):
+1. **Instalador Oficial Windows (`.msi`):** `IPED-Tools-MCP-<versão>.msi` (recomendado para computadores de trabalho e estações periciais fixas).
+2. **Pacote Portátil (`.zip`):** `IPED-Tools-MCP-<versão>-windows-x64-portable.zip` (ideal para execução a partir de unidades externas ou ambientes sem privilégios de administrador).
 3. **Manifesto Criptográfico:** `SHA256SUMS.txt` (contendo as assinaturas hash SHA-256 de cada arquivo).
 
 ---
@@ -23,20 +23,20 @@ Após realizar o download do arquivo desejado, abra o **PowerShell** no diretór
 
 ### Verificando o Pacote Portátil (`.zip`)
 ```powershell
-Get-FileHash -Algorithm SHA256 "IPED-Tools-MCP-1.0.1-windows-x64-portable.zip"
+Get-FileHash -Algorithm SHA256 "IPED-Tools-MCP-<versão>-windows-x64-portable.zip"
 ```
 
 ### Verificando o Instalador Windows (`.msi`)
 ```powershell
-Get-FileHash -Algorithm SHA256 "IPED-Tools-MCP-1.0.1.msi"
+Get-FileHash -Algorithm SHA256 "IPED-Tools-MCP-<versão>.msi"
 ```
 
 ### Comparação com o Manifesto Oficial
 Compare a saída hexadecimal com o conteúdo publicado em `SHA256SUMS.txt`:
 
 ```text
-<hash-sha256>  IPED-Tools-MCP-1.0.1-windows-x64-portable.zip
-<hash-sha256>  IPED-Tools-MCP-1.0.1.msi
+<hash-sha256>  IPED-Tools-MCP-<versão>-windows-x64-portable.zip
+<hash-sha256>  IPED-Tools-MCP-<versão>.msi
 ```
 
 Se o hash gerado coincidir perfeitamente com o valor de referência, a integridade do pacote está confirmada e o software pode ser instalado com segurança.
