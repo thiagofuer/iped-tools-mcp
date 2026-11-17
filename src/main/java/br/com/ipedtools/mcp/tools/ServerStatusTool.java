@@ -1,10 +1,12 @@
 package br.com.ipedtools.mcp.tools;
 
+import java.io.File;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import br.com.ipedtools.mcp.VersionInfo;
+import br.com.ipedtools.mcp.diagnostics.LogFiles;
 import br.com.ipedtools.mcp.service.IpedCoreService;
 import io.quarkiverse.mcp.server.Tool;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -21,6 +23,8 @@ public class ServerStatusTool {
             - CALL THIS TOOL FIRST: It confirms that the IPED MCP server is running and tells you whether a case is loaded.
             - If case_open is false, no other tools will work until a case folder is loaded by the examiner.
             - If case_open is true, case_source_id contains the active case identifier (e.g. 'caso1') needed for other tools.
+            - If case_open is false and last_error is present, the last attempt to open the case failed: tell the user
+              the failed step and message, and that the details are in the log file shown in log_file.
             """
     )
     public Map<String, Object> getServerStatus() {
@@ -56,8 +60,14 @@ public class ServerStatusTool {
         } else {
             response.put("sources_count", 0);
             response.put("sources", List.of());
+            Map<String, Object> lastError = service.getLastOpenError();
+            if (lastError != null) {
+                response.put("last_error", lastError);
+            }
         }
 
+        File logFile = LogFiles.getActiveFile();
+        response.put("log_file", logFile != null ? logFile.getAbsolutePath() : null);
         return response;
     }
 }

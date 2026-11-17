@@ -655,7 +655,11 @@ No chat com o modelo, chame o prompt '/start_case' para carregar automaticamente
         configJsonArea.setCaretPosition(0);
     }
 
+    private static final org.slf4j.Logger WINDOW_LOGGER = org.slf4j.LoggerFactory.getLogger(MainWindow.class);
+
     public void log(String message) {
+        // Everything shown in the window also goes to the GUI log file (~/.iped-tools-mcp/logs)
+        WINDOW_LOGGER.info(message);
         String timestamp = timeFormat.format(new Date());
         logArea.append("[" + timestamp + "] " + message + "\n");
         logArea.setCaretPosition(logArea.getDocument().getLength());

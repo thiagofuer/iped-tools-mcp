@@ -84,6 +84,7 @@ $jvmOptions = @(
     "--java-options", "-Dstdout.encoding=UTF-8",
     "--java-options", "-Dstderr.encoding=UTF-8",
     "--java-options", "-Dstdin.encoding=UTF-8",
+    "--java-options", "-Djava.util.logging.manager=org.jboss.logmanager.LogManager",
     "--java-options", "--add-opens=java.base/java.lang=ALL-UNNAMED",
     "--java-options", "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
     "--java-options", "--add-opens=java.base/java.math=ALL-UNNAMED",
