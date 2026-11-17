@@ -534,6 +534,38 @@ public class McpToolsTest {
         Map<String, Object> docRes = tool.searchSimilarDocuments(imageId, 50, 10);
         assertNotNull(docRes);
         assertEquals(imageId, docRes.get("reference_id"));
+
+        // Reference marking and counts without the reference
+        assertTrue(imgRes.containsKey("similar_found") && imgRes.containsKey("reference_in_results"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> imgItems = (List<Map<String, Object>>) imgRes.get("items");
+        assertTrue(imgItems.stream().anyMatch(i -> Boolean.TRUE.equals(i.get("is_reference"))));
+        if (!faceRes.containsKey("error")) {
+            assertTrue(faceRes.containsKey("similar_found") && faceRes.containsKey("reference_in_results"));
+        }
+        if (!docRes.containsKey("error")) {
+            assertTrue(docRes.containsKey("similar_found") && docRes.containsKey("reference_in_results"));
+        }
+    }
+
+    @Test
+    void testSimilarityDescriptionsGuideScoreAndReference() throws Exception {
+        String images = String.join(" ", SimilaritySearchTool.class
+                .getMethod("searchSimilarImages", int.class, Float.class, Integer.class)
+                .getAnnotation(io.quarkiverse.mcp.server.Tool.class).description().split("\\s+"));
+        for (String expected : List.of("ranked by score", "100 means an identical image", "IPED default",
+                "high min_score (for example 80)", "icons are poor references", "is_reference=true",
+                "Report similar_found")) {
+            assertTrue(images.contains(expected), "search_similar_images sem a orientação: " + expected);
+        }
+        String faces = String.join(" ", SimilaritySearchTool.class
+                .getMethod("searchSimilarFaces", int.class, Float.class, Integer.class)
+                .getAnnotation(io.quarkiverse.mcp.server.Tool.class).description().split("\\s+"));
+        assertTrue(faces.contains("is_reference=true") && faces.contains("Report similar_found"));
+        String docs = String.join(" ", SimilaritySearchTool.class
+                .getMethod("searchSimilarDocuments", int.class, Integer.class, Integer.class)
+                .getAnnotation(io.quarkiverse.mcp.server.Tool.class).description().split("\\s+"));
+        assertTrue(docs.contains("similar_found"));
     }
 
     @Test

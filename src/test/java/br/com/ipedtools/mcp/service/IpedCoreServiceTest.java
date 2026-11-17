@@ -492,6 +492,22 @@ public class IpedCoreServiceTest {
         assertTrue(imgSim.containsKey("total_found"));
         assertTrue(imgSim.containsKey("items"));
 
+        // The reference is marked and does not count as an occurrence
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> imgItems = (List<Map<String, Object>>) imgSim.get("items");
+        assertEquals(true, imgSim.get("reference_in_results"), "a imagem de referência deve estar entre os resultados");
+        assertEquals((int) imgSim.get("total_found") - 1, imgSim.get("similar_found"));
+        long marked = imgItems.stream().filter(i -> Boolean.TRUE.equals(i.get("is_reference"))).count();
+        assertEquals(1, marked, "só a referência vem marcada");
+        imgItems.stream().filter(i -> Boolean.TRUE.equals(i.get("is_reference")))
+                .forEach(i -> assertEquals(imageId, i.get("id")));
+        assertTrue(imgItems.stream().allMatch(i -> i.containsKey("is_reference")));
+
+        // reference_in_results is computed before the limit
+        Map<String, Object> onePage = service.searchSimilarImages(imageId, 1.0f, 1);
+        assertEquals(true, onePage.get("reference_in_results"));
+        assertEquals(imgSim.get("similar_found"), onePage.get("similar_found"));
+
         // 2. Similar faces
         Map<String, Object> faceSim = service.searchSimilarFaces(imageId, 50.0f, 10);
         assertNotNull(faceSim);
@@ -503,6 +519,31 @@ public class IpedCoreServiceTest {
         assertNotNull(docSim);
         assertEquals(imageId, docSim.get("reference_id"));
         assertTrue(docSim.containsKey("total_found") || docSim.containsKey("error"));
+        if (!docSim.containsKey("error")) {
+            assertEquals(docSim.get("total_found"), docSim.get("similar_found"),
+                    "a busca de documentos já exclui a referência");
+            assertEquals(false, docSim.get("reference_in_results"));
+        }
+    }
+
+    @Test
+    void testReferenceMarkingAndCounts() {
+        List<Map<String, Object>> matches = new java.util.ArrayList<>();
+        for (int id : new int[] { 7, 3, 9 }) {
+            Map<String, Object> m = new java.util.LinkedHashMap<>();
+            m.put("id", id);
+            matches.add(m);
+        }
+        IpedCoreService.markReference(matches, 3);
+        assertEquals(List.of(false, true, false), matches.stream().map(m -> m.get("is_reference")).toList());
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        IpedCoreService.putReferenceCounts(result, matches, 3);
+        assertEquals(3, result.get("total_found"));
+        assertEquals(true, result.get("reference_in_results"));
+        assertEquals(2, result.get("similar_found"));
+        IpedCoreService.putReferenceCounts(result, matches, 42);
+        assertEquals(false, result.get("reference_in_results"));
+        assertEquals(3, result.get("similar_found"));
     }
 
     @Test

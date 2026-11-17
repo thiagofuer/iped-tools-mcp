@@ -166,9 +166,14 @@ As três ferramentas acima usam o mesmo modelo de eventos, derivado somente das 
 * **Propósito:** Recupera a miniatura gráfica de imagens e vídeos codificada em Base64 JPEG como bloco multimodal do protocolo MCP.
 * **Exemplo de Pergunta:** *"Exiba a miniatura visual da foto ID 25830."*
 
+> 📌 **Referência sempre do caso:** as buscas de similaridade partem de um item já processado no caso (`item_id`), usando as características calculadas pelo IPED no processamento. Não há busca a partir de imagem externa ao caso; para isso, inclua a imagem num processamento do IPED e busque a partir do item. A busca de faces só encontra resultados se o caso foi processado com o reconhecimento facial habilitado, e a de imagens, com a similaridade de imagens habilitada.
+
+> 🎯 **Referência e contagem:** nas respostas, o item de referência vem marcado com `is_reference: true` e não conta como ocorrência. O campo `similar_found` traz o total de similares sem a referência; `total_found` inclui a referência quando ela aparece. A busca de documentos já não devolve o documento de referência.
+
 ### `search_similar_images`
 * **Propósito:** Realiza busca reversa por imagens visualmente semelhantes através de hashes perceptuais (pHash).
-* **Exemplo de Pergunta:** *"Localize imagens visualmente parecidas com a foto ID 1200."*
+* **Como ler a pontuação:** os resultados vêm ordenados por pontuação, de 1 a 100, e o topo é o que importa. 100 indica imagem idêntica (mesmo hash) ou quase idêntica; compare o `hash` com o da referência. O mínimo padrão (`min_score` 1.0) é o mesmo do IPED e traz tudo, ordenado. Para ficar só com cópias e variações próximas, peça um mínimo alto, por exemplo 80. Ícones e imagens muito pequenas ou lisas são más referências: muitos ícones sem relação pontuam perto de 100.
+* **Exemplo de Pergunta:** *"Localize imagens visualmente parecidas com a foto ID 1200."* · *"Só cópias quase idênticas da foto ID 1200, com pontuação mínima 80."*
 
 ### `search_similar_faces`
 * **Propósito:** Localiza outras fotos no caso que contenham rostos similares ao rosto identificado na foto de referência via redes de reconhecimento facial.

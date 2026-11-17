@@ -1800,13 +1800,14 @@ public class IpedCoreService {
         }
 
         matches.sort((a, b) -> Float.compare(((Number) b.get("similarity_score")).floatValue(), ((Number) a.get("similarity_score")).floatValue()));
+        markReference(matches, itemId);
         List<Map<String, Object>> returnedList = matches.stream().limit(maxLimit).collect(Collectors.toList());
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("reference_id", itemId);
         result.put("reference_name", refItem.getName());
         result.put("min_score", threshold);
-        result.put("total_found", matches.size());
+        putReferenceCounts(result, matches, itemId);
         result.put("returned_count", returnedList.size());
         result.put("items", returnedList);
         return result;
@@ -1874,13 +1875,14 @@ public class IpedCoreService {
         }
 
         matches.sort((a, b) -> Float.compare(((Number) b.get("similarity_score")).floatValue(), ((Number) a.get("similarity_score")).floatValue()));
+        markReference(matches, itemId);
         List<Map<String, Object>> returnedList = matches.stream().limit(maxLimit).collect(Collectors.toList());
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("reference_id", itemId);
         result.put("reference_name", refImage.getName());
         result.put("min_score", targetMinScore);
-        result.put("total_found", matches.size());
+        putReferenceCounts(result, matches, itemId);
         result.put("returned_count", returnedList.size());
         result.put("items", returnedList);
         return result;
@@ -1936,16 +1938,35 @@ public class IpedCoreService {
             }
         }
 
+        markReference(matches, itemId);
         List<Map<String, Object>> returnedList = matches.stream().limit(maxLimit).collect(Collectors.toList());
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("reference_id", itemId);
         result.put("reference_name", refDoc.getName());
         result.put("match_percent", percent);
-        result.put("total_found", matches.size());
+        putReferenceCounts(result, matches, itemId);
         result.put("returned_count", returnedList.size());
         result.put("items", returnedList);
         return result;
+    }
+
+    /** Marks the reference item among similarity results ({@code is_reference}). */
+    static void markReference(List<Map<String, Object>> matches, int referenceId) {
+        for (Map<String, Object> m : matches) {
+            m.put("is_reference", Integer.valueOf(referenceId).equals(m.get("id")));
+        }
+    }
+
+    /**
+     * Adds {@code total_found}, {@code reference_in_results} and {@code similar_found} (similar items without the
+     * reference), computed over all results above the threshold, before the limit is applied.
+     */
+    static void putReferenceCounts(Map<String, Object> result, List<Map<String, Object>> matches, int referenceId) {
+        boolean referenceIn = matches.stream().anyMatch(m -> Integer.valueOf(referenceId).equals(m.get("id")));
+        result.put("total_found", matches.size());
+        result.put("reference_in_results", referenceIn);
+        result.put("similar_found", matches.size() - (referenceIn ? 1 : 0));
     }
 
     private Map<String, Object> buildSimilarItemEntry(int id, float score) {
