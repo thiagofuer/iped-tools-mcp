@@ -1865,49 +1865,18 @@ public class IpedCoreService {
             throw new IllegalArgumentException("Item com ID " + itemId + " não encontrado no caso ativo.");
         }
 
-        byte[] thumbBytes = item.getThumb();
-        BufferedImage image = null;
-
-        if (thumbBytes != null && thumbBytes.length > 0) {
-            try (ByteArrayInputStream bais = new ByteArrayInputStream(thumbBytes)) {
-                image = ImageIO.read(bais);
-            } catch (Exception e) {
-                LOGGER.debug("Erro ao decodificar thumbnail em cache do item {}: {}", itemId, e.getMessage());
-            }
-        }
-
-        // Fallback 1: try reading directly from item stream (if image or document)
-        if (image == null) {
-            try (InputStream is = item.getBufferedInputStream()) {
-                if (is != null) {
-                    image = ImageIO.read(is);
-                }
-            } catch (Exception e) {
-                LOGGER.debug("Erro ao ler imagem original do item {}: {}", itemId, e.getMessage());
-            }
-        }
-
-        // Fallback 2: try viewFile
-        if (image == null && item.getViewFile() != null && item.getViewFile().exists()) {
-            try {
-                image = ImageIO.read(item.getViewFile());
-            } catch (Exception e) {
-                LOGGER.debug("Erro ao ler viewFile do item {}: {}", itemId, e.getMessage());
-            }
-        }
-
-        if (image == null) {
+        File viewFile = item.getViewFile();
+        ItemImageLoader.Loaded loaded = ItemImageLoader.load(item.getThumb(), item::getBufferedInputStream,
+                viewFile, maxDim);
+        if (loaded == null) {
             throw new IllegalStateException("O item ID " + itemId + " (" + item.getName() + ") não possui miniatura visual pré-computada nem pôde ser decodificado como imagem.");
         }
-
-        int targetMax = maxDim > 0 ? Math.min(maxDim, 2048) : 512;
+        BufferedImage image = loaded.image();
         int origW = image.getWidth();
         int origH = image.getHeight();
 
         // Ensure RGB color space for clean JPEG output without alpha artifacts
-        if (origW > targetMax || origH > targetMax) {
-            image = ImageUtil.resizeImage(image, targetMax, targetMax, BufferedImage.TYPE_INT_RGB);
-        } else if (image.getType() != BufferedImage.TYPE_INT_RGB) {
+        if (image.getType() != BufferedImage.TYPE_INT_RGB) {
             BufferedImage rgb = new BufferedImage(origW, origH, BufferedImage.TYPE_INT_RGB);
             Graphics2D g2d = rgb.createGraphics();
             try {
@@ -1932,6 +1901,13 @@ public class IpedCoreService {
         res.put("width", image.getWidth());
         res.put("height", image.getHeight());
         res.put("size_bytes", jpegBytes.length);
+        res.put("source", loaded.source());
+        if (loaded.originalWidth() > 0) {
+            res.put("original_width", loaded.originalWidth());
+            res.put("original_height", loaded.originalHeight());
+        }
+        res.put("requested_max_dimension", ItemImageLoader.target(maxDim));
+        res.put("thumbnail_fallback", loaded.thumbnailFallback());
         res.put("base64", base64);
         return res;
     }
