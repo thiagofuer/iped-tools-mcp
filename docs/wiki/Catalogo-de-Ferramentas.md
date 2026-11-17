@@ -168,8 +168,10 @@ As três ferramentas acima usam o mesmo modelo de eventos, derivado somente das 
 ## 8. Análise Multimodal e Similaridade
 
 ### `get_item_thumbnail`
-* **Propósito:** Recupera a miniatura gráfica de imagens e vídeos codificada em Base64 JPEG como bloco multimodal do protocolo MCP.
-* **Exemplo de Pergunta:** *"Exiba a miniatura visual da foto ID 25830."*
+* **Propósito:** Devolve a imagem do item em JPEG, como bloco multimodal do protocolo MCP, no tamanho pedido em `max_dimension`: padrão de 512 px, máximo de 2048 px, sem ampliar.
+* **Resolução:** a miniatura gravada pelo IPED costuma ter só 256 px. Quando o tamanho pedido é maior, a imagem vem do arquivo original, com a orientação EXIF aplicada. Para ler texto pequeno (documentos fotografados, comprovantes, capturas de tela), a IA pede de 1536 a 2048 px.
+* **Origem:** o texto que acompanha a imagem informa a origem (original, arquivo de visualização ou miniatura do IPED) e o tamanho original. Quando o original não pode ser decodificado (por exemplo, HEIC), vem a miniatura, com esse aviso.
+* **Exemplo de Pergunta:** *"Exiba a miniatura visual da foto ID 25830."* ou *"Mostre a imagem ID 3021 em alta resolução para eu ler o documento."*
 
 > 📌 **Referência sempre do caso:** as buscas de similaridade partem de um item já processado no caso (`item_id`), usando as características calculadas pelo IPED no processamento. Não há busca a partir de imagem externa ao caso; para isso, inclua a imagem num processamento do IPED e busque a partir do item. A busca de faces só encontra resultados se o caso foi processado com o reconhecimento facial habilitado, e a de imagens, com a similaridade de imagens habilitada.
 
