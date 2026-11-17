@@ -103,19 +103,21 @@ O IPED Tools MCP exige que a pasta selecionada seja a raiz de um caso já proces
 
 ---
 
-## ❓ 6. Alertas no log: "no jep in java.library.path"
+## ❓ 6. Alertas no log: "JEP not found" e `UnsatisfiedLinkError` do JEP
 
-Ao inspecionar o log, você poderá ver mensagens como:
+Ao inspecionar o log, você verá mensagens como:
 ```text
-java.lang.UnsatisfiedLinkError: no jep in java.library.path
+INFO  [br.co.ip.mc.se.PythonRuntimeGuard] Python embutido do IPED desativado: o MCP não executa tarefas de processamento. ...
+java.lang.UnsatisfiedLinkError: Can't load library: ...\iped-tools-mcp-python-disabled\jep.dll
 ERROR [ip.pa.py.PythonParser] JEP não encontrado, todos os módulos python foram desligados.
 ```
 
-* **Essas mensagens são normais quando o JEP não está instalado:**
-  1. O protocolo MCP STDIO envia toda a saída de log interno para o canal de erros (`stderr`) para não poluir o canal de dados (`stdout`). O cliente de IA captura o `stderr` e registra no log.
-  2. O IPED Core tenta carregar a biblioteca nativa JEP (Java Embedded Python). Se o ambiente não possuir o JEP configurado no Windows, o IPED simplesmente desliga os módulos opcionais em Python e segue funcionando normalmente com todos os parsers nativos, Lucene, Tika e Sleuthkit.
-  3. Logo depois, o log mostra `[abertura do caso] fim: configurações do IPED` e `"Caso carregado com sucesso"`, confirmando que o servidor está pronto para responder.
-* **Atenção:** se o log terminar em `[abertura do caso] início: configurações do IPED`, sem o `fim:`, o processo morreu durante a carga das configurações do IPED. Uma causa possível é a carga de uma instalação de Python ou de JEP presente no PATH. Confira as pastas listadas no cabeçalho de diagnóstico e envie o log e os `hs_err_pid*.log` ao suporte.
+* **Essas mensagens são esperadas:**
+  1. O MCP só lê casos já processados e não precisa de Python. Por isso, antes de carregar as configurações do IPED, ele desativa o Python embutido do IPED (JEP), apontando a biblioteca para um arquivo que não existe.
+  2. O IPED registra a falha do JEP, desliga os módulos em Python e segue normalmente com os parsers nativos, Lucene, Tika e Sleuthkit.
+  3. Logo depois, o log mostra `[abertura do caso] fim: configurações do IPED` e `Caso carregado com sucesso`, confirmando que o servidor está pronto.
+* **Python instalado na máquina não afeta o MCP:** instalações de Python ou do IPED no PATH, `PYTHONHOME` ou `PYTHONPATH` não são usadas. Os resultados que o IPED gravou no caso, como faces, similaridade de imagens, transcrições, OCR e detecções de IA, continuam disponíveis.
+* **Versões anteriores:** sem essa desativação, um Python de outra versão no ambiente podia travar a abertura do caso. O log parava em `[abertura do caso] início: configurações do IPED`, sem o `fim:`, e o cliente acabava fechando a conexão. Se você vê esse sintoma, atualize o IPED Tools MCP. Se ele persistir, envie o log e os `hs_err_pid*.log` ao suporte.
 * As antigas mensagens `main ERROR Unrecognized format specifier [d]` não aparecem mais a partir desta versão.
 
 ---
