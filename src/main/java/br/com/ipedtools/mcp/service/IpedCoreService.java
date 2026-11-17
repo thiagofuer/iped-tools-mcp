@@ -218,6 +218,9 @@ public class IpedCoreService {
         this.caseDirectory = caseDir;
         this.sourceId = caseDir.getName();
 
+        // The MCP needs no Python: keep IPED from starting JEP with whatever Python the environment offers.
+        PythonRuntimeGuard.disable();
+
         LOGGER.info("Carregando configurações do caso: {}", caseDir.getAbsolutePath());
         try {
             caseStep("configurações do IPED", () -> {
