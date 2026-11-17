@@ -52,7 +52,9 @@ import iped.engine.search.SimilarFacesSearch;
 import iped.engine.search.SimilarImagesSearch;
 import iped.engine.task.ParsingTask;
 import iped.engine.task.similarity.ImageSimilarityTask;
+import iped.parsers.ocr.OCRParser;
 import iped.parsers.standard.StandardParser;
+import iped.properties.ExtraProperties;
 import iped.search.SearchResult;
 import iped.utils.ImageUtil;
 
@@ -80,6 +82,10 @@ public class IpedCoreService {
 
     private IPEDSource ipedSource;
     private File caseDirectory;
+    /** OCR text stored by IPED processing in the open case, read-only. */
+    private OcrTextStore ocrStore;
+    private static final java.util.concurrent.atomic.AtomicBoolean PARSING_OPTIONS_APPLIED =
+            new java.util.concurrent.atomic.AtomicBoolean();
     private String sourceId = "caso1";
     private long lastActiveCaseFileCheck = 0;
     private long lastActiveCaseFileModTime = 0;
@@ -234,6 +240,8 @@ public class IpedCoreService {
                 return null;
             });
 
+            applyParsingOptions();
+
             // The QueryBuilder caches numeric PointsConfig per case instance the first time a query is parsed,
             // which happens inside the IPEDSource constructor before it loads metadataTypes.txt. Loading the
             // types first makes that cache include numeric extra properties (nudityScore, ocrCharCount...),
@@ -249,6 +257,7 @@ public class IpedCoreService {
 
             LOGGER.info("Inicializando IPEDSource e abrindo leitores Lucene...");
             this.ipedSource = caseStep("índice e marcadores", () -> new IPEDSource(caseDir));
+            this.ocrStore = new OcrTextStore(this.ipedSource.getModuleDir());
         } catch (Exception e) {
             this.ipedSource = null;
             this.caseDirectory = null;
@@ -287,6 +296,35 @@ public class IpedCoreService {
                 this.ipedSource = null;
                 this.caseDirectory = null;
             }
+        }
+        if (this.ocrStore != null) {
+            this.ocrStore.close();
+            this.ocrStore = null;
+        }
+    }
+
+    /**
+     * Applies the IPED parsing options of the case once, before any {@link StandardParser} exists, as the IPED
+     * SearchApp does. {@code StandardParser} keeps its Tika configuration in a static field created on first use, so
+     * a parser created earlier would ignore the case parser configuration for the whole process. IPED OCR stays
+     * disabled: on a cache miss it would run tesseract and write to the case folder. The stored OCR text is read by
+     * {@link OcrTextStore} instead.
+     */
+    private static void applyParsingOptions() {
+        if (!PARSING_OPTIONS_APPLIED.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            ParsingTask.setupParsingOptions(ConfigurationManager.get());
+        } catch (Throwable t) {
+            LOGGER.warn("Falha ao aplicar as opções de parsing do IPED (a extração de texto segue com a configuração padrão): {}",
+                    t.toString(), t);
+        }
+        System.setProperty(OCRParser.ENABLE_PROP, "false");
+        try {
+            new StandardParser(); // fixes the static Tika configuration with the options above
+        } catch (Throwable t) {
+            LOGGER.warn("Falha ao preparar o parser do IPED: {}", t.toString(), t);
         }
     }
 
@@ -692,9 +730,12 @@ public class IpedCoreService {
                 return "[Item não encontrado com o ID " + itemId + "]";
             }
 
+            // The case parsing options must exist before the first StandardParser (see applyParsingOptions).
+            applyParsingOptions();
             StandardParser parser = new StandardParser();
             ParsingTask expander = new ParsingTask(item, parser);
             expander.init(ConfigurationManager.get());
+            System.setProperty(OCRParser.ENABLE_PROP, "false"); // init re-enables it; IPED OCR never runs here
             ParseContext context = expander.getTikaContext(ipedSource);
             expander.setExtractEmbedded(false);
 
@@ -713,7 +754,7 @@ public class IpedCoreService {
                 LOGGER.debug("Erro na extração Tika para item {}: {}", itemId, e.getMessage());
             }
 
-            String fullText = baos.toString(StandardCharsets.UTF_8).trim();
+            String fullText = withStoredSections(itemId, item.getHash(), baos.toString(StandardCharsets.UTF_8).trim());
             if (fullText.isEmpty()) {
                 return "[Nenhum conteúdo textual extraído para este item]";
             }
@@ -736,6 +777,78 @@ public class IpedCoreService {
         } catch (Exception e) {
             LOGGER.error("Falha ao extrair texto do documento ID {}: {}", itemId, e.getMessage());
             return "[Erro ao extrair texto: " + e.getMessage() + "]";
+        }
+    }
+
+    static final String OCR_SECTION = "=== Texto de OCR (IPED) ===";
+    static final String TRANSCRIPT_SECTION = "=== Transcrição de áudio (IPED) ===";
+    static final String EXTRACTED_SECTION = "=== Texto extraído do arquivo ===";
+
+    /**
+     * Puts before the extracted text, in labeled sections, the OCR text and the audio transcription that IPED
+     * processing stored for the item, as the IPED "Text" tab shows them. They come first so the first page holds
+     * them even when the file yields long binary strings (audio). Read-only: OCR comes from the case OCR database
+     * and the transcription from the indexed property.
+     */
+    private String withStoredSections(int itemId, String hash, String extracted) {
+        StringBuilder sb = new StringBuilder();
+        Document doc = null;
+        try {
+            int luceneId = ipedSource.getLuceneId(itemId);
+            if (luceneId >= 0) {
+                doc = ipedSource.getReader().document(luceneId);
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Falha ao ler o documento {} do índice: {}", itemId, e.toString());
+        }
+
+        Optional<String> ocr = ocrStore != null ? ocrStore.find(hash) : Optional.empty();
+        if (ocr.isPresent()) {
+            appendSection(sb, OCR_SECTION, ocr.get());
+        } else {
+            long ocrChars = longValue(doc, OCRParser.OCR_CHAR_COUNT);
+            if (ocrChars > 0) {
+                appendSection(sb, OCR_SECTION, "[O IPED reconheceu " + ocrChars
+                        + " caracteres de OCR neste item, mas o texto não está disponível no caso]");
+            }
+        }
+
+        String transcript = doc != null ? doc.get(ExtraProperties.TRANSCRIPT_ATTR) : null;
+        if (transcript != null && !transcript.isBlank() && !extracted.contains(transcript.trim())) {
+            appendSection(sb, TRANSCRIPT_SECTION, transcript.trim());
+        }
+        if (sb.length() == 0) {
+            sb.append(extracted);
+        } else if (!extracted.isEmpty()) {
+            appendSection(sb, EXTRACTED_SECTION, extracted);
+        }
+        LOGGER.debug("Texto do item {}: extraído {} caracteres, OCR {} caracteres, transcrição {} caracteres", itemId,
+                extracted.length(), ocr.map(String::length).orElse(0), transcript != null ? transcript.length() : 0);
+        return sb.toString().trim();
+    }
+
+    private static void appendSection(StringBuilder sb, String title, String body) {
+        if (sb.length() > 0) {
+            sb.append("\n\n");
+        }
+        sb.append(title).append('\n').append(body);
+    }
+
+    private static long longValue(Document doc, String field) {
+        if (doc == null) {
+            return 0;
+        }
+        IndexableField f = doc.getField(field);
+        if (f == null) {
+            return 0;
+        }
+        try {
+            if (f.numericValue() != null) {
+                return f.numericValue().longValue();
+            }
+            return f.stringValue() != null ? (long) Double.parseDouble(f.stringValue().trim()) : 0;
+        } catch (RuntimeException e) {
+            return 0;
         }
     }
 

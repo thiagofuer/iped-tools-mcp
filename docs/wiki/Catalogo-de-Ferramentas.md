@@ -54,8 +54,13 @@ O catálogo mostra as propriedades que **existem neste caso**, lidas do índice,
 * **Exemplo de Pergunta:** *"Mostre todos os metadados técnicos e dados forenses do item ID 15420."*
 
 ### `get_document_text`
-* **Propósito:** Extrai o conteúdo textual completo de um arquivo processado pelo IPED/OCR com paginação controlada (`offset` e `max_chars`).
-* **Exemplo de Pergunta:** *"Leia os primeiros 2000 caracteres do documento ID 8412."*
+* **Propósito:** Extrai o conteúdo textual completo de um item com paginação controlada (`offset` e `max_chars`).
+* **OCR e transcrição:** a resposta começa pelo que o processamento do IPED gravou no caso, o mesmo que a aba "Texto" do IPED mostra:
+  * `=== Texto de OCR (IPED) ===`: texto reconhecido em imagens, PDFs digitalizados e imagens embutidas;
+  * `=== Transcrição de áudio (IPED) ===`: transcrição de áudios.
+
+  Depois vem `=== Texto extraído do arquivo ===`. Um item com `ocrCharCount` maior que zero ou com `audio:transcription` tem esse texto aqui. O MCP só lê o que o IPED gravou: não executa OCR nem transcrição e não grava na pasta do caso.
+* **Exemplo de Pergunta:** *"Leia os primeiros 2000 caracteres do documento ID 8412."* ou *"O que está escrito na imagem ID 3021?"*
 
 ### `list_categories`
 * **Propósito:** Lista todas as categorias de evidências catalogadas pelo IPED no caso e a contagem de itens em cada uma.
