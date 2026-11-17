@@ -98,8 +98,11 @@ public class IpedCoreService {
      * Checks if the active case was updated by another process (e.g. GUI) and reloads it dynamically.
      */
     public synchronized void syncActiveCaseIfNeeded() {
+        // With no case open, the active case is opened on demand: the throttle and the modification-time check
+        // only avoid re-reading the file while a case is already open.
+        boolean noCaseOpen = this.ipedSource == null;
         long now = System.currentTimeMillis();
-        if (now - lastActiveCaseFileCheck < 500) {
+        if (!noCaseOpen && now - lastActiveCaseFileCheck < 500) {
             return;
         }
         lastActiveCaseFileCheck = now;
@@ -109,7 +112,7 @@ public class IpedCoreService {
                 return;
             }
             long modTime = ACTIVE_CASE_FILE.lastModified();
-            if (modTime == lastActiveCaseFileModTime) {
+            if (!noCaseOpen && modTime == lastActiveCaseFileModTime) {
                 return;
             }
             lastActiveCaseFileModTime = modTime;
@@ -119,7 +122,11 @@ public class IpedCoreService {
                 File target = new File(path);
                 if (target.exists() && IPEDSource.checkIfIsCaseFolder(target)) {
                     if (this.caseDirectory == null || !this.caseDirectory.getCanonicalPath().equalsIgnoreCase(target.getCanonicalPath())) {
-                        LOGGER.info("Sincronizando caso ativo detectado via GUI/Arquivo de Estado: {}", target.getAbsolutePath());
+                        if (noCaseOpen) {
+                            LOGGER.info("Abrindo caso ativo sob demanda: {}", target.getAbsolutePath());
+                        } else {
+                            LOGGER.info("Sincronizando caso ativo detectado via GUI/Arquivo de Estado: {}", target.getAbsolutePath());
+                        }
                         openCaseInternal(target, false);
                     }
                 }
@@ -203,6 +210,11 @@ public class IpedCoreService {
                 this.caseDirectory = null;
             }
         }
+    }
+
+    /** Whether a case index is open now, without opening the active case on demand. */
+    public synchronized boolean isCaseLoaded() {
+        return this.ipedSource != null && this.ipedSource.getReader() != null;
     }
 
     public synchronized boolean isCaseOpen() {

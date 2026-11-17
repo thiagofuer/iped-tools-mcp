@@ -66,32 +66,12 @@ public class McpApplication {
         if (stdioMode) {
             // Mode A: STDIO Headless Server for LLM clients
             LOGGER.info("Iniciando IPED Tools MCP em modo STDIO...");
+            // The case index is not opened at startup: the first tool call opens the active case on demand
+            // (IpedCoreService.isCaseOpen), so an instance that is never used does not hold the case in memory.
             if (casePath != null && !casePath.isBlank()) {
-                try {
-                    File caseDir = new File(casePath);
-                    LOGGER.info("Pré-carregando caso IPED: {}", caseDir.getAbsolutePath());
-                    IpedCoreService.getInstance().openCase(caseDir);
-                } catch (Exception e) {
-                    LOGGER.error("Falha ao abrir caso no startup STDIO: {}", e.getMessage(), e);
-                    System.err.println("ERRO: Não foi possível carregar o caso especificado: " + e.getMessage());
-                }
+                registerStartupCase(casePath);
             } else {
-                LOGGER.info("Nenhum caso especificado com '--case'. Sincronizando caso ativo em segundo plano...");
-                Thread preloader = new Thread(() -> {
-                    try {
-                        IpedCoreService.getInstance().syncActiveCaseIfNeeded();
-                        if (IpedCoreService.getInstance().isCaseOpen()) {
-                            LOGGER.info("Caso ativo carregado automaticamente da GUI: {}",
-                                    IpedCoreService.getInstance().getCaseDirectory().getAbsolutePath());
-                        } else {
-                            LOGGER.warn("Nenhum caso ativo encontrado. As ferramentas aguardarão seleção posterior ou comando 'open_case'.");
-                        }
-                    } catch (Exception e) {
-                        LOGGER.debug("Erro na pré-carga assíncrona do caso: {}", e.getMessage());
-                    }
-                }, "iped-case-preloader");
-                preloader.setDaemon(true);
-                preloader.start();
+                LOGGER.info("Nenhum caso especificado com '--case'. O caso ativo será aberto na primeira chamada de ferramenta.");
             }
 
             Quarkus.run(args);
@@ -108,6 +88,40 @@ public class McpApplication {
                     LOGGER.error("Erro fatal ao abrir interface gráfica: {}", e.getMessage(), e);
                 }
             });
+        }
+    }
+
+    /**
+     * Validates the case given with {@code --case} and registers it as the active case in
+     * {@code ~/.iped-tools-mcp/active_case.txt}, without opening its index: the first tool call opens it.
+     * An invalid folder is reported on stderr and nothing is written.
+     *
+     * @return whether the case was accepted
+     */
+    public static boolean registerStartupCase(String casePath) {
+        File caseDir = new File(casePath);
+        try {
+            caseDir = caseDir.getCanonicalFile();
+        } catch (java.io.IOException ignored) {
+            caseDir = caseDir.getAbsoluteFile();
+        }
+        if (!caseDir.isDirectory() || !iped.engine.data.IPEDSource.checkIfIsCaseFolder(caseDir)) {
+            LOGGER.error("O caminho informado em '--case' não é uma pasta de caso do IPED: {}", caseDir.getAbsolutePath());
+            System.err.println("ERRO: '--case' não aponta para uma pasta de caso do IPED: " + caseDir.getAbsolutePath());
+            return false;
+        }
+        try {
+            File stateFile = IpedCoreService.ACTIVE_CASE_FILE;
+            if (stateFile.getParentFile() != null) {
+                java.nio.file.Files.createDirectories(stateFile.getParentFile().toPath());
+            }
+            java.nio.file.Files.writeString(stateFile.toPath(), caseDir.getAbsolutePath(), StandardCharsets.UTF_8);
+            LOGGER.info("Caso registrado como ativo: {}. O índice será aberto na primeira chamada de ferramenta.",
+                    caseDir.getAbsolutePath());
+            return true;
+        } catch (Exception e) {
+            LOGGER.error("Falha ao registrar o caso ativo {}: {}", caseDir.getAbsolutePath(), e.getMessage());
+            return false;
         }
     }
 

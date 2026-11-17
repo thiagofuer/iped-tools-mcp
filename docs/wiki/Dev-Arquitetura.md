@@ -97,16 +97,15 @@ sequenceDiagram
     alt args contém "--stdio"
         Note over Main: Modo Servidor MCP Headless
         Main->>Main: Redireciona System.out para stderr (stream isolation)
-        alt Informado "--case [caminho]"
-            Main->>Service: IpedCoreService.openCase(caminho)
-        else Sem "--case" (Configuração Recomendada)
-            Main->>State: Lê caso ativo salvo em disco
-            opt Caso ativo existente
-                Main->>Service: IpedCoreService.openCase(caminhoSalvo)
-            end
+        opt Informado "--case [caminho]"
+            Main->>State: Valida a pasta e grava o caminho como caso ativo (sem abrir o índice)
         end
         Main->>Quarkus: Inicia Quarkus MCP Server (stdin/stdout)
-        Note over Quarkus: Responde a requisições JSON-RPC e sincroniza caso ativo
+        Note over Quarkus: initialize e tools/list respondem sem abrir o caso
+        Quarkus->>Service: Primeira chamada de ferramenta: isCaseOpen()
+        Service->>State: Lê o caso ativo
+        Service->>Service: Abre o índice do caso (sob demanda)
+        Note over Service: O caso fica aberto até o processo terminar e acompanha trocas feitas pela GUI ou por open_case
     else Sem argumentos ou com duplo-clique
         Note over Main: Modo Configurador Gráfico
         Main->>State: Lê último caso ativo
@@ -125,6 +124,6 @@ O executável nativo suporta os seguintes parâmetros formais:
 | Parâmetro | Descrição | Comportamento Operacional |
 |---|---|---|
 | `--stdio` | Inicia o servidor em modo STDIO MCP. | Desativa a interface gráfica, isola o fluxo `stdout` para JSON-RPC e aguarda requisições na entrada padrão. |
-| `--case <caminho>` | Especifica um caso IPED fixo na inicialização. | Opcional. Quando omitido, o servidor utiliza o caso salvo em `~/.iped-tools-mcp/active_case.txt`. |
+| `--case <caminho>` | Especifica um caso IPED na inicialização. | Opcional. A pasta é validada e gravada como caso ativo em `~/.iped-tools-mcp/active_case.txt`; o índice só é aberto na primeira chamada de ferramenta. Quando omitido, o servidor usa o caso já salvo nesse arquivo. |
 | `--version`, `-v` | Exibe os dados de versão e licença. | Imprime versão, data do build, runtime Java e versão do IPED Core na saída padrão e finaliza imediatamente com código 0. |
 | `--help`, `-h` | Exibe a ajuda da linha de comando. | Lista todos os parâmetros suportados com exemplos de uso. |
