@@ -16,6 +16,8 @@ Em arquivos JSON (como `claude_desktop_config.json` ou `mcp.json`), a barra inve
 ### Causa Comum B: Processo travado em segundo plano
 Se uma sessão anterior do executável não foi finalizada pelo cliente de IA, abra o Gerenciador de Tarefas do Windows (`Ctrl+Shift+Esc`), procure por `IPED-Tools-MCP.exe` em *Detalhes* e finalize o processo.
 
+> ℹ️ **Várias instâncias são normais:** cada cliente de IA ou sessão ativa (por exemplo, o chat do Claude Desktop e cada sessão aberta da aba Code) inicia a sua própria instância do servidor, porque a comunicação por STDIO não pode ser compartilhada. Cada instância aparece como dois processos `IPED-Tools-MCP.exe`. Uma instância que ainda não recebeu nenhuma chamada não abre o caso e ocupa pouca memória; o caso só é carregado na primeira chamada de ferramenta.
+
 ---
 
 ## ❓ 2. Nenhuma ferramenta aparece listada no chat do cliente de IA
@@ -93,6 +95,6 @@ ERROR [ip.pa.py.PythonParser] JEP não encontrado, todos os módulos python fora
 
 Se o Claude Desktop fechar o canal de comunicação logo na abertura:
 1. **Verifique se o Claude Desktop foi completamente reiniciado:** Feche o Claude Desktop e abra-o novamente após salvar o arquivo `claude_desktop_config.json`.
-2. **Tempo de carregamento de casos gigantescos:** Se o caso ativo possuir centenas de milhares de documentos (ex: 700.000+ arquivos), o IPED Core pode levar 2 a 3 segundos para ler todo o índice Lucene do disco na primeira vez. Se o Claude disparar timeout antes de receber a resposta, certifique-se de que o caso já foi aberto previamente pela interface gráfica do IPED Tools MCP (o que agiliza a leitura via cache de disco do sistema operacional).
+2. **Tempo de carregamento de casos gigantescos:** o caso não é aberto ao iniciar o servidor, e sim na primeira chamada de ferramenta, que por isso leva alguns segundos a mais. Se o caso ativo possuir centenas de milhares de documentos (ex: 700.000+ arquivos), o IPED Core pode levar 2 a 3 segundos para ler o índice Lucene do disco. A conexão inicial (`initialize` e `tools/list`) não depende do caso. Se a primeira chamada estourar o tempo limite do cliente, repita-a: a leitura seguinte aproveita o cache de disco do sistema operacional.
 3. **Caminho do executável:** Certifique-se de apontar para a versão de produção instalada (`C:\Program Files\IPED Tools MCP\IPED-Tools-MCP.exe`) ou para o executável gerado na pasta portátil.
 
