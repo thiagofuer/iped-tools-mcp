@@ -61,6 +61,7 @@ $jvmArgs = @(
     "-Dstdout.encoding=UTF-8",
     "-Dstderr.encoding=UTF-8",
     "-Dstdin.encoding=UTF-8",
+    "-Djava.util.logging.manager=org.jboss.logmanager.LogManager",
     "--add-opens=java.base/java.lang=ALL-UNNAMED",
     "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
     "--add-opens=java.base/java.math=ALL-UNNAMED",

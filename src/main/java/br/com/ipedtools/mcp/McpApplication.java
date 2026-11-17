@@ -10,6 +10,9 @@ import java.nio.charset.StandardCharsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import br.com.ipedtools.mcp.diagnostics.CrashDiagnostics;
+import br.com.ipedtools.mcp.diagnostics.LogFiles;
+import br.com.ipedtools.mcp.diagnostics.StartupDiagnostics;
 import br.com.ipedtools.mcp.gui.MainWindow;
 import br.com.ipedtools.mcp.service.IpedCoreService;
 import io.quarkus.runtime.Quarkus;
@@ -63,6 +66,15 @@ public class McpApplication {
             }
         }
 
+        // Persistent log file of this mode (~/.iped-tools-mcp/logs), installed before anything else is logged.
+        File logFile = LogFiles.install(stdioMode ? LogFiles.Mode.STDIO : LogFiles.Mode.GUI);
+        StartupDiagnostics.log(stdioMode ? "STDIO" : "GUI", args, IpedCoreService.ACTIVE_CASE_FILE, logFile);
+        // STDIO logs its shutdown through the Quarkus ShutdownEvent (ShutdownLog); GUI through a JVM hook.
+        CrashDiagnostics.installHandlers(!stdioMode);
+        if (logFile != null) {
+            CrashDiagnostics.collectCrashReports(logFile.getParentFile());
+        }
+
         if (stdioMode) {
             // Mode A: STDIO Headless Server for LLM clients
             LOGGER.info("Iniciando IPED Tools MCP em modo STDIO...");
@@ -74,6 +86,9 @@ public class McpApplication {
                 LOGGER.info("Nenhum caso especificado com '--case'. O caso ativo será aberto na primeira chamada de ferramenta.");
             }
 
+            // The file handler installed above stays on the root logger after Quarkus configures logging. The Quarkus
+            // file log is not enabled: it would also receive the records Quarkus buffers before its logging setup and
+            // replays afterwards, writing the startup lines twice.
             Quarkus.run(args);
 
         } else {

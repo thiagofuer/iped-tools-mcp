@@ -56,14 +56,42 @@ Você tem duas opções simples e imediatas:
 
 ## ❓ 4. Onde consultar os logs de erro e diagnósticos?
 
-Por definição do protocolo STDIO MCP, a saída padrão (`stdout`) é reservada com exclusividade para os pacotes de comunicação JSON-RPC.
+O IPED Tools MCP grava o próprio log em arquivo, nos dois modos de execução, numa pasta fixa:
 
-**Todos os logs do sistema, avisos do Lucene, mensagens do Apache Tika e erros do Quarkus são direcionados para a saída de erros (`stderr`).**
-* **No Claude Desktop:** Os logs são salvos em:
-  ```text
-  %APPDATA%\Claude\logs\mcp*.log
-  ```
-* **No LM Studio:** Acesse a aba **MCP**, clique no servidor `iped` e visualize o painel de **Server Logs**.
+```text
+%USERPROFILE%\.iped-tools-mcp\logs\
+```
+
+| Arquivo | O que registra |
+|---|---|
+| `iped-tools-mcp-stdio.log` | O servidor iniciado pelo cliente de IA (`--stdio`): Claude Desktop, Claude Code, LM Studio, Cursor etc. |
+| `iped-tools-mcp-gui.log` | O configurador gráfico, incluindo tudo o que aparece na área de log da janela. |
+| `hs_err_pid<número>.log` | Relatório de queda da JVM. Quando o processo morre de forma abrupta, a JVM grava esse relatório na pasta temporária, e o MCP o copia para esta pasta na inicialização seguinte. |
+
+* **Rotação:** cada arquivo vai até 5 MB, e são guardados os 5 anteriores (`.1` a `.5`).
+* **Várias instâncias:** cada cliente de IA ou sessão ativa tem a sua instância, e todas gravam no mesmo arquivo. Cada linha traz o número do processo (`[pid 12345]`), para separar uma instância da outra.
+* **Cabeçalho de diagnóstico:** cada início registra um bloco entre `===== Diagnóstico de inicialização =====` e `===== Fim do diagnóstico =====`, com:
+  - versões do MCP, do IPED e do Java;
+  - modo e argumentos;
+  - diretório de trabalho e codificações;
+  - caso ativo e `iped.root`;
+  - as pastas do PATH ligadas a Python, JEP ou IPED, com as DLLs encontradas nelas.
+* **Etapas da abertura do caso:** cada etapa (configurações do IPED, tipos de metadados, índice e marcadores) registra `[abertura do caso] início:` e `fim:`, com a duração. **Se a última linha do log for um `início:` sem o `fim:` correspondente, o processo morreu dentro daquela etapa.** Nesse caso, procure também um `hs_err_pid*.log` na pasta.
+* **Pelo chat:** quando o caso não abre, a ferramenta `get_server_status` traz `last_error` (etapa, mensagem e horário) e `log_file` (o caminho do log). A IA pode informar isso diretamente.
+
+**O que o log contém e o que não contém:**
+* **Contém:** caminhos de casos, o nome do usuário do Windows (nos caminhos e no PATH), versões, IDs de itens, nomes de ferramentas, durações e mensagens de erro.
+* **Não contém:** conteúdo de itens do caso (texto, metadados das evidências), texto de consultas nem valores devolvidos pelas ferramentas.
+* **Fica só na sua máquina.** Nada é enviado automaticamente. Revise os arquivos antes de compartilhar.
+
+**Para pedir suporte**, envie a pasta `logs` inteira, ou pelo menos:
+1. o `iped-tools-mcp-stdio.log` (problema no chat) ou o `iped-tools-mcp-gui.log` (problema no configurador);
+2. todos os `hs_err_pid*.log` da pasta, se houver;
+3. o log do cliente de IA, se for problema de conexão:
+   * **No Claude Desktop:** `%APPDATA%\Claude\logs\mcp*.log`;
+   * **No LM Studio:** aba **MCP** → servidor `iped` → painel **Server Logs**.
+
+Por definição do protocolo STDIO MCP, a saída padrão (`stdout`) é reservada para os pacotes JSON-RPC. Por isso, além do arquivo, o log também vai para a saída de erros (`stderr`), que o cliente de IA captura no log dele.
 
 ---
 
@@ -75,19 +103,20 @@ O IPED Tools MCP exige que a pasta selecionada seja a raiz de um caso já proces
 
 ---
 
-## ❓ 6. Alertas no log: "no jep in java.library.path" ou "Unrecognized format specifier"
+## ❓ 6. Alertas no log: "no jep in java.library.path"
 
-Ao inspecionar o log do Claude Desktop ou LM Studio, você poderá ver mensagens como:
+Ao inspecionar o log, você poderá ver mensagens como:
 ```text
-main ERROR Unrecognized format specifier [d]
 java.lang.UnsatisfiedLinkError: no jep in java.library.path
 ERROR [ip.pa.py.PythonParser] JEP não encontrado, todos os módulos python foram desligados.
 ```
 
-* **Essas mensagens são completamente normais e inofensivas:**
+* **Essas mensagens são normais quando o JEP não está instalado:**
   1. O protocolo MCP STDIO envia toda a saída de log interno para o canal de erros (`stderr`) para não poluir o canal de dados (`stdout`). O cliente de IA captura o `stderr` e registra no log.
   2. O IPED Core tenta carregar a biblioteca nativa JEP (Java Embedded Python). Se o ambiente não possuir o JEP configurado no Windows, o IPED simplesmente desliga os módulos opcionais em Python e segue funcionando normalmente com todos os parsers nativos, Lucene, Tika e Sleuthkit.
-  3. Logo após essa mensagem, você verá no log: `"Caso carregado com sucesso"`, confirmando que o servidor está pronto para responder.
+  3. Logo depois, o log mostra `[abertura do caso] fim: configurações do IPED` e `"Caso carregado com sucesso"`, confirmando que o servidor está pronto para responder.
+* **Atenção:** se o log terminar em `[abertura do caso] início: configurações do IPED`, sem o `fim:`, o processo morreu durante a carga das configurações do IPED. Uma causa possível é a carga de uma instalação de Python ou de JEP presente no PATH. Confira as pastas listadas no cabeçalho de diagnóstico e envie o log e os `hs_err_pid*.log` ao suporte.
+* As antigas mensagens `main ERROR Unrecognized format specifier [d]` não aparecem mais a partir desta versão.
 
 ---
 

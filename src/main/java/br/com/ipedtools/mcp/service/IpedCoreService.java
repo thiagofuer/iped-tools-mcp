@@ -129,10 +129,64 @@ public class IpedCoreService {
                         }
                         openCaseInternal(target, false);
                     }
+                } else if (noCaseOpen) {
+                    String reason = target.exists()
+                            ? "a pasta do caso ativo não é uma pasta de caso do IPED: " + target.getAbsolutePath()
+                            : "a pasta do caso ativo não existe ou não está acessível: " + target.getAbsolutePath();
+                    recordOpenError("validação da pasta", reason);
+                    LOGGER.warn("Caso ativo não pode ser aberto: {}", reason);
                 }
             }
-        } catch (Exception e) {
-            LOGGER.debug("Erro ao verificar arquivo active_case.txt: {}", e.getMessage());
+        } catch (Exception | LinkageError e) {
+            // Opening failures were logged at DEBUG and lost; they are what support needs to see.
+            LOGGER.warn("Falha ao abrir o caso ativo: {}", e.toString(), e);
+            if (lastOpenError == null) {
+                recordOpenError("abertura do caso", e.toString());
+            }
+        }
+    }
+
+    // =========================================================================
+    // CASE OPENING DIAGNOSTICS
+    // =========================================================================
+
+    private volatile Map<String, Object> lastOpenError;
+
+    /** Step, message and time of the last failed attempt to open a case, or null after a successful opening. */
+    public Map<String, Object> getLastOpenError() {
+        return lastOpenError;
+    }
+
+    private void recordOpenError(String step, String message) {
+        Map<String, Object> error = new LinkedHashMap<>();
+        error.put("step", step);
+        error.put("message", message);
+        error.put("time", Instant.now().truncatedTo(ChronoUnit.SECONDS).toString());
+        lastOpenError = error;
+    }
+
+    @FunctionalInterface
+    private interface Step<T> {
+        T run() throws Exception;
+    }
+
+    /**
+     * Runs one step of case opening, logging its start before it runs and its end or failure with the duration.
+     * The start line is flushed to the log file before the step runs, so a native crash inside the step leaves
+     * the step name as the last line of the log. A failure is recorded as the last opening error and rethrown.
+     */
+    private <T> T caseStep(String name, Step<T> action) throws Exception {
+        long start = System.nanoTime();
+        LOGGER.info("[abertura do caso] início: {}", name);
+        try {
+            T result = action.run();
+            LOGGER.info("[abertura do caso] fim: {} ({} ms)", name, (System.nanoTime() - start) / 1_000_000);
+            return result;
+        } catch (Exception | LinkageError e) {
+            LOGGER.error("[abertura do caso] falhou: {} ({} ms): {}", name, (System.nanoTime() - start) / 1_000_000,
+                    e.toString(), e);
+            recordOpenError(name, e.toString());
+            throw e instanceof Exception ex ? ex : new IllegalStateException(e);
         }
     }
 
@@ -145,13 +199,18 @@ public class IpedCoreService {
 
     private synchronized void openCaseInternal(File caseDir, boolean persistState) {
         if (caseDir == null || !caseDir.exists()) {
-            throw new IllegalArgumentException("O diretório do caso não existe: " + caseDir);
+            String message = "O diretório do caso não existe: " + caseDir;
+            recordOpenError("validação da pasta", message);
+            LOGGER.warn(message);
+            throw new IllegalArgumentException(message);
         }
 
         if (!IPEDSource.checkIfIsCaseFolder(caseDir)) {
-            throw new IllegalArgumentException(
-                    "O diretório selecionado não é uma pasta de caso válida do IPED (subpastas 'iped/index', 'iped/data' ou 'iped/lib' não encontradas): "
-                            + caseDir.getAbsolutePath());
+            String message = "O diretório selecionado não é uma pasta de caso válida do IPED (subpastas 'iped/index', 'iped/data' ou 'iped/lib' não encontradas): "
+                    + caseDir.getAbsolutePath();
+            recordOpenError("validação da pasta", message);
+            LOGGER.warn(message);
+            throw new IllegalArgumentException(message);
         }
 
         closeCase();
@@ -161,23 +220,39 @@ public class IpedCoreService {
 
         LOGGER.info("Carregando configurações do caso: {}", caseDir.getAbsolutePath());
         try {
-            Configuration.getInstance().loadConfigurables(caseDir.getAbsolutePath() + File.separator + "iped", true);
-        } catch (Throwable t) {
-            LOGGER.warn("Aviso ao carregar configuráveis do IPED (ignorado em JDKs modernos sem SecurityManager): {}", t.getMessage());
-        }
+            caseStep("configurações do IPED", () -> {
+                try {
+                    Configuration.getInstance().loadConfigurables(caseDir.getAbsolutePath() + File.separator + "iped", true);
+                } catch (Throwable t) {
+                    // Not fatal for reading the case; logged in full so support can see what failed.
+                    LOGGER.warn("Aviso ao carregar configuráveis do IPED (ignorado; a leitura do caso continua): {}",
+                            t.toString(), t);
+                }
+                return null;
+            });
 
-        // The QueryBuilder caches numeric PointsConfig per case instance the first time a query is parsed,
-        // which happens inside the IPEDSource constructor before it loads metadataTypes.txt. Loading the
-        // types first makes that cache include numeric extra properties (nudityScore, ocrCharCount...),
-        // otherwise their range queries become textual and match nothing (issue #7).
-        try {
-            IndexItem.loadMetadataTypes(new File(caseDir, "iped" + File.separator + "conf"));
+            // The QueryBuilder caches numeric PointsConfig per case instance the first time a query is parsed,
+            // which happens inside the IPEDSource constructor before it loads metadataTypes.txt. Loading the
+            // types first makes that cache include numeric extra properties (nudityScore, ocrCharCount...),
+            // otherwise their range queries become textual and match nothing (issue #7).
+            caseStep("tipos de metadados", () -> {
+                try {
+                    IndexItem.loadMetadataTypes(new File(caseDir, "iped" + File.separator + "conf"));
+                } catch (Exception e) {
+                    LOGGER.warn("Falha ao pré-carregar metadataTypes.txt do caso: {}", e.toString(), e);
+                }
+                return null;
+            });
+
+            LOGGER.info("Inicializando IPEDSource e abrindo leitores Lucene...");
+            this.ipedSource = caseStep("índice e marcadores", () -> new IPEDSource(caseDir));
         } catch (Exception e) {
-            LOGGER.warn("Falha ao pré-carregar metadataTypes.txt do caso: {}", e.getMessage());
+            this.ipedSource = null;
+            this.caseDirectory = null;
+            throw e instanceof RuntimeException re ? re
+                    : new IllegalStateException("Falha ao abrir o caso " + caseDir.getAbsolutePath() + ": " + e.getMessage(), e);
         }
-
-        LOGGER.info("Inicializando IPEDSource e abrindo leitores Lucene...");
-        this.ipedSource = new IPEDSource(caseDir);
+        lastOpenError = null;
 
         LOGGER.info("Caso carregado com sucesso. Total de documentos no leitor: {}",
                 this.ipedSource.getReader().numDocs());

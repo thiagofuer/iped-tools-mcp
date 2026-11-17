@@ -10,6 +10,15 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 ## [Unreleased]
 
 ### Adicionado
+- **Logs e diagnóstico para suporte:**
+  - **Log em arquivo nos dois modos:** fica em `%USERPROFILE%\.iped-tools-mcp\logs\` (`iped-tools-mcp-stdio.log` e `iped-tools-mcp-gui.log`), com rotação a cada 5 MB (5 arquivos guardados), UTF-8 e o número do processo em cada linha. O `stderr` continua recebendo o log, e o `stdout` segue exclusivo do JSON-RPC.
+  - **Cabeçalho de diagnóstico em cada início:**
+    - versões, modo, argumentos, codificações, caso ativo e `iped.root`;
+    - `java.library.path` e as pastas do PATH ligadas a Python, JEP ou IPED, com as DLLs encontradas.
+  - **Etapas da abertura do caso** com início, fim e duração: se o processo morrer, a última linha indica a etapa.
+  - **Quedas:** exceções não capturadas e o encerramento ficam registrados, e os relatórios de queda da JVM (`hs_err_pid*.log`) deixados na pasta temporária são copiados para a pasta de logs no início seguinte.
+  - **`get_server_status`** passa a informar `log_file` e, quando a abertura do caso falha, `last_error` (etapa, mensagem e horário).
+  - **O log não registra conteúdo do caso:** nem texto de itens, nem consultas, nem valores devolvidos. Os termos que o IPED registrava na busca de documentos similares deixam de ir para o log.
 - **Modelo único de eventos de comunicação (`CommunicationAnalytics`, `CommunicationEventExtractor`):**
   - Eventos derivados somente do índice Lucene (somente leitura) a partir de itens com `Communication:From` ou `Communication:To`, com leitura seletiva dos campos armazenados e processamento em *streaming*.
   - Canal resolvido por `ufed:SourceApplication` → `accountType` → `contentType` (ex.: `Viber`, `WhatsApp`, `Telegram`, `Phone`, `Email`), com `unknown` quando não determinável.
@@ -72,6 +81,8 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 - **`get_top_contacts` e `get_communications_graph` não usam mais `get_device_and_owner_info`, `ufed:PhoneOwner` nem `Conversation:Account`:** nenhuma identidade é rotulada como dono do aparelho.
 
 ### Corrigido
+- **Mensagens "Unrecognized format specifier" do log4j:** a cada início, dezenas dessas linhas poluíam o log do cliente de IA. Na montagem do pacote, o cache de plugins do `log4j-core` era sobrescrito pelo do IPED. O `log4j-core` foi substituído pela ponte `log4j2-jboss-logmanager`, e o log das classes do IPED passa a sair no mesmo formato e destino do resto. O executável também passa a definir `-Djava.util.logging.manager=org.jboss.logmanager.LogManager`, o que elimina o aviso `The LogManager accessed before "java.util.logging.manager"...`.
+- **Falhas silenciosas ao abrir o caso ativo:** quando a abertura automática falhava, ou quando o caso ativo apontava para uma pasta inválida, o erro só era registrado em nível DEBUG e as ferramentas diziam apenas que não havia caso aberto. Agora a falha aparece no log e em `get_server_status`.
 - **Gravação de marcadores e seleção que não chegava ao caso:** quando `bookmarks.iped` não podia ser gravado (por exemplo, caso em mídia somente leitura), o IPED desviava a gravação, sem avisar, para um arquivo na pasta temporária do usuário, e `add_to_bookmark` e `set_item_checked` respondiam sucesso. Agora a gravação vai para `bookmarks.iped` por um arquivo temporário na mesma pasta, e qualquer falha volta como erro, com o estado em memória restaurado a partir do arquivo.
 - **Scripts de teste STDIO e do executável nativo:** num console com entrada em UTF-8 com BOM, o BOM era enviado antes da primeira mensagem JSON-RPC e o `initialize` falhava com erro de parse. Os scripts passam a usar UTF-8 sem BOM na entrada do processo.
 - **Telefone do dono tirado de regex (issue #3):** a ferramenta de identificação do aparelho apontava como telefone do dono o primeiro valor de `Regex:PHONE` de arquivos de configuração e trazia valores sem sentido (IDs de usuário do Android, pastas de apps) como prováveis donos. Agora só contas estruturadas e informações do aparelho são fonte, e a conclusão sobre quem usa o aparelho fica com quem analisa.
