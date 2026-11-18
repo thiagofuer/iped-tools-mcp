@@ -24,6 +24,7 @@ public class MultimodalTool {
             WHAT THIS TOOL DOES:
             1. Uses the thumbnail IPED stored during processing (often only 256px) when it already reaches max_dimension.
             2. Otherwise decodes the ORIGINAL image at the requested size, with its EXIF orientation applied.
+               Formats Java cannot decode (HEIC, SVG...) are converted with the image tool IPED uses for the case.
             3. Scales down to fit within max_dimension (default: 512px, max: 2048px), preserving aspect ratio; never enlarges.
             4. Returns an MCP image content block (image/jpeg) and a text block with the image source
                (original, view file or IPED thumbnail), its size and the original size.
@@ -80,6 +81,7 @@ public class MultimodalTool {
         String origin = switch (source) {
             case ItemImageLoader.SOURCE_ORIGINAL -> "a partir do original";
             case ItemImageLoader.SOURCE_VIEW_FILE -> "a partir do arquivo de visualização do IPED";
+            case ItemImageLoader.SOURCE_CONVERTED -> "convertida do original pela ferramenta de imagens do caso (formato não nativo, como HEIC ou SVG)";
             default -> "miniatura gravada pelo IPED";
         };
         StringBuilder sb = new StringBuilder(String.format("Imagem do item ID %d (%s) | %dx%d px, %s", itemId, name, w,

@@ -1866,8 +1866,9 @@ public class IpedCoreService {
         }
 
         File viewFile = item.getViewFile();
+        ExternalImageConversion.prepare();
         ItemImageLoader.Loaded loaded = ItemImageLoader.load(item.getThumb(), item::getBufferedInputStream,
-                viewFile, maxDim);
+                ExternalImageConversion.converter(), item.getLength(), viewFile, maxDim);
         if (loaded == null) {
             throw new IllegalStateException("O item ID " + itemId + " (" + item.getName() + ") não possui miniatura visual pré-computada nem pôde ser decodificado como imagem.");
         }
@@ -1902,14 +1903,35 @@ public class IpedCoreService {
         res.put("height", image.getHeight());
         res.put("size_bytes", jpegBytes.length);
         res.put("source", loaded.source());
-        if (loaded.originalWidth() > 0) {
-            res.put("original_width", loaded.originalWidth());
-            res.put("original_height", loaded.originalHeight());
+        int[] originalSize = loaded.originalWidth() > 0
+                ? new int[] { loaded.originalWidth(), loaded.originalHeight() }
+                : indexedImageSize(itemId); // formats Java cannot read: dimensions IPED recorded
+        if (originalSize[0] > 0) {
+            res.put("original_width", originalSize[0]);
+            res.put("original_height", originalSize[1]);
         }
         res.put("requested_max_dimension", ItemImageLoader.target(maxDim));
         res.put("thumbnail_fallback", loaded.thumbnailFallback());
         res.put("base64", base64);
         return res;
+    }
+
+    /** Image width and height recorded by IPED processing ({@code image:Width}, {@code image:Height}), or -1. */
+    private int[] indexedImageSize(int itemId) {
+        try {
+            int luceneId = ipedSource.getLuceneId(itemId);
+            if (luceneId >= 0) {
+                Document doc = ipedSource.getReader().document(luceneId);
+                long w = longValue(doc, "image:Width");
+                long h = longValue(doc, "image:Height");
+                if (w > 0 && h > 0) {
+                    return new int[] { (int) w, (int) h };
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Falha ao ler as dimensões do item {}: {}", itemId, e.toString());
+        }
+        return new int[] { -1, -1 };
     }
 
     /**
