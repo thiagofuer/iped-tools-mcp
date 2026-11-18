@@ -116,6 +116,92 @@ class ItemImageLoaderTest {
         assertEquals(1200, loaded.originalHeight());
     }
 
+    private static byte[] png(int w, int h, int type) throws Exception {
+        BufferedImage img = new BufferedImage(w, h, type);
+        Graphics2D g = img.createGraphics();
+        g.setColor(Color.WHITE);
+        g.fillRect(0, 0, w, h);
+        g.setColor(Color.BLACK);
+        g.fillRect(0, 0, w / 2, h / 4);
+        g.dispose();
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ImageIO.write(img, "png", out);
+        return out.toByteArray();
+    }
+
+    /**
+     * IPED's PNG reader (png-reader) takes precedence over the JDK one and needs java.desktop exports; without them
+     * every PNG fell back to the 256 px thumbnail.
+     */
+    @Test
+    void testPngOfEveryColorTypeComesFromTheOriginal() throws Exception {
+        int[] types = { BufferedImage.TYPE_INT_ARGB, BufferedImage.TYPE_INT_RGB, BufferedImage.TYPE_BYTE_INDEXED,
+                BufferedImage.TYPE_BYTE_GRAY };
+        for (int type : types) {
+            ItemImageLoader.Loaded loaded = ItemImageLoader.load(jpeg(256, 171), source(png(1200, 800, type)), null,
+                    2048);
+            assertEquals(ItemImageLoader.SOURCE_ORIGINAL, loaded.source(), "PNG do tipo " + type);
+            assertEquals(1200, loaded.image().getWidth(), "PNG do tipo " + type);
+            assertFalse(loaded.thumbnailFallback());
+        }
+    }
+
+    /** A converter replaced in the test: counts its calls and returns a fixed image, or null. */
+    private static final class FakeConverter implements ItemImageLoader.Converter {
+        int calls;
+        final BufferedImage result;
+
+        FakeConverter(BufferedImage result) {
+            this.result = result;
+        }
+
+        @Override
+        public BufferedImage convert(ItemImageLoader.StreamSource source, int target, Long size) {
+            calls++;
+            return result;
+        }
+    }
+
+    @Test
+    void testConverterIsNotCalledForNativeFormats() throws Exception {
+        FakeConverter conv = new FakeConverter(new BufferedImage(10, 10, BufferedImage.TYPE_INT_RGB));
+        ItemImageLoader.Loaded loaded = ItemImageLoader.load(jpeg(256, 171), source(jpeg(3000, 2000)), conv, 1L,
+                null, 2048);
+        assertEquals(ItemImageLoader.SOURCE_ORIGINAL, loaded.source());
+        assertEquals(0, conv.calls);
+    }
+
+    @Test
+    void testConverterIsUsedWhenNativeDecodingFails() throws Exception {
+        byte[] heicLike = "ftypheic não decodificável pelo Java".getBytes(StandardCharsets.UTF_8);
+        FakeConverter conv = new FakeConverter(new BufferedImage(2048, 1536, BufferedImage.TYPE_INT_RGB));
+        ItemImageLoader.Loaded loaded = ItemImageLoader.load(jpeg(256, 192), source(heicLike), conv, 1L, null, 2048);
+        assertEquals(ItemImageLoader.SOURCE_CONVERTED, loaded.source());
+        assertEquals(2048, loaded.image().getWidth());
+        assertEquals(1, conv.calls);
+        assertFalse(loaded.thumbnailFallback());
+    }
+
+    @Test
+    void testFailedConversionFallsBackToThumbnail() throws Exception {
+        byte[] heicLike = "ftypheic não decodificável pelo Java".getBytes(StandardCharsets.UTF_8);
+        FakeConverter conv = new FakeConverter(null);
+        ItemImageLoader.Loaded loaded = ItemImageLoader.load(jpeg(256, 192), source(heicLike), conv, 1L, null, 2048);
+        assertEquals(ItemImageLoader.SOURCE_THUMBNAIL, loaded.source());
+        assertTrue(loaded.thumbnailFallback());
+        assertEquals(1, conv.calls);
+    }
+
+    @Test
+    void testConverterIsNotCalledWhenThumbnailIsEnough() throws Exception {
+        FakeConverter conv = new FakeConverter(new BufferedImage(10, 10, BufferedImage.TYPE_INT_RGB));
+        byte[] heicLike = "ftypheic".getBytes(StandardCharsets.UTF_8);
+        ItemImageLoader.Loaded loaded = ItemImageLoader.load(jpeg(256, 192), source(heicLike), conv, 1L, null, 200);
+        assertEquals(ItemImageLoader.SOURCE_THUMBNAIL, loaded.source());
+        assertFalse(loaded.thumbnailFallback());
+        assertEquals(0, conv.calls);
+    }
+
     @Test
     void testTargetIsCapped() {
         assertEquals(2048, ItemImageLoader.target(5000));

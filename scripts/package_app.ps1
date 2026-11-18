@@ -94,7 +94,10 @@ $jvmOptions = @(
     "--java-options", "--add-opens=java.base/java.net=ALL-UNNAMED",
     "--java-options", "--add-opens=java.base/java.text=ALL-UNNAMED",
     "--java-options", "--add-opens=java.base/java.nio=ALL-UNNAMED",
-    "--java-options", "--add-opens=java.base/java.io=ALL-UNNAMED"
+    "--java-options", "--add-opens=java.base/java.io=ALL-UNNAMED",
+    # IPED PNG reader (png-reader, a JDK 11 copy) uses java.desktop internals; without these exports PNG decoding fails
+    "--java-options", "--add-exports=java.desktop/sun.awt.image=ALL-UNNAMED",
+    "--java-options", "--add-exports=java.desktop/com.sun.imageio.plugins.common=ALL-UNNAMED"
 )
 
 $jpackageArgs = @(

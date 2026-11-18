@@ -29,6 +29,7 @@ public final class ItemImageLoader {
 
     public static final String SOURCE_ORIGINAL = "original";
     public static final String SOURCE_VIEW_FILE = "view_file";
+    public static final String SOURCE_CONVERTED = "converted";
     public static final String SOURCE_THUMBNAIL = "thumbnail";
     public static final int MAX_DIMENSION = 2048;
 
@@ -36,6 +37,12 @@ public final class ItemImageLoader {
     @FunctionalInterface
     public interface StreamSource {
         InputStream open() throws IOException;
+    }
+
+    /** Converts an image that Java cannot decode, already scaled to {@code target}; null when it cannot. */
+    @FunctionalInterface
+    public interface Converter {
+        BufferedImage convert(StreamSource source, int target, Long size);
     }
 
     /**
@@ -62,6 +69,17 @@ public final class ItemImageLoader {
      * @return the image, or null when nothing could be decoded
      */
     public static Loaded load(byte[] thumb, StreamSource original, File viewFile, int maxDim) {
+        return load(thumb, original, null, null, viewFile, maxDim);
+    }
+
+    /**
+     * Same as {@link #load(byte[], StreamSource, File, int)}, with external conversion (null when disabled) tried
+     * after the native decoders and before the view file.
+     *
+     * @param size the original size in bytes, used for the conversion time limit, or null
+     */
+    public static Loaded load(byte[] thumb, StreamSource original, Converter converter, Long size, File viewFile,
+            int maxDim) {
         int target = target(maxDim);
         BufferedImage thumbImage = decode(thumb);
         int[] dims = original != null ? dimensions(original) : new int[] { -1, -1 };
@@ -85,6 +103,17 @@ public final class ItemImageLoader {
                 }
             } catch (Exception | LinkageError e) {
                 LOGGER.debug("Falha ao decodificar a imagem original: {}", e.toString());
+            }
+        }
+
+        if (converter != null && original != null) {
+            try {
+                BufferedImage img = converter.convert(original, target, size);
+                if (img != null) {
+                    return new Loaded(fit(img, target), SOURCE_CONVERTED, dims[0], dims[1], false);
+                }
+            } catch (Exception | LinkageError e) {
+                LOGGER.debug("Falha na conversão externa: {}", e.toString());
             }
         }
 

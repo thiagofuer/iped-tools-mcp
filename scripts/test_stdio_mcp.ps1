@@ -72,6 +72,8 @@ $jvmArgs = @(
     "--add-opens=java.base/java.text=ALL-UNNAMED",
     "--add-opens=java.base/java.nio=ALL-UNNAMED",
     "--add-opens=java.base/java.io=ALL-UNNAMED",
+    "--add-exports=java.desktop/sun.awt.image=ALL-UNNAMED",
+    "--add-exports=java.desktop/com.sun.imageio.plugins.common=ALL-UNNAMED",
     "-jar", $JarPath,
     "--stdio", "--case", $CasePath
 )

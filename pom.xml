@@ -161,6 +161,8 @@
                         --add-opens=java.base/java.text=ALL-UNNAMED
                         --add-opens=java.base/java.nio=ALL-UNNAMED
                         --add-opens=java.base/java.io=ALL-UNNAMED
+                        --add-exports=java.desktop/sun.awt.image=ALL-UNNAMED
+                        --add-exports=java.desktop/com.sun.imageio.plugins.common=ALL-UNNAMED
                     </argLine>
                     <systemPropertyVariables>
                         <!-- Same logging manager as the packaged application, so JUL and JBoss loggers share one tree -->
