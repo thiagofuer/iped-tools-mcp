@@ -1,8 +1,6 @@
 package br.com.ipedtools.mcp.diagnostics;
 
 import java.io.File;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -29,10 +27,10 @@ public final class StartupDiagnostics {
     }
 
     /** Logs the header of this process. Never throws. */
-    public static void log(String mode, String[] args, File activeCaseFile, File logFile) {
+    public static void log(String mode, String[] args, File logFile) {
         try {
-            for (String line : header(mode, args, System.getenv(), System.getProperties(), readActiveCase(activeCaseFile),
-                    logFile, ProcessHandle.current().pid())) {
+            for (String line : header(mode, args, System.getenv(), System.getProperties(), logFile,
+                    ProcessHandle.current().pid())) {
                 LOGGER.info(line);
             }
         } catch (RuntimeException e) {
@@ -41,7 +39,7 @@ public final class StartupDiagnostics {
     }
 
     static List<String> header(String mode, String[] args, Map<String, String> env, Properties props,
-            String activeCase, File logFile, long pid) {
+            File logFile, long pid) {
         List<String> lines = new ArrayList<>();
         lines.add("===== Diagnóstico de inicialização =====");
         lines.add("Aplicação: " + VersionInfo.APP_NAME + " v" + VersionInfo.getVersion() + " (build "
@@ -56,7 +54,6 @@ public final class StartupDiagnostics {
         lines.add("Codificações: file=" + props.getProperty("file.encoding") + " stdout="
                 + props.getProperty("stdout.encoding") + " stderr=" + props.getProperty("stderr.encoding")
                 + " native=" + props.getProperty("native.encoding"));
-        lines.add("Caso ativo (active_case.txt): " + (activeCase == null || activeCase.isBlank() ? "(nenhum)" : activeCase));
         String ipedRoot = props.getProperty("iped.root");
         lines.add("iped.root: " + (ipedRoot == null ? "(não definido)" : ipedRoot));
         lines.add("Arquivo de log: " + (logFile == null ? "(desativado)" : logFile.getAbsolutePath()));
@@ -116,17 +113,6 @@ public final class StartupDiagnostics {
             if (e.getKey().equalsIgnoreCase("PATH")) {
                 return e.getValue();
             }
-        }
-        return null;
-    }
-
-    private static String readActiveCase(File activeCaseFile) {
-        try {
-            if (activeCaseFile != null && activeCaseFile.isFile()) {
-                return Files.readString(activeCaseFile.toPath(), StandardCharsets.UTF_8).trim();
-            }
-        } catch (Exception e) {
-            return "(erro ao ler: " + e.getMessage() + ")";
         }
         return null;
     }

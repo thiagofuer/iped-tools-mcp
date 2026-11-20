@@ -47,7 +47,7 @@ public class DocumentMetadataTool {
     ) {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
-            return List.of(Map.of("error", "Nenhum caso está aberto no momento."));
+            return List.of(Map.of("error", IpedCoreService.NO_CASE_OPEN_MESSAGE));
         }
         return service.getDocumentMetadataBatch(docIds, raw, keys, groups);
     }

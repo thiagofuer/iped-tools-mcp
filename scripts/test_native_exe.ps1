@@ -67,7 +67,7 @@ if (-not $verMismatch -and $verOutput -match "ipedtools\.com\.br") {
 
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName = $resolvedExe
-$psi.Arguments = "--stdio --case `"$CasePath`""
+$psi.Arguments = "--stdio"
 $psi.RedirectStandardInput = $true
 $psi.RedirectStandardOutput = $true
 $psi.RedirectStandardError = $false
@@ -135,6 +135,16 @@ try {
         Write-Host (" PASS (" + $toolCount + " ferramentas)") -ForegroundColor Green
     } else {
         Write-Host (" FAIL (esperava >= 25, obteve $toolCount)") -ForegroundColor Red; exit 1
+    }
+
+    # A sessao comeca sem caso: o caso e aberto com open_case
+    Write-Host "[2b/10] Testando open_case..." -NoNewline
+    $openCall = Send-RpcRequest "tools/call" @{ name = "open_case"; arguments = @{ case_path = $CasePath } }
+    $openData = $openCall.result.content[0].text | ConvertFrom-Json
+    if ($openData.status -eq "success") {
+        Write-Host (" PASS (" + $openData.total_items + " itens)") -ForegroundColor Green
+    } else {
+        Write-Host (" FAIL: " + ($openCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
     Write-Host "[3/10] Testando get_server_status e list_sources (UTF-8)..." -NoNewline

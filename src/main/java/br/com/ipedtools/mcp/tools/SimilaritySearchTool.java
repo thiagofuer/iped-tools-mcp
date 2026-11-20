@@ -45,7 +45,7 @@ public class SimilaritySearchTool {
     ) {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
-            return Map.of("error", "Nenhum caso está aberto no momento.");
+            return Map.of("error", IpedCoreService.NO_CASE_OPEN_MESSAGE);
         }
         try {
             float min = minScore != null && minScore > 0 ? minScore : 1.0f;
@@ -83,7 +83,7 @@ public class SimilaritySearchTool {
     ) {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
-            return Map.of("error", "Nenhum caso está aberto no momento.");
+            return Map.of("error", IpedCoreService.NO_CASE_OPEN_MESSAGE);
         }
         try {
             float min = minScore != null && minScore > 0 ? minScore : 50.0f;
@@ -120,7 +120,7 @@ public class SimilaritySearchTool {
     ) {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
-            return Map.of("error", "Nenhum caso está aberto no momento.");
+            return Map.of("error", IpedCoreService.NO_CASE_OPEN_MESSAGE);
         }
         try {
             int percent = matchPercent != null && matchPercent > 0 ? matchPercent : 50;

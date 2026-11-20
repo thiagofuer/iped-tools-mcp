@@ -7,7 +7,7 @@ O **IPED Tools MCP** expõe 30 ferramentas periciais especializadas agrupadas em
 ## 1. Conectividade e Gestão de Casos
 
 ### `get_server_status`
-* **Propósito:** Retorna o status operacional do servidor MCP, versão instalada do produto, versão do IPED Core e informações do caso ativo aberto.
+* **Propósito:** Retorna o status operacional do servidor MCP, versão instalada do produto, versão do IPED Core e informações do caso aberto nesta conversa. Sem caso aberto, orienta o modelo a pedir a pasta do caso ao usuário e chamar `open_case`.
 * **Exemplo de Pergunta:** *"O servidor está ativo e qual versão do IPED está sendo utilizada?"*
 
 ### `check_connection`
@@ -23,7 +23,7 @@ O **IPED Tools MCP** expõe 30 ferramentas periciais especializadas agrupadas em
 * **Exemplo de Pergunta:** *"Quantos arquivos no total existem neste caso e quais são as principais categorias encontradas?"*
 
 ### `open_case`
-* **Propósito:** Carrega ou alterna dinamicamente o caso pericial ativo em tempo de execução sem reiniciar o processo ou reconfigurar o cliente de IA.
+* **Propósito:** Abre ou troca o caso pericial **desta conversa**, sem reiniciar o processo ou reconfigurar o cliente de IA. É a única forma de abrir um caso: cada conversa começa sem caso aberto, e o caso aberto numa conversa não muda o de outra. Se a pasta não for de um caso do IPED, devolve erro e o caso já aberto continua aberto.
 * **Exemplo de Pergunta:** *"Abra o caso pericial localizado em C:\casos_forenses\caso_operacao_02."*
 
 ---

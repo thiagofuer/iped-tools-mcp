@@ -22,7 +22,7 @@ Quando o prompt oficial `start_case` é acionado, a IA é instruída a seguir o 
 ```
 
 ### 1. Verificação do Ambiente e Caso
-A sessão sempre se inicia verificando se há um caso IPED carregado e pronto (`get_server_status`), seguido da análise volumétrica do acervo (`get_case_summary`).
+A sessão sempre se inicia verificando se há um caso IPED aberto nesta conversa (`get_server_status`). Cada conversa tem o seu próprio caso e começa sem caso aberto: nesse caso, a IA pede ao examinador o caminho da pasta do caso e o abre com `open_case`. Em seguida vem a análise volumétrica do acervo (`get_case_summary`).
 
 ### 2. Regras de Conduta
 Antes de analisar qualquer item, a IA cumpre quatro regras:

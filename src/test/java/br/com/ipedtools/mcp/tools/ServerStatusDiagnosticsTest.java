@@ -3,10 +3,9 @@ package br.com.ipedtools.mcp.tools;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 
@@ -19,41 +18,24 @@ import org.junit.jupiter.api.io.TempDir;
 import br.com.ipedtools.mcp.service.IpedCoreService;
 import br.com.ipedtools.mcp.test.TestCaseResolver;
 
-/**
- * get_server_status reports the log file and, after a failed opening, the failed step. The user's
- * active_case.txt is saved before each test and restored afterwards.
- */
+/** get_server_status reports the log file and, after a failed opening, the failed step. */
 class ServerStatusDiagnosticsTest {
-
-    private String savedActiveCase;
 
     static boolean isCaseAvailable() {
         return TestCaseResolver.isCaseAvailable();
     }
 
     @BeforeEach
-    void save() throws Exception {
-        Path p = IpedCoreService.ACTIVE_CASE_FILE.toPath();
-        savedActiveCase = Files.exists(p) ? Files.readString(p, StandardCharsets.UTF_8) : null;
-        IpedCoreService.getInstance().closeCase();
-    }
-
     @AfterEach
-    void restore() throws Exception {
-        Path p = IpedCoreService.ACTIVE_CASE_FILE.toPath();
-        if (savedActiveCase == null) {
-            Files.deleteIfExists(p);
-        } else {
-            Files.writeString(p, savedActiveCase, StandardCharsets.UTF_8);
-        }
+    void close() {
         IpedCoreService.getInstance().closeCase();
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    void testFailedOpeningIsReportedWithStepAndLogFile(@TempDir Path notACase) throws Exception {
-        Files.createDirectories(IpedCoreService.ACTIVE_CASE_FILE.toPath().getParent());
-        Files.writeString(IpedCoreService.ACTIVE_CASE_FILE.toPath(), notACase.toString(), StandardCharsets.UTF_8);
+    void testFailedOpeningIsReportedWithStepAndLogFile(@TempDir Path notACase) {
+        assertThrows(IllegalArgumentException.class,
+                () -> IpedCoreService.getInstance().openCase(notACase.toFile()));
 
         Map<String, Object> status = new ServerStatusTool().getServerStatus();
         assertEquals(false, status.get("case_open"));
@@ -65,13 +47,32 @@ class ServerStatusDiagnosticsTest {
     }
 
     @Test
+    void testStatusWithoutCasePointsToOpenCase() {
+        Map<String, Object> status = new ServerStatusTool().getServerStatus();
+        assertEquals(false, status.get("case_open"));
+        String text = String.valueOf(status.get("status"));
+        assertTrue(text.contains("open_case"), "sem caso, o status deve orientar o open_case: " + text);
+        assertFalse(text.toLowerCase().contains("configurador"), "o status não pode citar o configurador");
+    }
+
+    @Test
     @EnabledIf("isCaseAvailable")
-    void testSuccessfulOpeningHasNoLastError() throws Exception {
-        Files.writeString(IpedCoreService.ACTIVE_CASE_FILE.toPath(),
-                TestCaseResolver.getPrimaryCaseDir().getAbsolutePath(), StandardCharsets.UTF_8);
+    void testSuccessfulOpeningHasNoLastError() {
+        IpedCoreService.getInstance().openCase(TestCaseResolver.getPrimaryCaseDir());
         Map<String, Object> status = new ServerStatusTool().getServerStatus();
         assertEquals(true, status.get("case_open"));
         assertFalse(status.containsKey("last_error"));
         assertTrue(status.containsKey("log_file"));
+    }
+
+    @Test
+    @EnabledIf("isCaseAvailable")
+    void testInvalidFolderKeepsTheOpenCase(@TempDir Path notACase) {
+        IpedCoreService service = IpedCoreService.getInstance();
+        service.openCase(TestCaseResolver.getPrimaryCaseDir());
+        assertThrows(IllegalArgumentException.class, () -> service.openCase(notACase.toFile()));
+        assertTrue(service.isCaseOpen(), "uma pasta inválida não pode fechar o caso aberto");
+        assertEquals(TestCaseResolver.getPrimaryCaseDir().getAbsolutePath(),
+                service.getCaseDirectory().getAbsolutePath());
     }
 }

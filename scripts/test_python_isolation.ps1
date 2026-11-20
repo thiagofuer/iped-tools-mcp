@@ -52,7 +52,7 @@ Write-Host "==========================================================" -Foregro
 
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName = $ExePath
-$psi.Arguments = "--stdio --case `"$CasePath`""
+$psi.Arguments = "--stdio"
 $psi.UseShellExecute = $false
 $psi.CreateNoWindow = $true
 $psi.RedirectStandardInput = $true
@@ -90,9 +90,13 @@ try { do {
     if (Read-Response 1 30) { Write-Host " PASS" -ForegroundColor Green } else { Write-Host " FAIL (sem resposta)" -ForegroundColor Red; $failed = $true; break }
     Send @{ jsonrpc = "2.0"; method = "notifications/initialized" }
 
-    Write-Host "[2/3] get_server_status (abre o caso, limite de $TimeoutSeconds s)..." -NoNewline
-    Send @{ jsonrpc = "2.0"; id = 2; method = "tools/call"; params = @{ name = "get_server_status"; arguments = @{} } }
-    $status = Read-Response 2 $TimeoutSeconds
+    Write-Host "[2/3] open_case e get_server_status (limite de $TimeoutSeconds s)..." -NoNewline
+    Send @{ jsonrpc = "2.0"; id = 2; method = "tools/call"; params = @{ name = "open_case"; arguments = @{ case_path = $CasePath } } }
+    if (-not (Read-Response 2 $TimeoutSeconds)) {
+        Write-Host " FAIL (tempo limite: a abertura do caso travou)" -ForegroundColor Red; $failed = $true; break
+    }
+    Send @{ jsonrpc = "2.0"; id = 3; method = "tools/call"; params = @{ name = "get_server_status"; arguments = @{} } }
+    $status = Read-Response 3 30
     if (-not $status) {
         Write-Host " FAIL (tempo limite: a abertura do caso travou)" -ForegroundColor Red; $failed = $true; break
     }

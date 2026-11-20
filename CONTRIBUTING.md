@@ -76,7 +76,7 @@ O projeto adota a convenção de **Versionamento Semântico** no formato `MAJOR.
 
 Por se tratar de uma ferramenta voltada para perícia digital e investigação forense:
 
-1. **Jamais versione evidências periciais:** Nunca adicione arquivos de casos reais, bancos SQLite locais (`*.mv.db`), arquivos de estado (`active_case.txt`, `*.iped`, `bookmarks.iped`) ao controle de versão.
+1. **Jamais versione evidências periciais:** Nunca adicione arquivos de casos reais, bancos SQLite locais (`*.mv.db`), arquivos de estado (`*.iped`, `bookmarks.iped` e o `active_case.txt` de versões anteriores) ao controle de versão.
 2. **Jamais versione binários compilados:** Diretórios como `target/`, `dist/` e ferramentas externas como `tools/wix311` (104 MB) estão devidamente ignorados no `.gitignore` e não devem ser incluídos em commits.
 3. **WiX Toolset:** O script `scripts/package_msi.ps1` é auto-suficiente e realiza o download sob demanda caso o ambiente não possua o binário localmente.
 

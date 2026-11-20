@@ -27,7 +27,7 @@ public class SourcesTool {
     public List<Map<String, Object>> listSources() {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
-            return List.of(Map.of("error", "Nenhum caso do IPED aberto no momento."));
+            return List.of(Map.of("error", IpedCoreService.NO_CASE_OPEN_MESSAGE));
         }
         return service.listSources();
     }

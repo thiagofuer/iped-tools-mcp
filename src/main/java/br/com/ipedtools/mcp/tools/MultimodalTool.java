@@ -46,7 +46,7 @@ public class MultimodalTool {
     ) {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
-            return List.of(new TextContent("Nenhum caso está aberto no momento."));
+            return List.of(new TextContent(IpedCoreService.NO_CASE_OPEN_MESSAGE));
         }
 
         try {

@@ -55,8 +55,9 @@ public class ForensicPrompts {
             ## 📋 METODOLOGIA DE INVESTIGAÇÃO EM 7 ETAPAS
 
             ### 1. Verificação do Ambiente e Caso
-            - **Sempre inicie chamando `get_server_status`**. Ele confirma a prontidão do servidor e se há um caso IPED aberto (`case_open: true`).
-            - Se um caso estiver aberto, consulte `get_case_summary` para compreender o volume total de itens, categorias ativas e bookmarks prévios.
+            - **Sempre inicie chamando `get_server_status`**. Ele confirma a prontidão do servidor e se há um caso IPED aberto nesta conversa (`case_open: true`).
+            - Cada conversa tem o seu próprio caso, e uma sessão nova começa sem caso aberto. Se `case_open` for `false`, **peça ao examinador o caminho absoluto da pasta do caso do IPED e chame `open_case`** com ele. Só depois siga as etapas abaixo.
+            - Com o caso aberto, consulte `get_case_summary` para compreender o volume total de itens, categorias ativas e bookmarks prévios.
 
             ### 2. Regras de Conduta (antes de qualquer análise de itens)
 

@@ -40,17 +40,21 @@ Se o comando imprimir os dados da versão e sair com código 0, o executável e 
 
 ---
 
-## ❓ 3. Mensagem: "Nenhum caso ativo" ou `case_open: false`
+## ❓ 3. Mensagem: "Nenhum caso aberto nesta sessão" ou `case_open: false`
 
 ### O que acontece:
-O servidor MCP foi iniciado via STDIO, mas ainda não há nenhum caminho gravado em `%USERPROFILE%\.iped-tools-mcp\active_case.txt` e o parâmetro `--case` não foi utilizado.
+Isso é o esperado no início de cada conversa. Cada conversa tem o seu próprio caso e começa **sem caso aberto**. O caso não vem da configuração do cliente nem do configurador gráfico.
 
 ### Como resolver:
-Você tem duas opções simples e imediatas:
-1. **Pela Interface Gráfica:** Dê um duplo-clique em `IPED-Tools-MCP.exe`, selecione o caso no botão *"Selecionar Caso IPED..."*. O caso ativo é sincronizado instantaneamente com o chat.
-2. **Pelo Chat com a IA:** Peça diretamente para o modelo:
-   > *"Abra o caso pericial localizado em C:\casos_forenses\caso_operacao_01"*
-   A IA chamará a ferramenta `open_case`, carregando os índices do IPED na memória em tempo de execução.
+Peça diretamente para o modelo:
+> *"Abra o caso pericial localizado em C:\casos_forenses\caso_operacao_01"*
+
+A IA chamará a ferramenta `open_case`, que abre o caso só nesta conversa. O prompt `start_case` também orienta o modelo a pedir a pasta do caso quando nenhum estiver aberto.
+
+### Observações:
+* **`--case` na configuração:** versões anteriores aceitavam o argumento `--case`. Ele não é mais usado: o servidor o ignora, registra no log o aviso *"O argumento '--case' não é mais suportado e foi ignorado"* e inicia sem caso. Remova-o da configuração do cliente.
+* **Arquivo `active_case.txt`:** versões anteriores compartilhavam o caso pelo arquivo `%USERPROFILE%\.iped-tools-mcp\active_case.txt`. Ele agora é ignorado e pode ser apagado.
+* **Testar a instalação:** no [Configurador Gráfico](Configurador-Grafico), use **Testar o MCP** com a pasta do caso. Se o teste abre o caso e a conversa não, compare o caminho informado ao modelo com o usado no teste.
 
 ---
 
@@ -74,7 +78,7 @@ O IPED Tools MCP grava o próprio log em arquivo, nos dois modos de execução, 
   - versões do MCP, do IPED e do Java;
   - modo e argumentos;
   - diretório de trabalho e codificações;
-  - caso ativo e `iped.root`;
+  - `iped.root`;
   - as pastas do PATH ligadas a Python, JEP ou IPED, com as DLLs encontradas nelas.
 * **Etapas da abertura do caso:** cada etapa (configurações do IPED, tipos de metadados, índice e marcadores) registra `[abertura do caso] início:` e `fim:`, com a duração. **Se a última linha do log for um `início:` sem o `fim:` correspondente, o processo morreu dentro daquela etapa.** Nesse caso, procure também um `hs_err_pid*.log` na pasta.
 * **Pelo chat:** quando o caso não abre, a ferramenta `get_server_status` traz `last_error` (etapa, mensagem e horário) e `log_file` (o caminho do log). A IA pode informar isso diretamente.
@@ -126,6 +130,6 @@ ERROR [ip.pa.py.PythonParser] JEP não encontrado, todos os módulos python fora
 
 Se o Claude Desktop fechar o canal de comunicação logo na abertura:
 1. **Verifique se o Claude Desktop foi completamente reiniciado:** Feche o Claude Desktop e abra-o novamente após salvar o arquivo `claude_desktop_config.json`.
-2. **Tempo de carregamento de casos gigantescos:** o caso não é aberto ao iniciar o servidor, e sim na primeira chamada de ferramenta, que por isso leva alguns segundos a mais. Se o caso ativo possuir centenas de milhares de documentos (ex: 700.000+ arquivos), o IPED Core pode levar 2 a 3 segundos para ler o índice Lucene do disco. A conexão inicial (`initialize` e `tools/list`) não depende do caso. Se a primeira chamada estourar o tempo limite do cliente, repita-a: a leitura seguinte aproveita o cache de disco do sistema operacional.
+2. **Tempo de carregamento de casos gigantescos:** o caso não é aberto ao iniciar o servidor, e sim quando o modelo chama `open_case`, que por isso leva alguns segundos a mais. Se o caso possuir centenas de milhares de documentos (ex: 700.000+ arquivos), o IPED Core pode levar 2 a 3 segundos para ler o índice Lucene do disco. A conexão inicial (`initialize` e `tools/list`) não depende do caso. Se o `open_case` estourar o tempo limite do cliente, repita-o: a leitura seguinte aproveita o cache de disco do sistema operacional.
 3. **Caminho do executável:** Certifique-se de apontar para a versão de produção instalada (`C:\Program Files\IPED Tools MCP\IPED-Tools-MCP.exe`) ou para o executável gerado na pasta portátil.
 

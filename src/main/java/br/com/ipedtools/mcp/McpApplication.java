@@ -14,7 +14,6 @@ import br.com.ipedtools.mcp.diagnostics.CrashDiagnostics;
 import br.com.ipedtools.mcp.diagnostics.LogFiles;
 import br.com.ipedtools.mcp.diagnostics.StartupDiagnostics;
 import br.com.ipedtools.mcp.gui.MainWindow;
-import br.com.ipedtools.mcp.service.IpedCoreService;
 import io.quarkus.runtime.Quarkus;
 import io.quarkus.runtime.annotations.QuarkusMain;
 
@@ -22,7 +21,8 @@ import io.quarkus.runtime.annotations.QuarkusMain;
  * Main application entrypoint for IPED Tools MCP.
  * Implements dual-mode execution:
  * - GUI Mode: Launches the Swing visual configurator when executed without '--stdio'.
- * - STDIO Mode: Launches the headless Quarkus MCP Server when called with '--stdio --case <path>'.
+ * - STDIO Mode: Launches the headless Quarkus MCP Server when called with '--stdio'. The case is opened by the
+ *   open_case tool, in each server process; it is never taken from the command line.
  */
 @QuarkusMain
 public class McpApplication {
@@ -45,16 +45,20 @@ public class McpApplication {
         }
 
         boolean stdioMode = false;
-        String casePath = null;
+        boolean legacyCaseArgument = false;
 
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
             if ("--stdio".equalsIgnoreCase(arg)) {
                 stdioMode = true;
             } else if (arg.startsWith("--case=")) {
-                casePath = arg.substring("--case=".length());
-            } else if ("--case".equalsIgnoreCase(arg) && i + 1 < args.length) {
-                casePath = args[++i];
+                legacyCaseArgument = true;
+            } else if ("--case".equalsIgnoreCase(arg)) {
+                // Older client configurations still pass the case; it is consumed and ignored.
+                legacyCaseArgument = true;
+                if (i + 1 < args.length) {
+                    i++;
+                }
             } else if ("--version".equalsIgnoreCase(arg) || "-v".equalsIgnoreCase(arg)) {
                 attachConsoleOnWindows();
                 printVersion();
@@ -68,7 +72,7 @@ public class McpApplication {
 
         // Persistent log file of this mode (~/.iped-tools-mcp/logs), installed before anything else is logged.
         File logFile = LogFiles.install(stdioMode ? LogFiles.Mode.STDIO : LogFiles.Mode.GUI);
-        StartupDiagnostics.log(stdioMode ? "STDIO" : "GUI", args, IpedCoreService.ACTIVE_CASE_FILE, logFile);
+        StartupDiagnostics.log(stdioMode ? "STDIO" : "GUI", args, logFile);
         // STDIO logs its shutdown through the Quarkus ShutdownEvent (ShutdownLog); GUI through a JVM hook.
         CrashDiagnostics.installHandlers(!stdioMode);
         if (logFile != null) {
@@ -78,12 +82,9 @@ public class McpApplication {
         if (stdioMode) {
             // Mode A: STDIO Headless Server for LLM clients
             LOGGER.info("Iniciando IPED Tools MCP em modo STDIO...");
-            // The case index is not opened at startup: the first tool call opens the active case on demand
-            // (IpedCoreService.isCaseOpen), so an instance that is never used does not hold the case in memory.
-            if (casePath != null && !casePath.isBlank()) {
-                registerStartupCase(casePath);
-            } else {
-                LOGGER.info("Nenhum caso especificado com '--case'. O caso ativo será aberto na primeira chamada de ferramenta.");
+            // The session starts without a case: the LLM opens one with open_case.
+            if (legacyCaseArgument) {
+                LOGGER.warn(LEGACY_CASE_WARNING);
             }
 
             // The file handler installed above stays on the root logger after Quarkus configures logging. The Quarkus
@@ -106,39 +107,10 @@ public class McpApplication {
         }
     }
 
-    /**
-     * Validates the case given with {@code --case} and registers it as the active case in
-     * {@code ~/.iped-tools-mcp/active_case.txt}, without opening its index: the first tool call opens it.
-     * An invalid folder is reported on stderr and nothing is written.
-     *
-     * @return whether the case was accepted
-     */
-    public static boolean registerStartupCase(String casePath) {
-        File caseDir = new File(casePath);
-        try {
-            caseDir = caseDir.getCanonicalFile();
-        } catch (java.io.IOException ignored) {
-            caseDir = caseDir.getAbsoluteFile();
-        }
-        if (!caseDir.isDirectory() || !iped.engine.data.IPEDSource.checkIfIsCaseFolder(caseDir)) {
-            LOGGER.error("O caminho informado em '--case' não é uma pasta de caso do IPED: {}", caseDir.getAbsolutePath());
-            System.err.println("ERRO: '--case' não aponta para uma pasta de caso do IPED: " + caseDir.getAbsolutePath());
-            return false;
-        }
-        try {
-            File stateFile = IpedCoreService.ACTIVE_CASE_FILE;
-            if (stateFile.getParentFile() != null) {
-                java.nio.file.Files.createDirectories(stateFile.getParentFile().toPath());
-            }
-            java.nio.file.Files.writeString(stateFile.toPath(), caseDir.getAbsolutePath(), StandardCharsets.UTF_8);
-            LOGGER.info("Caso registrado como ativo: {}. O índice será aberto na primeira chamada de ferramenta.",
-                    caseDir.getAbsolutePath());
-            return true;
-        } catch (Exception e) {
-            LOGGER.error("Falha ao registrar o caso ativo {}: {}", caseDir.getAbsolutePath(), e.getMessage());
-            return false;
-        }
-    }
+    /** Logged when an older client configuration passes {@code --case}, which is no longer supported. */
+    static final String LEGACY_CASE_WARNING = "O argumento '--case' não é mais suportado e foi ignorado: "
+            + "o servidor inicia sem caso aberto, e o caso é aberto na conversa com a ferramenta open_case. "
+            + "Remova '--case' da configuração do cliente de IA.";
 
     /**
      * Enforces UTF-8 character encoding on standard I/O streams (stdout, stderr, stdin)
@@ -233,11 +205,11 @@ public class McpApplication {
         System.out.println();
         System.out.println("Uso:");
         System.out.println("  IPED-Tools-MCP.exe                                (Abre a interface grafica)");
-        System.out.println("  IPED-Tools-MCP.exe --stdio --case <dir>           (Inicia como servidor MCP STDIO)");
+        System.out.println("  IPED-Tools-MCP.exe --stdio                        (Inicia como servidor MCP STDIO)");
         System.out.println();
         System.out.println("Opcoes:");
         System.out.println("  --stdio              Executa como servidor MCP via STDIO (chamado pela LLM)");
-        System.out.println("  --case <diretorio>   Caminho para a pasta do caso processado pelo IPED");
+        System.out.println("                       O caso e aberto na conversa, com a ferramenta open_case.");
         System.out.println("  --gui                Forca a abertura da interface grafica");
         System.out.println("  --version, -v        Exibe a versao e informacoes de build");
         System.out.println("  --help, -h           Exibe esta mensagem de ajuda");

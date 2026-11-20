@@ -13,7 +13,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 public class BookmarkTools {
 
     private static final Map<String, Object> NO_CASE = Map.of("success", false, "error",
-            "Nenhum caso está aberto no momento.");
+            IpedCoreService.NO_CASE_OPEN_MESSAGE);
 
     @Tool(
         name = "list_bookmarks",

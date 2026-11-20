@@ -35,11 +35,11 @@ Você também pode configurar por projeto criando o arquivo `.cursor/mcp.json` n
 
 ---
 
-## 💡 Sincronização do Caso
+## 💡 Caso por Conversa
 
-Assim como nos demais clientes, você **não precisa fixar `--case`**. O Cursor se conectará ao caso atualmente selecionado no [Configurador Gráfico](Configurador-Grafico) ou ao caso ativo definido no arquivo compartilhado `%USERPROFILE%\.iped-tools-mcp\active_case.txt`.
-
-Para alternar de caso durante uma sessão, basta selecionar um novo caso na janela gráfica do IPED Tools MCP ou pedir no chat do Cursor:
+A configuração tem só `--stdio`, sem caso. Cada conversa começa **sem caso aberto**. Para abrir ou trocar o caso, peça no chat do Cursor:
 > *"Abra o caso pericial localizado em C:\casos_forenses\outro_caso"*
 
-A ferramenta `open_case` será invocada e os índices serão alternados em memória instantaneamente.
+A ferramenta `open_case` será invocada e o caso será aberto só nesta conversa. O caso de uma conversa não muda o de outra, e o [Configurador Gráfico](Configurador-Grafico) não muda o caso de nenhuma conversa.
+
+O argumento `--case` de versões anteriores não é mais usado: se ainda estiver na configuração, o servidor o ignora e inicia sem caso.

@@ -33,13 +33,13 @@ class StartupDiagnosticsTest {
         props.setProperty("java.library.path", path);
 
         List<String> header = StartupDiagnostics.header("STDIO", new String[] { "--stdio" }, Map.of("Path", path), props,
-                "C:\\casos_forenses\\caso_operacao_01", new File("teste.log"), 1234L);
+                new File("teste.log"), 1234L);
         String text = String.join("\n", header);
 
         assertTrue(text.contains("Modo: STDIO | PID: 1234 | Argumentos: --stdio"));
         assertTrue(text.contains("Java: 21.0.1"));
         assertTrue(text.contains("user.dir): C:\\Windows\\System32"));
-        assertTrue(text.contains("Caso ativo (active_case.txt): C:\\casos_forenses\\caso_operacao_01"));
+        assertFalse(text.contains("Caso ativo"), "o servidor inicia sem caso: o cabeçalho não mostra caso");
         assertTrue(text.contains("iped.root: (não definido)"));
         assertTrue(text.contains(python + " [python39.dll]"), "deve apontar a DLL do Python: " + text);
         assertTrue(text.contains(jep + " [jep.dll]"), "deve apontar o jep.dll: " + text);
@@ -51,12 +51,12 @@ class StartupDiagnosticsTest {
     }
 
     @Test
-    void testHeaderWithoutRelevantPathOrActiveCase() {
+    void testHeaderWithoutRelevantPath() {
         List<String> header = StartupDiagnostics.header("GUI", new String[0], Map.of("PATH", "C:\\Windows"),
-                new Properties(), null, null, 1L);
+                new Properties(), null, 1L);
         String text = String.join("\n", header);
         assertTrue(text.contains("Argumentos: (nenhum)"));
-        assertTrue(text.contains("Caso ativo (active_case.txt): (nenhum)"));
+        assertFalse(text.contains("Caso ativo"));
         assertTrue(text.contains("Arquivo de log: (desativado)"));
         assertTrue(text.contains("PATH: nenhuma entrada de Python, JEP ou IPED"));
     }

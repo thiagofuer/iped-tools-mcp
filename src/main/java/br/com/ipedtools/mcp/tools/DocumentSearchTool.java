@@ -69,7 +69,7 @@ public class DocumentSearchTool {
     ) {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
-            return Map.of("error", "Nenhum caso está aberto no momento.");
+            return Map.of("error", IpedCoreService.NO_CASE_OPEN_MESSAGE);
         }
         try {
             return service.executeSearch(query, limit, offset == null ? 0 : offset);

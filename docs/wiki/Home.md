@@ -11,7 +11,7 @@ Bem-vindo à documentação oficial do **IPED Tools MCP**, o servidor nativo bas
 | **[Requisitos](Requisitos)** | Compatibilidade de sistema, versões do IPED suportadas e clientes homologados. |
 | **[Download e Verificação](Download-e-Verificacao)** | Obtenção dos pacotes oficiais e conferência de integridade criptográfica SHA-256. |
 | **[Instalação](Instalacao)** | Passo a passo para instalação via instalador Windows (`.msi`) ou pacote portátil (`.zip`). |
-| **[Configurador Gráfico](Configurador-Grafico)** | Como utilizar a interface visual para alternar o caso ativo e gerar configurações 1-click. |
+| **[Configurador Gráfico](Configurador-Grafico)** | Como testar o MCP em modo STDIO pela interface visual e gerar configurações 1-click. |
 | **[Clientes de IA](Cliente-Claude-Desktop)** | Guias específicos para [Claude Desktop](Cliente-Claude-Desktop), [Cursor](Cliente-Cursor), [Antigravity](Cliente-Antigravity), [LM Studio (Air-Gapped)](Cliente-LM-Studio) e [Claude Code](Cliente-Claude-Code). |
 | **[Fluxo de Investigação](Fluxo-de-Investigacao)** | Metodologia forense assistida por IA, uso do prompt `start_case` e ciclo de auditoria. |
 | **[Catálogo de Ferramentas](Catalogo-de-Ferramentas)** | Documentação completa das 30 ferramentas periciais disponíveis com exemplos de comandos. |

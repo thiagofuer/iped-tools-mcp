@@ -50,7 +50,7 @@ public class PropertyCatalogTool {
     ) {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
-            return Map.of("error", "Nenhum caso do IPED está aberto no momento.");
+            return Map.of("error", IpedCoreService.NO_CASE_OPEN_MESSAGE);
         }
         try {
             return PropertyCatalogService.getInstance().listProperties(group, pattern, category, Boolean.TRUE.equals(identity));
@@ -88,7 +88,7 @@ public class PropertyCatalogTool {
     ) {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
-            return Map.of("error", "Nenhum caso do IPED está aberto no momento.");
+            return Map.of("error", IpedCoreService.NO_CASE_OPEN_MESSAGE);
         }
         if (name == null || name.isBlank()) {
             return Map.of("error", "Informe o nome da propriedade (use list_properties para descobrir os nomes).");

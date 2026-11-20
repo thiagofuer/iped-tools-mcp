@@ -83,6 +83,10 @@ class ForensicPromptsTest {
         // 3. Phased investigation methodology
         assertTrue(text.contains("get_server_status"), "Deve orientar início com get_server_status");
         assertTrue(text.contains("get_case_summary"), "Deve indicar get_case_summary");
+        assertTrue(text.contains("peça ao examinador o caminho absoluto da pasta do caso do IPED e chame `open_case`"),
+                "Sem caso aberto, deve orientar pedir a pasta ao examinador e chamar open_case");
+        assertTrue(text.contains("uma sessão nova começa sem caso aberto"), "Deve dizer que a sessão começa sem caso");
+        assertFalse(text.toLowerCase().contains("configurador"), "Não deve mandar carregar o caso no configurador");
         assertTrue(text.contains("list_sources"), "Deve indicar list_sources");
         assertTrue(text.contains("get_device_and_accounts"), "Deve orientar o levantamento dos identificadores");
         assertTrue(text.contains("compare as fontes"), "Deve orientar a comparação das fontes");
@@ -258,6 +262,8 @@ class ForensicPromptsTest {
     void testServerInstructionsStateTheFourRules() throws Exception {
         String instructions = serverInstructions();
         assertTrue(instructions.contains("start_case"), "deve recomendar o prompt start_case");
+        assertTrue(instructions.contains("A sessão começa sem caso aberto"), "deve dizer que a sessão começa sem caso");
+        assertTrue(instructions.contains("chame open_case"), "deve orientar a abertura do caso com open_case");
         // 1. sensitive content check, with the same signals as the prompt
         assertTrue(instructions.contains("\"não verificado\", nunca zero"));
         java.util.Set<String> promptSignals = checkedPropertyNames(sensitiveCheckSection(defaultPrompt()));

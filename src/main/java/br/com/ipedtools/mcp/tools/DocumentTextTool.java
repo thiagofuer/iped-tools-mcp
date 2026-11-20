@@ -40,7 +40,7 @@ public class DocumentTextTool {
     ) {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
-            return "[Erro: Nenhum caso está aberto no momento.]";
+            return "[Erro: " + IpedCoreService.NO_CASE_OPEN_MESSAGE + "]";
         }
         return service.getDocumentText(docId, offset, maxChars);
     }
