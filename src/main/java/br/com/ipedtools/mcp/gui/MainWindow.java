@@ -12,6 +12,7 @@ import javax.swing.border.TitledBorder;
 
 import br.com.ipedtools.mcp.McpApplication;
 import br.com.ipedtools.mcp.VersionInfo;
+import br.com.ipedtools.mcp.prompts.StartPromptStore;
 
 /**
  * Modern Swing configuration and diagnostic GUI for IPED Tools MCP.
@@ -27,6 +28,8 @@ public class MainWindow extends JFrame {
     private final JButton cancelTestButton;
     private final JTextArea testResultArea;
     private volatile StdioSelfTest currentTest;
+
+    private final StartPromptPanel startPromptPanel;
 
     private final JComboBox<String> clientSelectCombo;
     private final JTextArea configJsonArea;
@@ -44,8 +47,8 @@ public class MainWindow extends JFrame {
         }
 
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(850, 720);
-        setMinimumSize(new Dimension(750, 600));
+        setSize(880, 900);
+        setMinimumSize(new Dimension(780, 760));
         setLocationRelativeTo(null);
 
         initAppIcons();
@@ -97,7 +100,7 @@ public class MainWindow extends JFrame {
         testTop.add(testHintLabel, BorderLayout.NORTH);
         testTop.add(testCaseRow, BorderLayout.SOUTH);
 
-        testResultArea = new JTextArea(6, 40);
+        testResultArea = new JTextArea(5, 40);
         testResultArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
         testResultArea.setEditable(false);
         testResultArea.setBackground(new Color(248, 249, 250));
@@ -108,10 +111,15 @@ public class MainWindow extends JFrame {
         contentPanel.add(testPanel);
         contentPanel.add(Box.createVerticalStrut(8));
 
+        // start_case prompt: copy for clients without MCP prompts, edit or restore the methodology
+        startPromptPanel = new StartPromptPanel(StartPromptStore.forUser(), this::log);
+        contentPanel.add(startPromptPanel);
+        contentPanel.add(Box.createVerticalStrut(8));
+
         // Config generation section
         JPanel configPanel = new JPanel(new BorderLayout(6, 6));
         configPanel.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createEtchedBorder(), " 2. Configuração do Cliente de IA ",
+                BorderFactory.createEtchedBorder(), " 3. Configuração do Cliente de IA ",
                 TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION,
                 new Font("SansSerif", Font.BOLD, 12)
         ));
@@ -137,7 +145,7 @@ public class MainWindow extends JFrame {
         topContainer.add(configTopPanel, BorderLayout.NORTH);
         topContainer.add(configHintLabel, BorderLayout.SOUTH);
 
-        configJsonArea = new JTextArea(8, 40);
+        configJsonArea = new JTextArea(7, 40);
         configJsonArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
         configJsonArea.setEditable(false);
         configJsonArea.setBackground(new Color(248, 249, 250));
@@ -185,6 +193,12 @@ public class MainWindow extends JFrame {
             @Override
             public void windowClosing(java.awt.event.WindowEvent e) {
                 cancelRunningTest();
+            }
+
+            // The prompt file may have been edited outside the window.
+            @Override
+            public void windowActivated(java.awt.event.WindowEvent e) {
+                startPromptPanel.refreshStatus();
             }
         });
         Runtime.getRuntime().addShutdownHook(new Thread(this::cancelRunningTest, "mcp-selftest-cleanup"));

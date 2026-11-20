@@ -133,3 +133,20 @@ Se o Claude Desktop fechar o canal de comunicação logo na abertura:
 2. **Tempo de carregamento de casos gigantescos:** o caso não é aberto ao iniciar o servidor, e sim quando o modelo chama `open_case`, que por isso leva alguns segundos a mais. Se o caso possuir centenas de milhares de documentos (ex: 700.000+ arquivos), o IPED Core pode levar 2 a 3 segundos para ler o índice Lucene do disco. A conexão inicial (`initialize` e `tools/list`) não depende do caso. Se o `open_case` estourar o tempo limite do cliente, repita-o: a leitura seguinte aproveita o cache de disco do sistema operacional.
 3. **Caminho do executável:** Certifique-se de apontar para a versão de produção instalada (`C:\Program Files\IPED Tools MCP\IPED-Tools-MCP.exe`) ou para o executável gerado na pasta portátil.
 
+
+---
+
+## ❓ 8. O prompt personalizado não está sendo usado
+
+### O que acontece:
+Você editou a metodologia do `start_case` (`%USERPROFILE%\.iped-tools-mcp\prompts\start_case.md`), mas a IA continua recebendo o texto padrão.
+
+### Como verificar:
+1. **No [Configurador Gráfico](Configurador-Grafico):** a linha de situação da seção **Prompt inicial da investigação** diz *"Metodologia personalizada inválida"* e o motivo: arquivo vazio, com mais de 200 KB, fora do UTF-8 ou ilegível. Enquanto isso, vale a metodologia padrão.
+2. **No log do servidor** (`iped-tools-mcp-stdio.log`): a cada `start_case` com cópia inválida aparece *"Prompt start_case personalizado ignorado"*, com o caminho e o motivo. Uma cópia desatualizada continua valendo e aparece uma vez por processo como *"Prompt start_case personalizado desatualizado"*.
+
+### Como resolver:
+* **Codificação:** salve o arquivo em **UTF-8** (no Bloco de Notas: *Salvar como* → *Codificação: UTF-8*).
+* **Arquivo vazio ou grande demais:** corrija o texto, ou use **Restaurar padrão** e recomece pelo **Editar**.
+* **O prompt é lido a cada `start_case`:** não é preciso reiniciar o cliente, mas é preciso acionar o `start_case` de novo numa conversa. Uma conversa já iniciada guarda o texto que recebeu.
+* **Clientes sem menu de prompts:** o texto colado vem do botão **Copiar prompt**; copie de novo depois de editar.

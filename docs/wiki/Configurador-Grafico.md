@@ -2,10 +2,11 @@
 
 O executável `IPED-Tools-MCP.exe` opera em modo duplo (*dual-mode*). Quando iniciado sem argumentos de linha de comando ou via duplo-clique no atalho da Área de Trabalho/Menu Iniciar, ele abre o **Configurador Gráfico (GUI)** em Java Swing.
 
-O configurador serve para duas coisas:
+O configurador serve para três coisas:
 
 1. **Testar o MCP** do mesmo jeito que o cliente de IA vai executá-lo.
-2. **Gerar a configuração** do cliente de IA.
+2. **Copiar e personalizar o prompt inicial** da investigação (`start_case`).
+3. **Gerar a configuração** do cliente de IA.
 
 O configurador **não abre nem define o caso das conversas**. Cada conversa com o modelo de IA tem o seu próprio caso, aberto com a ferramenta `open_case` (veja [Caso por conversa](#-caso-por-conversa)).
 
@@ -47,7 +48,36 @@ Cada etapa aparece com ✔ (passou), ❌ (falhou) ou – (não executada, porque
 
 ---
 
-## 🔄 2. Configuração do Cliente de IA
+## 📝 2. Prompt inicial da investigação (`start_case`)
+
+O `start_case` traz a metodologia de investigação e as regras de conduta (veja [Fluxo de Investigação](Fluxo-de-Investigacao)). Esta seção mostra qual metodologia está em uso e permite copiar o prompt ou personalizá-lo.
+
+### Situação
+A linha de situação mostra uma de quatro mensagens:
+
+| Situação | Significado |
+|---|---|
+| Metodologia padrão da versão | Não há cópia personalizada: vale a metodologia da versão instalada. |
+| Metodologia personalizada | Vale a sua cópia em `%USERPROFILE%\.iped-tools-mcp\prompts\start_case.md`. |
+| Personalizada desatualizada | A sua cópia foi criada a partir do padrão de uma versão anterior, e o padrão mudou. Ela continua valendo, mas compare-a com o padrão. |
+| Personalizada inválida | A cópia está vazia, tem mais de 200 KB, não está em UTF-8 ou não pôde ser lida. Vale a metodologia padrão até a cópia ser corrigida. |
+
+A situação é atualizada quando a janela volta ao primeiro plano, por exemplo depois de você salvar o arquivo no editor.
+
+### Botões
+* **📋 Copiar prompt:** copia o prompt completo, com os campos opcionais **Foco** e **Pasta do caso**. É o mesmo texto que o servidor entrega no `start_case`. Use em clientes que não oferecem os prompts do MCP: cole o texto como **primeira mensagem** da conversa.
+* **Editar:** na primeira vez, cria a cópia personalizada a partir do padrão da versão instalada; depois, abre a cópia existente sem alterá-la. O arquivo abre no editor associado a `.md`. Se não houver um, a janela abre a pasta e mostra o caminho do arquivo. A edição vale no próximo `start_case`, sem reiniciar o cliente de IA.
+* **Abrir pasta:** abre `%USERPROFILE%\.iped-tools-mcp\prompts`.
+* **Restaurar padrão:** depois de confirmar, renomeia a cópia para `start_case.md.bak-<data e hora>`, na mesma pasta, e volta à metodologia padrão.
+
+### O que pode e o que não pode ser editado
+* **Pode:** a persona, o idioma e as etapas da metodologia.
+* **Não pode:** as **regras de conduta** (acesso só pelas ferramentas do MCP, checagem de conteúdo sensível, consentimento do modelo em nuvem, aceite por sessão e confirmação de escritas). Elas não estão no arquivo: o aplicativo as acrescenta sempre ao fim do prompt, e elas prevalecem sobre o restante do texto.
+* A primeira linha do arquivo (`<!-- iped-tools-mcp start_case base: ... -->`) registra de qual padrão a cópia foi criada e não vai para o modelo. Se você apagá-la, a cópia continua valendo, mas o configurador não consegue avisar quando ela ficar desatualizada.
+
+---
+
+## 🔄 3. Configuração do Cliente de IA
 
 No menu suspenso *"Selecione seu aplicativo de IA:"*, você encontra três opções correspondentes aos principais fluxos de trabalho:
 

@@ -8,7 +8,7 @@ O modelo de linguagem atua como um assistente cognitivo do examinador: ele reali
 
 ## 🧭 Metodologia em 7 Etapas
 
-Quando o prompt oficial `start_case` é acionado, a IA é instruída a seguir o seguinte ciclo de trabalho:
+Quando o prompt oficial `start_case` é acionado, a IA é instruída a seguir o seguinte ciclo de trabalho. No texto do prompt, as etapas 2 e 7 formam o bloco fixo de **regras de conduta**, que o aplicativo acrescenta sempre ao fim do prompt; as demais etapas formam a **metodologia**, que pode ser personalizada (veja [Personalizar a metodologia](#personalizar-a-metodologia)).
 
 ```
 [1. Status e Prontidão]  -->  [2. Regras de Conduta]          -->  [3. Reconhecimento de Fontes]
@@ -67,7 +67,10 @@ O `start_case` é um **prompt MCP**: quem o insere na conversa é o cliente, qua
 
 > ⚠️ **Não digite `start_case` como texto comum** (nem peça "execute o prompt start_case"). Assim a mensagem chega à IA como um pedido qualquer, e a metodologia e as regras de conduta não entram na conversa.
 
-Mesmo sem o `start_case`, o servidor envia ao cliente, na conexão, um resumo das regras de conduta (as *instructions* do protocolo MCP). Cada cliente decide se repassa esse texto à IA. Nos clientes testados, só o Claude Code o repassa. O chat do Claude Desktop e o LM Studio não repassam: neles, só a regra de confirmar escritas chega à IA, pelas descrições das ferramentas. Por isso, acione o `start_case` pelo menu de prompts. Se o cliente não tiver esse menu, peça explicitamente a checagem de conteúdo sensível antes de analisar itens.
+Mesmo sem o `start_case`, o servidor envia ao cliente, na conexão, um resumo das regras de conduta (as *instructions* do protocolo MCP). Cada cliente decide se repassa esse texto à IA. Nos clientes testados, só o Claude Code o repassa. O chat do Claude Desktop e o LM Studio não repassam: neles, só a regra de confirmar escritas chega à IA, pelas descrições das ferramentas. Por isso, acione o `start_case` pelo menu de prompts.
+
+### Clientes sem menu de prompts:
+Se o cliente não oferece os prompts MCP, abra o [Configurador Gráfico](Configurador-Grafico), seção **Prompt inicial da investigação**, preencha se quiser o foco e a pasta do caso e clique em **📋 Copiar prompt**. Cole o texto como **primeira mensagem** da conversa. É o mesmo texto que o servidor entrega no `start_case`, com a metodologia em uso e as regras de conduta.
 
 ### Parâmetros Opcionais:
 * `investigation_target`: Tema ou foco específico da investigação (ex: *"mensagens entre o suspeito A e o suspeito B"*).
@@ -75,6 +78,22 @@ Mesmo sem o `start_case`, o servidor envia ao cliente, na conexão, um resumo da
 
 ### Espelhamento Dinâmico de Idioma (Dynamic Language Mirroring):
 O prompt instrui a IA a iniciar respondendo em **Português do Brasil (pt-BR)** como idioma padrão, mas a acompanhar fluentemente qualquer outro idioma utilizado pelo examinador ao longo do diálogo, mantendo inalterados termos técnicos internacionais e hashes forenses.
+
+### Personalizar a metodologia
+O `start_case` tem três partes, sempre nesta ordem:
+
+1. **Metodologia:** persona, idioma e as etapas de trabalho. É a parte que pode ser personalizada.
+2. **Foco e pasta do caso:** gerados a partir dos parâmetros opcionais.
+3. **Regras de conduta:** acesso só pelo MCP, checagem de conteúdo sensível, consentimento e aceite, e confirmação de escritas. Elas são acrescentadas pelo aplicativo, **não fazem parte do arquivo editável** e prevalecem sobre qualquer instrução anterior do prompt.
+
+Para adaptar a metodologia à rotina do laboratório, use o botão **Editar** do [Configurador Gráfico](Configurador-Grafico). A cópia personalizada fica em `%USERPROFILE%\.iped-tools-mcp\prompts\start_case.md` e vale no próximo `start_case`, sem reiniciar o cliente de IA. **Restaurar padrão** volta à metodologia da versão instalada e guarda a cópia como backup.
+
+Recomendações:
+* Mantenha a metodologia enxuta. Modelos locais têm contexto pequeno, e o prompt inteiro entra na conversa. A metodologia padrão tem cerca de 6 KB; o limite aceito é 200 KB, mas textos muito longos prejudicam a análise.
+* As descrições das ferramentas continuam orientando o modelo (paginação, descoberta de propriedades etc.) mesmo que a metodologia personalizada não cite esses pontos.
+* As regras de conduta orientam a IA, mas o servidor não bloqueia chamadas: um texto da metodologia que as contradiga não as desliga, porém também não há garantia de que o modelo as siga.
+
+**Cópia desatualizada:** uma nova versão pode mudar a metodologia padrão (por exemplo, ao incluir ou renomear ferramentas). A cópia personalizada registra de qual padrão foi criada, e o configurador avisa quando ela ficou desatualizada. Compare a cópia com o padrão (o backup criado por **Restaurar padrão** ajuda) e atualize-a, ou restaure o padrão.
 
 ---
 
