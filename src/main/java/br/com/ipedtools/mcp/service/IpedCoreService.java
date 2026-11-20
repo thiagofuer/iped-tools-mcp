@@ -75,10 +75,9 @@ public class IpedCoreService {
             "trackid", "timeeventords", "timeeventgroups", "x-reader", "ipedembeddefolder"
     );
 
-    public static final File ACTIVE_CASE_FILE = new File(
-            System.getProperty("user.home") + File.separator + ".iped-tools-mcp",
-            "active_case.txt"
-    );
+    /** Answer of every case tool while no case is open in this session: the case is opened only with open_case. */
+    public static final String NO_CASE_OPEN_MESSAGE = "Nenhum caso aberto nesta sessão. Peça ao usuário o caminho da pasta "
+            + "do caso do IPED e chame a ferramenta open_case.";
 
     private IPEDSource ipedSource;
     private File caseDirectory;
@@ -87,8 +86,6 @@ public class IpedCoreService {
     private static final java.util.concurrent.atomic.AtomicBoolean PARSING_OPTIONS_APPLIED =
             new java.util.concurrent.atomic.AtomicBoolean();
     private String sourceId = "caso1";
-    private long lastActiveCaseFileCheck = 0;
-    private long lastActiveCaseFileModTime = 0;
 
     private IpedCoreService() {
     }
@@ -98,58 +95,6 @@ public class IpedCoreService {
             INSTANCE = new IpedCoreService();
         }
         return INSTANCE;
-    }
-
-    /**
-     * Checks if the active case was updated by another process (e.g. GUI) and reloads it dynamically.
-     */
-    public synchronized void syncActiveCaseIfNeeded() {
-        // With no case open, the active case is opened on demand: the throttle and the modification-time check
-        // only avoid re-reading the file while a case is already open.
-        boolean noCaseOpen = this.ipedSource == null;
-        long now = System.currentTimeMillis();
-        if (!noCaseOpen && now - lastActiveCaseFileCheck < 500) {
-            return;
-        }
-        lastActiveCaseFileCheck = now;
-
-        try {
-            if (!ACTIVE_CASE_FILE.exists()) {
-                return;
-            }
-            long modTime = ACTIVE_CASE_FILE.lastModified();
-            if (!noCaseOpen && modTime == lastActiveCaseFileModTime) {
-                return;
-            }
-            lastActiveCaseFileModTime = modTime;
-
-            String path = java.nio.file.Files.readString(ACTIVE_CASE_FILE.toPath(), java.nio.charset.StandardCharsets.UTF_8).trim();
-            if (!path.isBlank()) {
-                File target = new File(path);
-                if (target.exists() && IPEDSource.checkIfIsCaseFolder(target)) {
-                    if (this.caseDirectory == null || !this.caseDirectory.getCanonicalPath().equalsIgnoreCase(target.getCanonicalPath())) {
-                        if (noCaseOpen) {
-                            LOGGER.info("Abrindo caso ativo sob demanda: {}", target.getAbsolutePath());
-                        } else {
-                            LOGGER.info("Sincronizando caso ativo detectado via GUI/Arquivo de Estado: {}", target.getAbsolutePath());
-                        }
-                        openCaseInternal(target, false);
-                    }
-                } else if (noCaseOpen) {
-                    String reason = target.exists()
-                            ? "a pasta do caso ativo não é uma pasta de caso do IPED: " + target.getAbsolutePath()
-                            : "a pasta do caso ativo não existe ou não está acessível: " + target.getAbsolutePath();
-                    recordOpenError("validação da pasta", reason);
-                    LOGGER.warn("Caso ativo não pode ser aberto: {}", reason);
-                }
-            }
-        } catch (Exception | LinkageError e) {
-            // Opening failures were logged at DEBUG and lost; they are what support needs to see.
-            LOGGER.warn("Falha ao abrir o caso ativo: {}", e.toString(), e);
-            if (lastOpenError == null) {
-                recordOpenError("abertura do caso", e.toString());
-            }
-        }
     }
 
     // =========================================================================
@@ -200,10 +145,6 @@ public class IpedCoreService {
      * Opens and validates an IPED case folder.
      */
     public synchronized void openCase(File caseDir) {
-        openCaseInternal(caseDir, true);
-    }
-
-    private synchronized void openCaseInternal(File caseDir, boolean persistState) {
         if (caseDir == null || !caseDir.exists()) {
             String message = "O diretório do caso não existe: " + caseDir;
             recordOpenError("validação da pasta", message);
@@ -268,18 +209,6 @@ public class IpedCoreService {
 
         LOGGER.info("Caso carregado com sucesso. Total de documentos no leitor: {}",
                 this.ipedSource.getReader().numDocs());
-
-        if (persistState) {
-            try {
-                if (ACTIVE_CASE_FILE.getParentFile() != null) {
-                    java.nio.file.Files.createDirectories(ACTIVE_CASE_FILE.getParentFile().toPath());
-                }
-                java.nio.file.Files.writeString(ACTIVE_CASE_FILE.toPath(), caseDir.getAbsolutePath(), java.nio.charset.StandardCharsets.UTF_8);
-                lastActiveCaseFileModTime = ACTIVE_CASE_FILE.lastModified();
-            } catch (Exception ex) {
-                LOGGER.debug("Falha ao salvar active_case.txt: {}", ex.getMessage());
-            }
-        }
     }
 
     /**
@@ -334,17 +263,14 @@ public class IpedCoreService {
     }
 
     public synchronized boolean isCaseOpen() {
-        syncActiveCaseIfNeeded();
         return this.ipedSource != null && this.ipedSource.getReader() != null;
     }
 
     public synchronized File getCaseDirectory() {
-        syncActiveCaseIfNeeded();
         return this.caseDirectory;
     }
 
     public synchronized String getSourceId() {
-        syncActiveCaseIfNeeded();
         return this.sourceId;
     }
 
@@ -1632,7 +1558,7 @@ public class IpedCoreService {
 
     private void checkCaseOpen() {
         if (!isCaseOpen()) {
-            throw new IllegalStateException("Nenhum caso do IPED está aberto no momento. Use openCase(File) primeiro.");
+            throw new IllegalStateException(NO_CASE_OPEN_MESSAGE);
         }
     }
 

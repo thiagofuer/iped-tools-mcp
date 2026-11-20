@@ -22,7 +22,7 @@ O [Configurador Gráfico](Configurador-Grafico) gera os campos exatos para preen
      ```
 4. Salve e ative a chave de conexão correspondente.
 
-> ✨ **Vantagem:** Com apenas o argumento `--stdio`, você nunca mais precisará reconfigurar o LM Studio! O servidor se sincronizará automaticamente com qualquer caso selecionado no Configurador Gráfico ou aberto pela IA no chat.
+> ✨ **Vantagem:** Com apenas o argumento `--stdio`, você não precisa reconfigurar o LM Studio para trocar de caso. Cada conversa começa sem caso aberto: peça ao modelo para abrir a pasta do caso (por exemplo, *"abra o caso D:\casos\operacao_01"*), e ele chama a ferramenta `open_case`. O argumento `--case` de versões anteriores não é mais usado e pode ser removido.
 
 ---
 

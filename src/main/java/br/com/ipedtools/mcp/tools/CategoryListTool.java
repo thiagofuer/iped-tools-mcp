@@ -22,7 +22,7 @@ public class CategoryListTool {
     public List<String> listCategories() {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
-            return List.of("[Erro: Nenhum caso está aberto no momento.]");
+            return List.of("[Erro: " + IpedCoreService.NO_CASE_OPEN_MESSAGE + "]");
         }
         return service.listCategories();
     }

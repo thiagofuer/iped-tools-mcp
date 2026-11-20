@@ -141,7 +141,7 @@ public final class PropertyCatalogService {
     synchronized Map<String, CaseField> caseFields() throws IOException {
         IPEDSource source = core().getSource();
         if (source == null) {
-            throw new IllegalStateException("Nenhum caso do IPED está aberto no momento.");
+            throw new IllegalStateException(IpedCoreService.NO_CASE_OPEN_MESSAGE);
         }
         if (source == cachedSource && cachedFields != null) {
             return cachedFields;

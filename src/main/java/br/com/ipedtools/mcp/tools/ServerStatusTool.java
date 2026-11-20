@@ -21,7 +21,9 @@ public class ServerStatusTool {
             
             WORKFLOW RULE:
             - CALL THIS TOOL FIRST: It confirms that the IPED MCP server is running and tells you whether a case is loaded.
-            - If case_open is false, no other tools will work until a case folder is loaded by the examiner.
+            - Each conversation has its own case, and a new session starts with no case open.
+            - If case_open is false, ask the user for the absolute path of the IPED case folder and call open_case
+              with it. Case tools do not work until a case is opened with open_case in this conversation.
             - If case_open is true, case_source_id contains the active case identifier (e.g. 'caso1') needed for other tools.
             - If case_open is false and last_error is present, the last attempt to open the case failed: tell the user
               the failed step and message, and that the details are in the log file shown in log_file.
@@ -49,7 +51,7 @@ public class ServerStatusTool {
         response.put("connected", true);
         response.put("server_version", VersionInfo.getVersion());
         response.put("case_open", isOpen);
-        response.put("status", isOpen ? "Pronto para análise forense" : "Aguardando carregamento de caso");
+        response.put("status", isOpen ? "Pronto para análise forense" : IpedCoreService.NO_CASE_OPEN_MESSAGE);
 
         if (isOpen) {
             response.put("case_source_id", service.getSourceId());

@@ -48,28 +48,9 @@ Abra o arquivo `claude_desktop_config.json` e insira o bloco abaixo dentro da ch
 
 *(Se estiver utilizando a versão portátil, substitua pelo caminho correspondente, por exemplo: `"C:\\Ferramentas\\IPED-Tools-MCP\\IPED-Tools-MCP.exe"`)*
 
-> 💡 **Nota Importante:** Note que **não é necessário fixar o parâmetro `--case`**! Com apenas `--stdio`, o servidor MCP sincroniza automaticamente com o caso selecionado na interface gráfica do IPED Tools MCP ou com o caso que você solicitar para a IA abrir no chat através da ferramenta `open_case`.
-
----
-
-## 📌 Configuração com Caso Fixo (Opcional)
-
-Se você preferir travar a inicialização sempre em um caso pericial específico:
-
-```json
-{
-  "mcpServers": {
-    "iped": {
-      "command": "C:\\Program Files\\IPED Tools MCP\\IPED-Tools-MCP.exe",
-      "args": [
-        "--stdio",
-        "--case",
-        "C:\\casos_forenses\\caso_operacao_01"
-      ]
-    }
-  }
-}
-```
+> 💡 **Nota Importante:** a configuração tem só `--stdio`, sem caso. Cada conversa começa sem caso aberto: peça ao Claude para abrir a pasta do caso (por exemplo, *"abra o caso C:\casos_forenses\caso_operacao_01"*), e ele chama a ferramenta `open_case`. O caso de uma conversa não muda o de outra.
+>
+> O argumento `--case` de versões anteriores não é mais usado. Se ele estiver na sua configuração, o servidor o ignora e inicia sem caso; você pode removê-lo.
 
 ---
 

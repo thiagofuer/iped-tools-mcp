@@ -328,7 +328,7 @@ public final class DeviceAccountsService {
         IpedCoreService core = IpedCoreService.getInstance();
         IPEDSource source = core.getSource();
         if (source == null) {
-            throw new IllegalStateException("Nenhum caso do IPED está aberto no momento.");
+            throw new IllegalStateException(IpedCoreService.NO_CASE_OPEN_MESSAGE);
         }
         IndexReader reader = source.getReader();
         Map<String, Container> containers = loadContainers(source);

@@ -75,7 +75,8 @@ $jvmArgs = @(
     "--add-exports=java.desktop/sun.awt.image=ALL-UNNAMED",
     "--add-exports=java.desktop/com.sun.imageio.plugins.common=ALL-UNNAMED",
     "-jar", $JarPath,
-    "--stdio", "--case", $CasePath
+    # '--case' de configuracoes antigas deve ser ignorado: a sessao comeca sem caso e o caso e aberto com open_case
+    "--stdio", "--case", "`"$CasePath`""
 )
 
 $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -154,6 +155,20 @@ try {
         Write-Host (" PASS (" + $toolCount + " ferramentas registradas)") -ForegroundColor Green
     } else {
         Write-Host (" FAIL (" + $toolCount + " ferramentas, esperado " + $expectedTools + " incluindo get_contact_relationship e list_properties)") -ForegroundColor Red; exit 1
+    }
+
+    # 3b. Sessao sem caso: '--case' ignorado, e o caso so abre com open_case
+    Write-Host "[2b/25] Testando sessao sem caso e open_case..." -NoNewline
+    $noCase = (Send-RpcRequest "tools/call" @{ name = "get_server_status"; arguments = @{} }).result.content[0].text | ConvertFrom-Json
+    if ($noCase.case_open) {
+        Write-Host " FAIL (o servidor iniciou com caso aberto; '--case' deveria ser ignorado)" -ForegroundColor Red; exit 1
+    }
+    $openCall = Send-RpcRequest "tools/call" @{ name = "open_case"; arguments = @{ case_path = $CasePath } }
+    $openData = $openCall.result.content[0].text | ConvertFrom-Json
+    if ($openData.status -eq "success") {
+        Write-Host (" PASS (sem caso no inicio; open_case abriu " + $openData.total_items + " itens)") -ForegroundColor Green
+    } else {
+        Write-Host (" FAIL: " + ($openCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
     # 4. Call list_properties (group overview)

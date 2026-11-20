@@ -29,5 +29,5 @@ No Antigravity, acesse as configurações de servidores MCP através do menu de 
 
 Com o servidor conectado no Antigravity:
 * **Automação de Quesitos:** Agentes especializados podem ler volumes maciços de evidências indexadas, checar integridade de hashes e responder quesitos periciais estruturados com citações precisas dos itens probatórios.
-* **Sincronização Compartilhada:** Não é necessário fixar o parâmetro `--case`. O agente pode iniciar chamando `check_connection` ou `get_server_status` para identificar o caso ativo, ou alternar entre fontes probatórias utilizando `open_case`.
+* **Caso por conversa:** A configuração tem só `--stdio`, sem caso. Cada conversa começa sem caso aberto: o agente chama `get_server_status`, pede a pasta do caso e a abre com `open_case`, que também serve para trocar de caso. O caso de uma conversa não muda o de outra. O argumento `--case` de versões anteriores é ignorado e pode ser removido.
 * **Metodologia de Custódia:** O agente opera sob estrito modo somente-leitura, podendo registrar achados relevantes com `add_to_bookmark` e `set_item_checked` para conferência posterior pelo perito no IPED Desktop.
