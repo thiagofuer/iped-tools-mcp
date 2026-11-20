@@ -10,6 +10,11 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 ## [Unreleased]
 
 ### Adicionado
+- **Prompt `start_case` personalizável:** o texto sai do código e passa a ter três partes: a metodologia, as seções geradas (foco e pasta do caso) e, por último, as regras de conduta.
+  - A metodologia padrão é um recurso do executável. O perito pode criar uma cópia em `%USERPROFILE%\.iped-tools-mcp\prompts\start_case.md`, que o servidor lê a cada `start_case`, sem reinício. Uma cópia vazia, com mais de 200 KB, fora do UTF-8 ou ilegível é ignorada, com aviso no log, e vale o padrão.
+  - As regras de conduta (acesso só pelo MCP, checagem de conteúdo sensível, consentimento e aceite, confirmação de escritas) não fazem parte do arquivo editável: o aplicativo as acrescenta sempre ao fim do prompt, e elas prevalecem sobre o restante do texto.
+  - A cópia registra de qual padrão foi criada; quando uma nova versão muda o padrão, o configurador e o log avisam que ela está desatualizada.
+- **Seção "Prompt inicial da investigação" no configurador:** mostra a metodologia em uso; **Copiar prompt** copia o mesmo texto que o servidor entrega no `start_case`, com foco e pasta do caso opcionais, para clientes que não oferecem os prompts do MCP; **Editar** cria a cópia a partir do padrão e a abre no editor; **Abrir pasta**; **Restaurar padrão** guarda a cópia como backup e volta ao padrão.
 - **Logs e diagnóstico para suporte:**
   - **Log em arquivo nos dois modos:** fica em `%USERPROFILE%\.iped-tools-mcp\logs\` (`iped-tools-mcp-stdio.log` e `iped-tools-mcp-gui.log`), com rotação a cada 5 MB (5 arquivos guardados), UTF-8 e o número do processo em cada linha. O `stderr` continua recebendo o log, e o `stdout` segue exclusivo do JSON-RPC.
   - **Cabeçalho de diagnóstico em cada início:**

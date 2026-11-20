@@ -56,7 +56,13 @@ if (-not $verMismatch -and $verOutput -match "ipedtools\.com\.br") {
     Write-Host " FAIL: $verMismatch | $verOutput" -ForegroundColor Red; exit 1
 }
 
+# Perfil temporario: o prompt personalizado do usuario (~/.iped-tools-mcp/prompts) nao interfere no teste,
+# e o teste do prompt grava a copia personalizada so nesta pasta
+$TestHome = Join-Path ([IO.Path]::GetTempPath()) ("iped-tools-mcp-stdio-" + [Guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Force $TestHome | Out-Null
+
 $jvmArgs = @(
+    "-Duser.home=`"$TestHome`"",
     "-Dfile.encoding=UTF-8",
     "-Dstdout.encoding=UTF-8",
     "-Dstderr.encoding=UTF-8",
@@ -155,6 +161,22 @@ try {
         Write-Host (" PASS (" + $toolCount + " ferramentas registradas)") -ForegroundColor Green
     } else {
         Write-Host (" FAIL (" + $toolCount + " ferramentas, esperado " + $expectedTools + " incluindo get_contact_relationship e list_properties)") -ForegroundColor Red; exit 1
+    }
+
+    # 3a. Prompt start_case: metodologia padrao e, depois, a copia do usuario, sempre com as regras de conduta
+    Write-Host "[2a/25] Testando prompts/list e prompts/get start_case (padrao e personalizado)..." -NoNewline
+    $promptNames = (Send-RpcRequest "prompts/list").result.prompts | ForEach-Object { $_.name }
+    $defaultText = (Send-RpcRequest "prompts/get" @{ name = "start_case"; arguments = @{} }).result.messages[0].content.text
+    $userPrompt = Join-Path $TestHome ".iped-tools-mcp\prompts\start_case.md"
+    New-Item -ItemType Directory -Force (Split-Path $userPrompt) | Out-Null
+    [IO.File]::WriteAllText($userPrompt, "# Metodologia de teste do roteiro`n", (New-Object System.Text.UTF8Encoding($false)))
+    $customText = (Send-RpcRequest "prompts/get" @{ name = "start_case"; arguments = @{} }).result.messages[0].content.text
+    if (($promptNames -contains "start_case") -and $defaultText -match "METODOLOGIA DE INVESTIGA" -and $defaultText -match "REGRAS DE CONDUTA" `
+            -and $customText.StartsWith("# Metodologia de teste do roteiro") -and $customText -match "REGRAS DE CONDUTA" `
+            -and $customText -notmatch "METODOLOGIA DE INVESTIGA") {
+        Write-Host " PASS (padrao e copia do usuario, ambos com as regras de conduta)" -ForegroundColor Green
+    } else {
+        Write-Host " FAIL (prompt sem a metodologia esperada ou sem as regras de conduta)" -ForegroundColor Red; exit 1
     }
 
     # 3b. Sessao sem caso: '--case' ignorado, e o caso so abre com open_case
@@ -505,4 +527,6 @@ try {
     if ($proc -and !$proc.HasExited) {
         $proc.Kill()
     }
+    if ($proc) { $null = $proc.WaitForExit(10000) }
+    Remove-Item -Recurse -Force $TestHome -ErrorAction SilentlyContinue
 }

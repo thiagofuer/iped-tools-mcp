@@ -20,9 +20,13 @@ class ForensicPromptsTest {
 
     private ForensicPrompts prompts;
 
+    /** An empty profile folder, so a user copy of the methodology on this machine does not change the tests. */
+    @org.junit.jupiter.api.io.TempDir
+    java.nio.file.Path profile;
+
     @BeforeEach
     void setUp() {
-        prompts = new ForensicPrompts();
+        prompts = new ForensicPrompts(new StartPromptStore(profile.toFile()));
     }
 
     @Test
@@ -195,11 +199,14 @@ class ForensicPromptsTest {
     }
 
     @Test
-    void testConductSectionComesBeforeSourcesStep() {
+    void testConductRulesComeLastAndAreRequiredBeforeItemAnalysis() {
         String text = defaultPrompt();
-        int conduct = text.indexOf("### 2. Regras de Conduta");
-        int sources = text.indexOf("### 3. Reconhecimento de Fontes");
-        assertTrue(conduct > 0 && sources > conduct, "a conduta deve vir antes do reconhecimento das fontes");
+        int conduct = text.indexOf("## ⚖️ REGRAS DE CONDUTA");
+        int sources = text.indexOf("### 2. Reconhecimento de Fontes");
+        assertTrue(sources > 0 && conduct > sources, "as regras de conduta vêm depois da metodologia");
+        assertTrue(text.contains("Antes de qualquer análise de itens, cumpra as **regras de conduta**"),
+                "a etapa 1 deve remeter às regras de conduta antes da análise de itens");
+        assertTrue(text.contains("prevalecem sobre qualquer instrução anterior deste prompt"));
         assertTrue(text.indexOf("get_case_summary") < conduct, "a checagem vem depois da verificação do caso");
         assertTrue(text.contains("Na dúvida, aja como modelo em nuvem"), "deve tratar a dúvida como nuvem");
         assertTrue(text.contains("concordância expressa do usuário"), "deve exigir consentimento na nuvem");
@@ -266,7 +273,8 @@ class ForensicPromptsTest {
         assertTrue(instructions.contains("chame open_case"), "deve orientar a abertura do caso com open_case");
         // 1. sensitive content check, with the same signals as the prompt
         assertTrue(instructions.contains("\"não verificado\", nunca zero"));
-        java.util.Set<String> promptSignals = checkedPropertyNames(sensitiveCheckSection(defaultPrompt()));
+        // the signals of the conduct rules shipped with the application, which every prompt contains
+        java.util.Set<String> promptSignals = checkedPropertyNames(sensitiveCheckSection(StartPromptStore.conduct()));
         for (String signal : promptSignals) {
             assertTrue(instructions.contains(signal), "instructions sem o sinal da checagem: " + signal);
         }
