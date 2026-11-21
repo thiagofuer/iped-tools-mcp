@@ -42,4 +42,8 @@ A validação é feita pelo [Configurador Gráfico](Configurador-Grafico):
 
 > 💡 O executável não imprime informações no terminal: argumentos como `--version` ou `--help` apenas abrem o configurador, que mostra a versão no título.
 
-Com a instalação validada, use a seção **Configuração do Cliente de IA** do configurador para conectar o seu aplicativo de IA. Depois, na conversa, peça ao modelo para abrir a pasta do caso.
+---
+
+## ➡️ Próximo passo
+
+Configure o seu aplicativo de IA pelo **[Configurador Gráfico](Configurador-Grafico)** e o guia do cliente no menu ao lado. Em seguida, veja **[Como Investigar com o MCP](Como-Investigar-com-o-MCP)**.

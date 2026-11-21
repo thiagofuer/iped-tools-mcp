@@ -56,10 +56,11 @@ Configurar o IPED Tools MCP com seu aplicativo de IA favorito leva menos de 2 mi
 
 Toda a documentação técnica, manuais operacionais e guias passo a passo estão organizados na **[Wiki Oficial](https://github.com/thiagofuer/iped-tools-mcp/wiki)**:
 
-* **[Requisitos e Instalação](https://github.com/thiagofuer/iped-tools-mcp/wiki/Instalacao):** Detalhes de hardware, compatibilidade do IPED e validação pós-instalação.
-* **[Guias de Clientes de IA](https://github.com/thiagofuer/iped-tools-mcp/wiki/Configurador-Grafico):** Passo a passo para [Claude Desktop](https://github.com/thiagofuer/iped-tools-mcp/wiki/Cliente-Claude-Desktop), [Cursor](https://github.com/thiagofuer/iped-tools-mcp/wiki/Cliente-Cursor), [Antigravity](https://github.com/thiagofuer/iped-tools-mcp/wiki/Cliente-Antigravity), [LM Studio (Air-Gapped & Offline)](https://github.com/thiagofuer/iped-tools-mcp/wiki/Cliente-LM-Studio) e [Claude Code](https://github.com/thiagofuer/iped-tools-mcp/wiki/Cliente-Claude-Code).
-* **[Metodologia Forense e start_case](https://github.com/thiagofuer/iped-tools-mcp/wiki/Fluxo-de-Investigacao):** Diretrizes da ISO/IEC 27037 e ciclo de auditoria probatória com o IPED Desktop.
-* **[Catálogo Completo das 26 Ferramentas MCP](https://github.com/thiagofuer/iped-tools-mcp/wiki/Catalogo-de-Ferramentas):** Propósito e exemplos práticos de perguntas para cada ferramenta forense.
+* **Instalação e Configuração:**
+  * **[Instalação](https://github.com/thiagofuer/iped-tools-mcp/wiki/Instalacao):** requisitos, download, instalação (`.msi` ou `.zip`) e validação pelo configurador.
+  * **[Configuração do cliente de IA](https://github.com/thiagofuer/iped-tools-mcp/wiki/Configurador-Grafico):** configurador gráfico e guias para [Claude Code](https://github.com/thiagofuer/iped-tools-mcp/wiki/Cliente-Claude-Code), [Claude Desktop](https://github.com/thiagofuer/iped-tools-mcp/wiki/Cliente-Claude-Desktop), [Cursor](https://github.com/thiagofuer/iped-tools-mcp/wiki/Cliente-Cursor), [Antigravity](https://github.com/thiagofuer/iped-tools-mcp/wiki/Cliente-Antigravity) e [LM Studio (offline)](https://github.com/thiagofuer/iped-tools-mcp/wiki/Cliente-LM-Studio).
+* **[Como Investigar com o MCP](https://github.com/thiagofuer/iped-tools-mcp/wiki/Como-Investigar-com-o-MCP):** passo a passo da investigação com o seu aplicativo de IA, metodologia (ISO/IEC 27037), regras de conduta e revisão no IPED Desktop.
+* **[Catálogo de Ferramentas](https://github.com/thiagofuer/iped-tools-mcp/wiki/Catalogo-de-Ferramentas):** Propósito e exemplos práticos de perguntas para cada ferramenta forense.
 * **[Consultas Lucene e Metadados](https://github.com/thiagofuer/iped-tools-mcp/wiki/Consultas-Lucene-e-Propriedades):** Guia de sintaxe de pesquisa, escape de caracteres e catálogo semântico de propriedades.
 * **[Boas Práticas e Custódia](https://github.com/thiagofuer/iped-tools-mcp/wiki/Boas-Praticas-Forenses):** Princípios de acesso estritamente somente-leitura e salvaguardas probatórias.
 * **[Solução de Problemas (FAQ)](https://github.com/thiagofuer/iped-tools-mcp/wiki/Solucao-de-Problemas):** Resolução de dúvidas frequentes, diagnóstico de conexão e logs de erro.

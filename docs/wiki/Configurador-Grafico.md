@@ -50,7 +50,7 @@ Cada etapa aparece com ✔ (passou), ❌ (falhou) ou – (não executada, porque
 
 ## 📝 2. Prompt inicial da investigação (`start_case`)
 
-O `start_case` traz a metodologia de investigação e as regras de conduta (veja [Fluxo de Investigação](Fluxo-de-Investigacao)). Esta seção mostra qual metodologia está em uso e permite copiar o prompt ou personalizá-lo.
+O `start_case` traz a metodologia de investigação e as regras de conduta (veja [Como Investigar com o MCP](Como-Investigar-com-o-MCP)). Esta seção mostra qual metodologia está em uso e permite copiar o prompt ou personalizá-lo.
 
 ### Situação
 A linha de situação mostra uma de quatro mensagens:

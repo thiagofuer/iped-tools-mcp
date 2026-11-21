@@ -27,7 +27,7 @@ graph TD
         subgraph MCP_Layer ["Modo Headless STDIO (Quarkus MCP Engine)"]
             StdioHandler["STDIO Transport (stdin / stdout)"]
             McpDispatcher["Quarkus MCP Dispatcher"]
-            Tools["30 Ferramentas Forenses (@Tool)"]
+            Tools["Ferramentas Forenses (@Tool)"]
         end
 
         subgraph Core_Service ["Camada de Serviço Forense"]
@@ -93,11 +93,11 @@ sequenceDiagram
         Note over Quarkus: initialize e tools/list respondem sem caso aberto
         Quarkus->>Service: open_case(case_path) pedido pelo modelo
         Service->>Service: Abre o índice do caso só neste processo
-        Note over Service: O caso fica aberto até outro open_case ou o fim do processo; nenhum estado é compartilhado com outros processos
+        Note over Service: O caso fica aberto até outro open_case ou o fim do processo, sem estado compartilhado com outros processos
     else Sem argumentos ou com duplo-clique
         Note over Main: Modo Configurador Gráfico
         Main->>Swing: EventQueue.invokeLater(() -> new MainWindow())
-        Note over Swing: Não abre caso no próprio processo; o teste local executa o servidor --stdio num processo filho
+        Note over Swing: Não abre caso no próprio processo. O teste local executa o servidor --stdio num processo filho
     end
 ```
 

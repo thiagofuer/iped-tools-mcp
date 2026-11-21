@@ -31,3 +31,9 @@ Com o servidor conectado no Antigravity:
 * **Automação de Quesitos:** Agentes especializados podem ler volumes maciços de evidências indexadas, checar integridade de hashes e responder quesitos periciais estruturados com citações precisas dos itens probatórios.
 * **Caso por conversa:** A configuração tem só `--stdio`, sem caso. Cada conversa começa sem caso aberto: o agente chama `get_server_status`, pede a pasta do caso e a abre com `open_case`, que também serve para trocar de caso. O caso de uma conversa não muda o de outra. O argumento `--case` de versões anteriores é ignorado e pode ser removido.
 * **Metodologia de Custódia:** O agente opera sob estrito modo somente-leitura, podendo registrar achados relevantes com `add_to_bookmark` e `set_item_checked` para conferência posterior pelo perito no IPED Desktop.
+
+---
+
+## ➡️ Próximo passo
+
+Com o servidor `iped` configurado, siga para **[Como Investigar com o MCP](Como-Investigar-com-o-MCP)**: o passo a passo para iniciar o `start_case`, abrir o caso, responder ao alerta de conteúdo sensível e conduzir a investigação.

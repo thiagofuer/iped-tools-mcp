@@ -63,6 +63,17 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 - **Versão declarada só no `pom.xml`:** o número da versão deixa de ser repetido no código, nos testes, nos scripts e na documentação. Para trocar a versão: `mvn versions:set "-DnewVersion=X.Y.Z" "-DgenerateBackupPoms=false"`. Uma build sem a filtragem de recursos do Maven informa a versão `dev`, e a data de build e a versão do IPED como `desconhecida`, em vez de um número de release. Os testes (`VersionInfoTest`, `test_stdio_mcp.ps1`, `test_native_exe.ps1`) comparam a versão informada com a do pom e reprovam `dev`. A wiki usa `<versão>` nos nomes de arquivos, e o badge do README mostra a última tag `vX.Y.Z`.
 - **BREAKING — scripts de empacotamento:** `package_app.ps1` e `package_msi.ps1` não aceitam mais o parâmetro `-Version` nem assumem uma versão de reserva; leem a versão do `pom.xml` e param com erro se não conseguirem. O `package_app.ps1` passa a empacotar só `target/iped-tools-mcp-<versão>-runner.jar` da versão do pom e para com erro se ele não existir, em vez de usar o jar de outra versão que estiver em `target/`.
 - **Wiki e README:** o `start_case` é acionado pelo menu de prompts do cliente (no Claude Code, `/mcp__iped__start_case`); digitado como texto comum, ele não é acionado.
+- **Wiki reorganizada:**
+  - **Menu:** passa a começar pelo grupo **Instalação e Configuração** (Requisitos, Download, Instalação, Configurador Gráfico e guias dos clientes), com o próximo passo para a investigação. A página de instalação e cada guia de cliente terminam com o link do próximo passo.
+  - **Página "Como Investigar com o MCP":** substitui "Fluxo de Investigação" e traz um passo a passo:
+    - iniciar o `start_case` em cada cliente, incluindo o **Copiar prompt** no LM Studio e nos clientes sem prompts MCP;
+    - informar a pasta do caso;
+    - responder ao alerta de conteúdo sensível;
+    - exemplos de perguntas;
+    - registrar marcadores e revisar no IPED Desktop.
+
+    Depois do passo a passo vêm a metodologia e a personalização. A página antiga virou um aviso com o link.
+  - **Contagem de ferramentas:** o total aparece só no Catálogo.
 - **BREAKING — `get_communications_graph`:** o nó sintético `Dispositivo_Local` foi removido; o lado local de cada evento com direção explícita passa a ser o nó `local:<canal>` (`type: LOCAL_ENDPOINT`, `identity_resolved: false`) com os identificadores locais observados. Os nós passam a ter `type` (`ACCOUNT`, `GROUP`, `LOCAL_ENDPOINT`) e os ids são chaves canônicas (ex.: `tel:15550101181`).
 - **BREAKING — `channels`:** passa a conter o aplicativo real (ex.: `Viber`) em vez de rótulos genéricos (`chat messages`, `calls`).
 - **BREAKING — `get_document_metadata`:** os blocos `basic`, `communication`, `geo`, `forensic` e `extra` dão lugar aos grupos do catálogo (`Basic`, `Communication`, `AI`, `Image`, `UFED`...). A lista de permissões manual foi removida: `nudityScore`, `nudityClass`, `ocrCharCount`, `Regex:*`, `language:*`, `pdf:*` e `office:*` deixam de ser descartados no modo padrão.
