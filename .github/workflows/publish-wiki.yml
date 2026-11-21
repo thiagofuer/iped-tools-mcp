@@ -21,8 +21,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout do Repositório
+      # Sempre o main: no disparo manual, a branch escolhida na tela do Actions não pode publicar
+      # documentação ainda não lançada (develop, feature/*).
+      - name: Checkout do Repositório (main)
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Configurar Git e Clonar Repositório da Wiki
         id: clone_wiki
