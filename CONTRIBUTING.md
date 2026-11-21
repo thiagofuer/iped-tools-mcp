@@ -90,20 +90,19 @@ Antes de submeter um Pull Request, certifique-se de que todos os passos a seguir
    ```powershell
    mvn clean test
    ```
-   Todos os testes devem passar (atualmente 52/52 testes com 0 falhas).
+   Todos os testes devem passar, sem falhas.
 
-2. **Verificação da Flag `--version`:**
+2. **Empacotamento do JAR:**
    ```powershell
-   mvn package -DskipTests
-   java -jar target/iped-tools-mcp-*-runner.jar --version
+   mvn package
    ```
-   Deve exibir a versão correta e sair com código de retorno 0.
+   A saída deve terminar com `BUILD SUCCESS`. Os testes que executam o servidor de verdade (`StdioSelfTestTest`) se pulam quando o JAR em `target/` é mais antigo que o código compilado; rode `mvn test` de novo depois do `package` para executá-los.
 
 3. **Testes de Integração MCP STDIO:**
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts\test_stdio_mcp.ps1 -CasePath "caminho_para_caso_teste"
    ```
-   Todos os testes automatizados do protocolo MCP devem ser validados.
+   Todos os testes automatizados do protocolo MCP devem ser validados. O roteiro também confere a versão: a informada no `initialize` e no `get_server_status` deve ser a do `pom.xml`. O executável não tem argumentos de versão ou de ajuda (`--version`, `--help`): o lançador nativo não tem console, e esses argumentos apenas abrem o configurador.
 
 ---
 

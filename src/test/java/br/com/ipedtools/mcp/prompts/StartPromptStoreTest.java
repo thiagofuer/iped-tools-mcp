@@ -11,9 +11,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 import br.com.ipedtools.mcp.prompts.StartPromptStore.Methodology;
 import br.com.ipedtools.mcp.prompts.StartPromptStore.State;
@@ -22,14 +22,33 @@ import io.quarkiverse.mcp.server.TextContent;
 /** Default and user methodology of start_case, always followed by the fixed conduct rules. */
 class StartPromptStoreTest {
 
-    @TempDir
+    /**
+     * Profile folder of each test. Not a JUnit @TempDir: on Windows another process (antivirus, indexer) may briefly
+     * hold a file just renamed by restoreDefault, and a failed @TempDir cleanup fails the test.
+     */
     Path profile;
 
     private StartPromptStore store;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
+        profile = Files.createTempDirectory("iped-tools-mcp-prompt-test");
         store = new StartPromptStore(profile.toFile());
+    }
+
+    /** Deletes the profile folder, retrying briefly; a folder still locked is left in the system temp folder. */
+    @AfterEach
+    void tearDown() throws InterruptedException {
+        for (int attempt = 0; attempt < 20; attempt++) {
+            try (java.util.stream.Stream<Path> walk = Files.walk(profile)) {
+                for (Path p : walk.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                    Files.deleteIfExists(p);
+                }
+                return;
+            } catch (java.io.IOException e) {
+                Thread.sleep(100);
+            }
+        }
     }
 
     private void writeUserCopy(String content) throws Exception {

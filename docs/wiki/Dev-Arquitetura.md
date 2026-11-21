@@ -111,8 +111,9 @@ O executável nativo suporta os seguintes parâmetros formais:
 |---|---|---|
 | `--stdio` | Inicia o servidor em modo STDIO MCP. | Desativa a interface gráfica, isola o fluxo `stdout` para JSON-RPC e aguarda requisições na entrada padrão. |
 | `--case <caminho>` | Não suportado. | Ignorado com um aviso no log, para não quebrar configurações antigas. O servidor sempre inicia sem caso; o caso é aberto na conversa com `open_case`, só naquele processo. |
-| `--version`, `-v` | Exibe os dados de versão e licença. | Imprime versão, data do build, runtime Java e versão do IPED Core na saída padrão e finaliza imediatamente com código 0. |
-| `--help`, `-h` | Exibe a ajuda da linha de comando. | Lista todos os parâmetros suportados com exemplos de uso. |
+| Qualquer outro (inclusive `--version` e `--help`) ou nenhum | Abre o configurador gráfico. | O executável não imprime informações no terminal: o lançador nativo do jpackage não tem console e executa a JVM como processo filho, então a saída se perderia. A versão aparece no título da janela e no "Sobre", e no protocolo MCP (`serverInfo.version` e `get_server_status`). |
+
+A análise dos argumentos fica em `McpApplication.parseArguments`, que devolve o modo (STDIO ou configurador) e se houve `--case` legado.
 
 ---
 

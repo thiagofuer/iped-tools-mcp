@@ -45,16 +45,8 @@ if (-not (Test-Path $JavaPath)) {
     $JavaPath = (Get-Command java).Source
 }
 
-# Teste prévio: flag --version
-Write-Host "[0/26] Testando flag '--version'..." -NoNewline
-$verOutput = (& $JavaPath -jar $JarPath --version | Out-String)
-$verMismatch = "saida sem 'IPED Tools MCP v<versao>'"
-if ($verOutput -match "IPED Tools MCP v(\S+)") { $verMismatch = Get-VersionMismatch -Reported $matches[1] -Expected $ExpectedVersion }
-if (-not $verMismatch -and $verOutput -match "ipedtools\.com\.br") {
-    Write-Host (" PASS (" + ($verOutput -split "`r?`n")[0] + ")") -ForegroundColor Green
-} else {
-    Write-Host " FAIL: $verMismatch | $verOutput" -ForegroundColor Red; exit 1
-}
+# A versao e conferida pelo protocolo (initialize e get_server_status): o executavel nao imprime
+# nada no terminal, porque o lancador do jpackage nao tem console.
 
 # Perfil temporario: o prompt personalizado do usuario (~/.iped-tools-mcp/prompts) nao interfere no teste,
 # e o teste do prompt grava a copia personalizada so nesta pasta

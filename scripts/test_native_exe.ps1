@@ -53,17 +53,8 @@ Write-Host "==========================================================" -Foregro
 
 $resolvedExe = (Resolve-Path $ExePath).Path
 
-# Teste prévio: flag --version
-Write-Host "[0/10] Testando flag '--version' no executavel..." -NoNewline
-$verOutput = (& $resolvedExe --version | Out-String)
-$verMismatch = "saida sem 'IPED Tools MCP v<versao>'"
-if ($verOutput -match "IPED Tools MCP v(\S+)") { $verMismatch = Get-VersionMismatch -Reported $matches[1] -Expected $ExpectedVersion }
-if (-not $verMismatch -and $verOutput -match "ipedtools\.com\.br") {
-    $firstLine = ($verOutput -split "`r?`n")[0]
-    Write-Host (" PASS (" + $firstLine + ")") -ForegroundColor Green
-} else {
-    Write-Host " FAIL: $verMismatch | $verOutput" -ForegroundColor Red; exit 1
-}
+# A versao e conferida pelo protocolo (initialize e get_server_status): o executavel nao imprime
+# nada no terminal, porque o lancador do jpackage nao tem console.
 
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName = $resolvedExe

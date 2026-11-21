@@ -5,8 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
 import java.util.Properties;
 
 import org.junit.jupiter.api.Test;
@@ -50,28 +48,19 @@ class VersionInfoTest {
     }
 
     @Test
-    void testMcpApplicationVersionFlag() {
-        String output = captureOutput("--version");
-        assertTrue(output.contains("IPED Tools MCP v" + VersionInfo.getVersion()), "Deveria conter a versão na saída");
-        assertTrue(output.contains("Website: " + VersionInfo.OFFICIAL_WEBSITE), "Deveria conter o website oficial");
-    }
-
-    @Test
-    void testMcpApplicationHelpFlag() {
-        String output = captureOutput("--help");
-        assertTrue(output.contains("--version, -v"), "Help deveria listar a flag --version");
-        assertTrue(output.contains("Versao: " + VersionInfo.getVersion()), "Help deveria listar a versão atual");
-    }
-
-    private static String captureOutput(String flag) {
-        PrintStream originalOut = System.out;
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        try {
-            System.setOut(new PrintStream(baos));
-            McpApplication.main(flag);
-            return baos.toString();
-        } finally {
-            System.setOut(originalOut);
+    void testOnlyStdioIsRecognized() {
+        // No information flags: the native launcher has no console, so they open the configurator instead
+        for (String arg : new String[] { "--version", "-v", "--help", "-h", "--gui", "" }) {
+            McpApplication.LaunchOptions options = McpApplication.parseArguments(arg);
+            assertFalse(options.stdio(), arg + " deve abrir o configurador");
+            assertFalse(options.legacyCaseArgument());
         }
+        assertEquals(new McpApplication.LaunchOptions(false, false), McpApplication.parseArguments());
+        assertEquals(new McpApplication.LaunchOptions(true, false), McpApplication.parseArguments("--stdio"));
+        assertEquals(new McpApplication.LaunchOptions(true, true),
+                McpApplication.parseArguments("--stdio", "--case", "C:\\casos_forenses\\caso_operacao_01"));
+        assertEquals(new McpApplication.LaunchOptions(true, true),
+                McpApplication.parseArguments("--case=C:\\casos_forenses\\caso_operacao_01", "--stdio"));
     }
+
 }
