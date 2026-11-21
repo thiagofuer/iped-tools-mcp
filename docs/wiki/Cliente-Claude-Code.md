@@ -9,7 +9,7 @@ O [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/
 Para adicionar o IPED Tools MCP ao Claude Code, abra o PowerShell ou terminal e execute o comando `claude mcp add`:
 
 ```powershell
-claude mcp add iped "C:\Program Files\IPED Tools MCP\IPED-Tools-MCP.exe" --stdio
+claude mcp add iped "C:\Program Files\IPED-Tools-MCP\IPED-Tools-MCP.exe" --stdio
 ```
 
 *(Caso utilize o pacote portátil, forneça o caminho do executável extraído, por exemplo: `claude mcp add iped "C:\Ferramentas\IPED-Tools-MCP\IPED-Tools-MCP.exe" --stdio`)*

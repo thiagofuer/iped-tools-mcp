@@ -8,15 +8,15 @@ Se você encontrar dificuldades na configuração ou execução do **IPED Tools 
 
 ### Causa Comum A: Caminho do executável com barras invertidas não escapadas
 Em arquivos JSON (como `claude_desktop_config.json` ou `mcp.json`), a barra invertida do Windows (`\`) é um caractere de escape reservado.
-* ❌ **Incorreto:** `"C:\Program Files\IPED Tools MCP\IPED-Tools-MCP.exe"`
-* ✅ **Correto:** `"C:\\Program Files\\IPED Tools MCP\\IPED-Tools-MCP.exe"`
+* ❌ **Incorreto:** `"C:\Program Files\IPED-Tools-MCP\IPED-Tools-MCP.exe"`
+* ✅ **Correto:** `"C:\\Program Files\\IPED-Tools-MCP\\IPED-Tools-MCP.exe"`
 
 > 💡 **Dica:** Utilize o botão **"Copiar Configuração"** no [Configurador Gráfico](Configurador-Grafico). Ele já gera o caminho com o escape duplo exato automaticamente.
 
 ### Causa Comum B: Processo travado em segundo plano
 Se uma sessão anterior do executável não foi finalizada pelo cliente de IA, abra o Gerenciador de Tarefas do Windows (`Ctrl+Shift+Esc`), procure por `IPED-Tools-MCP.exe` em *Detalhes* e finalize o processo.
 
-> ℹ️ **Várias instâncias são normais:** cada cliente de IA ou sessão ativa (por exemplo, o chat do Claude Desktop e cada sessão aberta da aba Code) inicia a sua própria instância do servidor, porque a comunicação por STDIO não pode ser compartilhada. Cada instância aparece como dois processos `IPED-Tools-MCP.exe`. Uma instância que ainda não recebeu nenhuma chamada não abre o caso e ocupa pouca memória; o caso só é carregado na primeira chamada de ferramenta.
+> ℹ️ **Várias instâncias são normais:** cada cliente de IA ou sessão ativa (por exemplo, o chat do Claude Desktop e cada sessão aberta da aba Code) inicia a sua própria instância do servidor, porque a comunicação por STDIO não pode ser compartilhada. Cada instância aparece como dois processos `IPED-Tools-MCP.exe`: o lançador do Windows, com poucos MB, e o processo filho onde o servidor roda; ao fechar o lançador, o Windows encerra o filho. Uma instância começa sem caso aberto e ocupa menos memória; o caso só é carregado quando o modelo chama `open_case`.
 
 ---
 
@@ -31,12 +31,12 @@ O executável precisa do argumento `--stdio` para operar como servidor MCP. Sem 
   ]
   ```
 
-### Causa Comum B: Diagnóstico rápido com a flag `--version`
-Abra o Prompt de Comando (`cmd.exe`) ou PowerShell e teste a execução direta do binário:
-```cmd
-"C:\Program Files\IPED Tools MCP\IPED-Tools-MCP.exe" --version
-```
-Se o comando imprimir os dados da versão e sair com código 0, o executável e seu runtime Java embutido estão íntegros e o problema está restrito à configuração do arquivo JSON do cliente.
+### Causa Comum B: Diagnóstico rápido com o teste local do configurador
+Abra o [Configurador Gráfico](Configurador-Grafico) e, na seção **Testar o MCP**, clique em **▶ Executar teste**. O teste executa o servidor com o mesmo comando da configuração gerada (`--stdio`) e lista as ferramentas, como o cliente de IA faria.
+* **Todas as etapas com ✔:** o executável e o runtime Java embutido estão íntegros, e o problema está na configuração do cliente (caminho do executável, argumento `--stdio` ou escape das barras no JSON). Copie de novo a configuração pelo configurador.
+* **Alguma etapa com ❌:** o detalhe da etapa e as últimas linhas do log do servidor aparecem no console de diagnóstico da janela. Veja também a seção 4 desta página.
+
+> ℹ️ Não use `--version` no terminal: o executável não imprime nada no Prompt de Comando, porque o lançador do Windows não tem console. Esse argumento apenas abre o configurador, que mostra a versão no título.
 
 ---
 
@@ -131,7 +131,7 @@ ERROR [ip.pa.py.PythonParser] JEP não encontrado, todos os módulos python fora
 Se o Claude Desktop fechar o canal de comunicação logo na abertura:
 1. **Verifique se o Claude Desktop foi completamente reiniciado:** Feche o Claude Desktop e abra-o novamente após salvar o arquivo `claude_desktop_config.json`.
 2. **Tempo de carregamento de casos gigantescos:** o caso não é aberto ao iniciar o servidor, e sim quando o modelo chama `open_case`, que por isso leva alguns segundos a mais. Se o caso possuir centenas de milhares de documentos (ex: 700.000+ arquivos), o IPED Core pode levar 2 a 3 segundos para ler o índice Lucene do disco. A conexão inicial (`initialize` e `tools/list`) não depende do caso. Se o `open_case` estourar o tempo limite do cliente, repita-o: a leitura seguinte aproveita o cache de disco do sistema operacional.
-3. **Caminho do executável:** Certifique-se de apontar para a versão de produção instalada (`C:\Program Files\IPED Tools MCP\IPED-Tools-MCP.exe`) ou para o executável gerado na pasta portátil.
+3. **Caminho do executável:** Certifique-se de apontar para a versão de produção instalada (`C:\Program Files\IPED-Tools-MCP\IPED-Tools-MCP.exe`) ou para o executável gerado na pasta portátil.
 
 
 ---

@@ -89,6 +89,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 - **`get_top_contacts` e `get_communications_graph` não usam mais `get_device_and_owner_info`, `ufed:PhoneOwner` nem `Conversation:Account`:** nenhuma identidade é rotulada como dono do aparelho.
 
 ### Removido
+- **BREAKING — argumentos `--version`, `-v`, `--help` e `-h`:** no executável instalado eles não mostravam nada no terminal, porque o lançador nativo do jpackage não tem console e executa a JVM como processo filho. O executável passa a reconhecer só `--stdio`; esses e quaisquer outros argumentos abrem o configurador, que mostra a versão no título e no "Sobre". A versão também é informada no `initialize` (`serverInfo.version`) e no `get_server_status` (`server_version`), e o teste STDIO do configurador a confere. A wiki valida a instalação pelo configurador, e os roteiros de teste conferem a versão pelo protocolo.
 - **Sincronização do caso entre configurador e conversas:** o arquivo `~/.iped-tools-mcp/active_case.txt` não é mais lido nem gravado. Um arquivo deixado por versões anteriores é ignorado e pode ser apagado. A restauração do último caso ao abrir o configurador e o acompanhamento do caso aberto pelo chat também saem.
 
 ### Corrigido

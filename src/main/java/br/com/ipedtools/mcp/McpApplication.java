@@ -44,31 +44,8 @@ public class McpApplication {
             System.setProperty("user.dir", fallbackDir.getAbsolutePath());
         }
 
-        boolean stdioMode = false;
-        boolean legacyCaseArgument = false;
-
-        for (int i = 0; i < args.length; i++) {
-            String arg = args[i];
-            if ("--stdio".equalsIgnoreCase(arg)) {
-                stdioMode = true;
-            } else if (arg.startsWith("--case=")) {
-                legacyCaseArgument = true;
-            } else if ("--case".equalsIgnoreCase(arg)) {
-                // Older client configurations still pass the case; it is consumed and ignored.
-                legacyCaseArgument = true;
-                if (i + 1 < args.length) {
-                    i++;
-                }
-            } else if ("--version".equalsIgnoreCase(arg) || "-v".equalsIgnoreCase(arg)) {
-                attachConsoleOnWindows();
-                printVersion();
-                return;
-            } else if ("--help".equalsIgnoreCase(arg) || "-h".equalsIgnoreCase(arg)) {
-                attachConsoleOnWindows();
-                printHelp();
-                return;
-            }
-        }
+        LaunchOptions options = parseArguments(args);
+        boolean stdioMode = options.stdio();
 
         // Persistent log file of this mode (~/.iped-tools-mcp/logs), installed before anything else is logged.
         File logFile = LogFiles.install(stdioMode ? LogFiles.Mode.STDIO : LogFiles.Mode.GUI);
@@ -83,7 +60,7 @@ public class McpApplication {
             // Mode A: STDIO Headless Server for LLM clients
             LOGGER.info("Iniciando IPED Tools MCP em modo STDIO...");
             // The session starts without a case: the LLM opens one with open_case.
-            if (legacyCaseArgument) {
+            if (options.legacyCaseArgument()) {
                 LOGGER.warn(LEGACY_CASE_WARNING);
             }
 
@@ -105,6 +82,40 @@ public class McpApplication {
                 }
             });
         }
+    }
+
+    /**
+     * How the executable was started: {@code --stdio} runs the MCP server; anything else opens the configurator.
+     *
+     * @param legacyCaseArgument whether an older client configuration passed {@code --case}, which is ignored
+     */
+    record LaunchOptions(boolean stdio, boolean legacyCaseArgument) {
+    }
+
+    /**
+     * Reads the command line. {@code --stdio} is the only recognized argument; {@code --case} (with its value) is
+     * consumed and reported as legacy. There are no information flags: the native launcher runs the JVM as a child
+     * process without a console, so text printed to the terminal would be lost. {@code --version}, {@code --help}
+     * and any other argument open the configurator, which shows the version in its title.
+     */
+    static LaunchOptions parseArguments(String... args) {
+        boolean stdio = false;
+        boolean legacyCase = false;
+        for (int i = 0; i < args.length; i++) {
+            String arg = args[i];
+            if ("--stdio".equalsIgnoreCase(arg)) {
+                stdio = true;
+            } else if (arg.startsWith("--case=")) {
+                legacyCase = true;
+            } else if ("--case".equalsIgnoreCase(arg)) {
+                // Older client configurations still pass the case; it is consumed and ignored.
+                legacyCase = true;
+                if (i + 1 < args.length) {
+                    i++;
+                }
+            }
+        }
+        return new LaunchOptions(stdio, legacyCase);
     }
 
     /** Logged when an older client configuration passes {@code --case}, which is no longer supported. */
@@ -163,25 +174,6 @@ public class McpApplication {
         }
     }
 
-    private static void attachConsoleOnWindows() {
-        if (System.getProperty("os.name", "").toLowerCase().contains("win")) {
-            try {
-                com.sun.jna.platform.win32.WinNT.HANDLE hStdOut =
-                        com.sun.jna.platform.win32.Kernel32.INSTANCE.GetStdHandle(-11); // STD_OUTPUT_HANDLE
-                int fileType = (hStdOut != null) ? com.sun.jna.platform.win32.Kernel32.INSTANCE.GetFileType(hStdOut) : 0;
-                // If stdout is not already redirected to a file (1) or pipe (3), attach to parent console
-                if (fileType != 1 && fileType != 3) {
-                    com.sun.jna.platform.win32.Kernel32.INSTANCE.AttachConsole(-1); // ATTACH_PARENT_PROCESS
-                    java.io.FileOutputStream conout = new java.io.FileOutputStream("CONOUT$");
-                    java.io.PrintStream out = new java.io.PrintStream(conout, true, java.nio.charset.StandardCharsets.UTF_8);
-                    System.setOut(out);
-                    System.setErr(out);
-                }
-            } catch (Throwable ignored) {
-            }
-        }
-    }
-
     private static void detachConsoleIfPresent() {
         if (System.getProperty("os.name", "").toLowerCase().contains("win")) {
             try {
@@ -189,29 +181,5 @@ public class McpApplication {
             } catch (Throwable ignored) {
             }
         }
-    }
-
-    private static void printVersion() {
-        System.out.println(VersionInfo.getFullVersionString());
-        System.out.println("Website: " + VersionInfo.OFFICIAL_WEBSITE);
-        System.out.println("Codigo-fonte: " + VersionInfo.GITHUB_REPO);
-        System.out.println("Licenca: " + VersionInfo.LICENSE);
-    }
-
-    private static void printHelp() {
-        System.out.println(VersionInfo.APP_NAME + " - " + VersionInfo.APP_DESCRIPTION);
-        System.out.println("Versao: " + VersionInfo.getVersion());
-        System.out.println("Website: " + VersionInfo.OFFICIAL_WEBSITE);
-        System.out.println();
-        System.out.println("Uso:");
-        System.out.println("  IPED-Tools-MCP.exe                                (Abre a interface grafica)");
-        System.out.println("  IPED-Tools-MCP.exe --stdio                        (Inicia como servidor MCP STDIO)");
-        System.out.println();
-        System.out.println("Opcoes:");
-        System.out.println("  --stdio              Executa como servidor MCP via STDIO (chamado pela LLM)");
-        System.out.println("                       O caso e aberto na conversa, com a ferramenta open_case.");
-        System.out.println("  --gui                Forca a abertura da interface grafica");
-        System.out.println("  --version, -v        Exibe a versao e informacoes de build");
-        System.out.println("  --help, -h           Exibe esta mensagem de ajuda");
     }
 }

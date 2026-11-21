@@ -15,7 +15,7 @@ Você pode configurar o servidor MCP no Cursor de duas formas:
 4. Defina:
    * **Name:** `iped`
    * **Type:** `command`
-   * **Command:** `C:\Program Files\IPED Tools MCP\IPED-Tools-MCP.exe --stdio`
+   * **Command:** `C:\Program Files\IPED-Tools-MCP\IPED-Tools-MCP.exe --stdio`
 
 ### Método 2: Arquivo JSON de Configuração (`mcp.json`)
 Você também pode configurar por projeto criando o arquivo `.cursor/mcp.json` na raiz da sua pasta de trabalho, ou no arquivo de configuração global do Cursor:
@@ -24,7 +24,7 @@ Você também pode configurar por projeto criando o arquivo `.cursor/mcp.json` n
 {
   "mcpServers": {
     "iped": {
-      "command": "C:\\Program Files\\IPED Tools MCP\\IPED-Tools-MCP.exe",
+      "command": "C:\\Program Files\\IPED-Tools-MCP\\IPED-Tools-MCP.exe",
       "args": [
         "--stdio"
       ]
