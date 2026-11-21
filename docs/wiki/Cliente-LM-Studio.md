@@ -15,7 +15,7 @@ O [Configurador Gráfico](Configurador-Grafico) gera os campos exatos para preen
 3. Preencha os campos exatamente como indicado:
    * **Nome (Name):** `iped`
    * **Conexão (Connection):** `Neste computador` (*Local*)
-   * **Comando (Command):** `C:\Program Files\IPED Tools MCP\IPED-Tools-MCP.exe`
+   * **Comando (Command):** `C:\Program Files\IPED-Tools-MCP\IPED-Tools-MCP.exe`
    * **Argumentos (Arguments):** Clique em **+ Adicionar argumento** e insira somente:
      ```text
      --stdio
@@ -39,7 +39,7 @@ Se você preferir configurar inserindo o bloco JSON diretamente no arquivo do LM
       "enabled": true,
       "connection": {
         "type": "stdio",
-        "command": "C:\\Program Files\\IPED Tools MCP\\IPED-Tools-MCP.exe",
+        "command": "C:\\Program Files\\IPED-Tools-MCP\\IPED-Tools-MCP.exe",
         "args": [
           "--stdio"
         ],

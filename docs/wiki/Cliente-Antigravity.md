@@ -12,7 +12,7 @@ No Antigravity, acesse as configurações de servidores MCP através do menu de 
 {
   "mcpServers": {
     "iped": {
-      "command": "C:\\Program Files\\IPED Tools MCP\\IPED-Tools-MCP.exe",
+      "command": "C:\\Program Files\\IPED-Tools-MCP\\IPED-Tools-MCP.exe",
       "args": [
         "--stdio"
       ]

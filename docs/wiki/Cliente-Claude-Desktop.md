@@ -29,7 +29,7 @@ Se o arquivo ainda não existir, você pode criá-lo ou utilizar o botão **Edit
 
 ---
 
-## 📝 Bloco de Configuração (Recomendado — Caso Dinâmico)
+## 📝 Bloco de Configuração (Recomendado)
 
 Abra o arquivo `claude_desktop_config.json` e insira o bloco abaixo dentro da chave `"mcpServers"` (gerado com 1-click no [Configurador Gráfico](Configurador-Grafico)):
 
@@ -37,7 +37,7 @@ Abra o arquivo `claude_desktop_config.json` e insira o bloco abaixo dentro da ch
 {
   "mcpServers": {
     "iped": {
-      "command": "C:\\Program Files\\IPED Tools MCP\\IPED-Tools-MCP.exe",
+      "command": "C:\\Program Files\\IPED-Tools-MCP\\IPED-Tools-MCP.exe",
       "args": [
         "--stdio"
       ]
