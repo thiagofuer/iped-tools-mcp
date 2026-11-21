@@ -43,3 +43,9 @@ A configuração tem só `--stdio`, sem caso. Cada conversa começa **sem caso a
 A ferramenta `open_case` será invocada e o caso será aberto só nesta conversa. O caso de uma conversa não muda o de outra, e o [Configurador Gráfico](Configurador-Grafico) não muda o caso de nenhuma conversa.
 
 O argumento `--case` de versões anteriores não é mais usado: se ainda estiver na configuração, o servidor o ignora e inicia sem caso.
+
+---
+
+## ➡️ Próximo passo
+
+Com o servidor `iped` configurado, siga para **[Como Investigar com o MCP](Como-Investigar-com-o-MCP)**: o passo a passo para iniciar o `start_case`, abrir o caso, responder ao alerta de conteúdo sensível e conduzir a investigação.

@@ -48,3 +48,9 @@ Ou simplesmente perguntar diretamente:
 > *"Qual é o caso atualmente carregado no IPED e quantas evidências foram indexadas?"*
 
 O Claude Code acionará as ferramentas `get_server_status` ou `get_case_summary` para responder de forma fundamentada e auditável.
+
+---
+
+## ➡️ Próximo passo
+
+Com o servidor `iped` configurado, siga para **[Como Investigar com o MCP](Como-Investigar-com-o-MCP)**: o passo a passo para iniciar o `start_case`, abrir o caso, responder ao alerta de conteúdo sensível e conduzir a investigação.

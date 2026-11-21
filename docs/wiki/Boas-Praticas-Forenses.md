@@ -49,7 +49,7 @@ O prompt `start_case` e as instruções que o servidor envia ao cliente na conex
 3. **Aceite por sessão:** o aceite vale para a conversa atual; ao trocar de caso ou iniciar outra conversa, a IA pede de novo.
 4. **Confirmação de escritas:** antes de criar, alterar ou excluir marcadores, incluir ou remover itens, ou marcar itens, a IA mostra o que vai mudar (itens, nome do marcador e, se houver, cor e comentário) e aguarda a confirmação do perito. Nome, cor e comentário são os que o perito escolher; a IA pode sugerir, sem indicar autoria de IA.
 
-> ⚠️ **Orientação, não bloqueio:** essas regras orientam a IA, mas o servidor não bloqueia chamadas. A garantia final continua sendo a revisão humana no IPED Desktop. Para que as regras completas entrem na conversa, acione o `start_case` pelo menu de prompts do cliente (ver [Fluxo de Investigação](Fluxo-de-Investigacao)).
+> ⚠️ **Orientação, não bloqueio:** essas regras orientam a IA, mas o servidor não bloqueia chamadas. A garantia final continua sendo a revisão humana no IPED Desktop. Para que as regras completas entrem na conversa, acione o `start_case` pelo menu de prompts do cliente (ver [Como Investigar com o MCP](Como-Investigar-com-o-MCP)).
 
 ---
 
