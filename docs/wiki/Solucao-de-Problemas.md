@@ -68,7 +68,7 @@ O IPED Tools MCP grava o próprio log em arquivo, nos dois modos de execução, 
 
 | Arquivo | O que registra |
 |---|---|
-| `iped-tools-mcp-stdio.log` | O servidor iniciado pelo cliente de IA (`--stdio`): Claude Desktop, Claude Code, LM Studio, Cursor etc. |
+| `iped-tools-mcp-stdio.log` | O servidor iniciado pelo cliente de IA (`--stdio`): Claude Desktop, Claude Code, LM Studio, Codex etc. |
 | `iped-tools-mcp-gui.log` | O configurador gráfico, incluindo tudo o que aparece na área de log da janela. |
 | `hs_err_pid<número>.log` | Relatório de queda da JVM. Quando o processo morre de forma abrupta, a JVM grava esse relatório na pasta temporária, e o MCP o copia para esta pasta na inicialização seguinte. |
 

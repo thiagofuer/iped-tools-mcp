@@ -126,11 +126,7 @@ public class MainWindow extends JFrame {
 
         JPanel configTopPanel = new JPanel(new BorderLayout(5, 5));
         JLabel clientLabel = new JLabel("Selecione seu aplicativo de IA: ");
-        clientSelectCombo = new JComboBox<>(new String[]{
-                "LM Studio (Formulário Visual - Copiar Campos)",
-                "LM Studio (Arquivo ng-mcp.json)",
-                "Claude Desktop / Cursor / Antigravity (JSON)"
-        });
+        clientSelectCombo = new JComboBox<>(CLIENT_OPTIONS);
 
         configTopPanel.add(clientLabel, BorderLayout.WEST);
         configTopPanel.add(clientSelectCombo, BorderLayout.CENTER);
@@ -485,11 +481,23 @@ public class MainWindow extends JFrame {
     }
 
     private void updateGeneratedConfig() {
-        String execPath = McpApplication.getAppExecutableOrJarPath();
-        String jsonEscapedExec = execPath.replace("\\", "\\\\");
+        String configSnippet = configText((String) clientSelectCombo.getSelectedItem(),
+                McpApplication.getAppExecutableOrJarPath());
+        configJsonArea.setText(configSnippet);
+        configJsonArea.setCaretPosition(0);
+    }
 
+    /** Client options of the configurator; only clients with a guide in the wiki are named. */
+    static final String[] CLIENT_OPTIONS = {
+            "LM Studio (Formulário Visual - Copiar Campos)",
+            "LM Studio (Arquivo ng-mcp.json)",
+            "Claude Desktop / Antigravity (JSON)"
+    };
+
+    /** The configuration text for a client option and the path of the executable (or runner JAR). */
+    static String configText(String selectedClient, String execPath) {
+        String jsonEscapedExec = execPath.replace("\\", "\\\\");
         boolean isJar = execPath.toLowerCase().endsWith(".jar");
-        String selectedClient = (String) clientSelectCombo.getSelectedItem();
         if (selectedClient == null) {
             selectedClient = "";
         }
@@ -512,7 +520,8 @@ public class MainWindow extends JFrame {
 Cada conversa tem o seu próprio caso: peça ao modelo para abrir a pasta do caso (ex: 'abra o caso D:\\meu_caso').
 
 💡 DICA FORENSE:
-No chat com o modelo, chame o prompt '/start_case' para carregar a metodologia forense, instruções de busca e regras de custódia!
+O LM Studio não lista os prompts do servidor: para iniciar com a metodologia forense e as regras de conduta,
+use o botão 'Copiar prompt' (seção 2 desta janela) e cole o texto como primeira mensagem da conversa.
 """.formatted(execPath);
         } else if (selectedClient.contains("ng-mcp.json")) {
             configSnippet = """
@@ -564,8 +573,7 @@ No chat com o modelo, chame o prompt '/start_case' para carregar a metodologia f
 }""".formatted(jsonEscapedExec);
         }
 
-        configJsonArea.setText(configSnippet);
-        configJsonArea.setCaretPosition(0);
+        return configSnippet;
     }
 
     private static final org.slf4j.Logger WINDOW_LOGGER = org.slf4j.LoggerFactory.getLogger(MainWindow.class);

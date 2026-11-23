@@ -10,9 +10,9 @@ O **IPED Tools MCP** é construído sobre o ecossistema **Java 21 (LTS)** e **Qu
 graph TD
     subgraph LLM_Client ["Clientes de IA / MCP"]
         Claude["Claude Desktop / Claude Code"]
-        CursorApp["Cursor / IDEs"]
         LMStudio["LM Studio (Local / Air-Gapped)"]
         Antigravity["Antigravity / Agentes"]
+        Codex["Codex (app da OpenAI)"]
     end
 
     subgraph Product ["IPED Tools MCP (Executável Nativo Windows)"]
