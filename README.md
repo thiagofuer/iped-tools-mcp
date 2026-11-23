@@ -8,7 +8,7 @@
 [![Distribution](https://img.shields.io/badge/Download-mcp.ipedtools.com.br-brightgreen.svg)](https://www.mcp.ipedtools.com.br)
 [![Wiki](https://img.shields.io/badge/Docs-Wiki-orange.svg)](https://github.com/thiagofuer/iped-tools-mcp/wiki)
 
-**IPED Tools MCP** é um servidor nativo baseado na especificação **Model Context Protocol (MCP)** que conecta Modelos de Linguagem e Inteligências Artificiais (como Claude Desktop, Claude Code, Cursor, Antigravity e LM Studio) diretamente a casos processados pelo **IPED (Indexador e Processador de Evidências Digitais)**.
+**IPED Tools MCP** é um servidor nativo baseado na especificação **Model Context Protocol (MCP)** que conecta Modelos de Linguagem e Inteligências Artificiais (como Claude Desktop, Claude Code, Cursor, Antigravity, LM Studio e Codex) diretamente a casos processados pelo **IPED (Indexador e Processador de Evidências Digitais)**.
 
 Elimina intermediários de rede e servidores HTTP legados, permitindo que a IA interrogue diretamente os índices Apache Lucene e metadados estruturados do IPED em memória de processo, com alto desempenho, preservação da cadeia de custódia e garantia de operação 100% desconectada (air-gapped).
 
@@ -58,7 +58,7 @@ Toda a documentação técnica, manuais operacionais e guias passo a passo estã
 
 * **Instalação e Configuração:**
   * **[Instalação](https://github.com/thiagofuer/iped-tools-mcp/wiki/Instalacao):** requisitos, download, instalação (`.msi` ou `.zip`) e validação pelo configurador.
-  * **[Configuração do cliente de IA](https://github.com/thiagofuer/iped-tools-mcp/wiki/Configurador-Grafico):** configurador gráfico e guias para [Claude Code](https://github.com/thiagofuer/iped-tools-mcp/wiki/Cliente-Claude-Code), [Claude Desktop](https://github.com/thiagofuer/iped-tools-mcp/wiki/Cliente-Claude-Desktop), [Cursor](https://github.com/thiagofuer/iped-tools-mcp/wiki/Cliente-Cursor), [Antigravity](https://github.com/thiagofuer/iped-tools-mcp/wiki/Cliente-Antigravity) e [LM Studio (offline)](https://github.com/thiagofuer/iped-tools-mcp/wiki/Cliente-LM-Studio).
+  * **[Configuração do cliente de IA](https://github.com/thiagofuer/iped-tools-mcp/wiki/Configurador-Grafico):** configurador gráfico e guias para [Claude Code](https://github.com/thiagofuer/iped-tools-mcp/wiki/Cliente-Claude-Code), [Claude Desktop](https://github.com/thiagofuer/iped-tools-mcp/wiki/Cliente-Claude-Desktop), [Cursor](https://github.com/thiagofuer/iped-tools-mcp/wiki/Cliente-Cursor), [Antigravity](https://github.com/thiagofuer/iped-tools-mcp/wiki/Cliente-Antigravity), [LM Studio (offline)](https://github.com/thiagofuer/iped-tools-mcp/wiki/Cliente-LM-Studio) e [Codex (app da OpenAI)](https://github.com/thiagofuer/iped-tools-mcp/wiki/Cliente-Codex).
 * **[Como Investigar com o MCP](https://github.com/thiagofuer/iped-tools-mcp/wiki/Como-Investigar-com-o-MCP):** passo a passo da investigação com o seu aplicativo de IA, metodologia (ISO/IEC 27037), regras de conduta e revisão no IPED Desktop.
 * **[Catálogo de Ferramentas](https://github.com/thiagofuer/iped-tools-mcp/wiki/Catalogo-de-Ferramentas):** Propósito e exemplos práticos de perguntas para cada ferramenta forense.
 * **[Consultas Lucene e Metadados](https://github.com/thiagofuer/iped-tools-mcp/wiki/Consultas-Lucene-e-Propriedades):** Guia de sintaxe de pesquisa, escape de caracteres e catálogo semântico de propriedades.

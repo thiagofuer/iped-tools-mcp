@@ -12,7 +12,7 @@ Siga nesta ordem: instale, configure o seu aplicativo de IA e passe à investiga
 | Etapa | O que você encontrará |
 |---|---|
 | **Instalação** | [Requisitos](Requisitos) (sistema, versões do IPED e clientes homologados), [Download e Verificação](Download-e-Verificacao) (pacotes oficiais e conferência SHA-256) e [Instalação](Instalacao) (instalador `.msi` ou pacote portátil `.zip`). |
-| **Configuração do cliente de IA** | [Configurador Gráfico](Configurador-Grafico) (testar o MCP e gerar a configuração 1-click) e os guias de [Claude Code](Cliente-Claude-Code), [Claude Desktop](Cliente-Claude-Desktop), [Cursor](Cliente-Cursor), [Antigravity](Cliente-Antigravity) e [LM Studio (offline)](Cliente-LM-Studio). |
+| **Configuração do cliente de IA** | [Configurador Gráfico](Configurador-Grafico) (testar o MCP e gerar a configuração 1-click) e os guias de [Claude Code](Cliente-Claude-Code), [Claude Desktop](Cliente-Claude-Desktop), [Cursor](Cliente-Cursor), [Antigravity](Cliente-Antigravity), [LM Studio (offline)](Cliente-LM-Studio) e [Codex (app da OpenAI)](Cliente-Codex). |
 | **➡️ Próximo passo** | [Como Investigar com o MCP](Como-Investigar-com-o-MCP). |
 
 ### 🔍 Investigação

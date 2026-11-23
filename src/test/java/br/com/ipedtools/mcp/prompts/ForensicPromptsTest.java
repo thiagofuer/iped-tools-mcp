@@ -269,6 +269,9 @@ class ForensicPromptsTest {
     void testServerInstructionsStateTheFourRules() throws Exception {
         String instructions = serverInstructions();
         assertTrue(instructions.contains("start_case"), "deve recomendar o prompt start_case");
+        assertTrue(instructions.contains("se o cliente não tiver menu de prompts")
+                && instructions.contains("\"Copiar prompt\" do configurador"),
+                "deve indicar o Copiar prompt para clientes sem menu de prompts");
         assertTrue(instructions.contains("A sessão começa sem caso aberto"), "deve dizer que a sessão começa sem caso");
         assertTrue(instructions.contains("chame open_case"), "deve orientar a abertura do caso com open_case");
         // 1. sensitive content check, with the same signals as the prompt
