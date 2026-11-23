@@ -23,7 +23,8 @@ Abra uma **conversa nova** e comece pelo `start_case`. Ele traz a metodologia de
 | Cliente | Como iniciar o `start_case` |
 |---|---|
 | **Claude Desktop** | Menu **+** da caixa de mensagem → servidor `iped` → `start_case`. Preencha os parâmetros opcionais e envie. |
-| **Claude Code** | Digite `/mcp__iped__start_case` (digite `/` e procure por `start_case` para conferir o nome na sua instalação). |
+| **Claude Code (terminal)** | Digite `/iped` e escolha `/iped:start_case (MCP)`. O nome antes de `:` é o nome com que o servidor foi registrado no `claude mcp add` (`iped` no guia). |
+| **Aba Code do app Claude Desktop** | O menu `/` não lista os prompts MCP: use o **Copiar prompt** do configurador (abaixo). |
 | **LM Studio** | Nas versões testadas, o LM Studio não lista prompts MCP: use o **Copiar prompt** do configurador (abaixo). Se a sua versão listar os prompts do servidor `iped`, selecione `start_case`. |
 | **Cursor** e **Antigravity** | Use a lista de prompts MCP do cliente, se ele oferecer. Se não oferecer, use o **Copiar prompt** do configurador (abaixo). |
 | **Qualquer cliente sem prompts MCP** | No [Configurador Gráfico](Configurador-Grafico), seção **Prompt inicial da investigação**, preencha se quiser o foco e a pasta do caso, clique em **📋 Copiar prompt** e cole o texto como **primeira mensagem** da conversa. |
