@@ -57,6 +57,31 @@ class ClientConfigTextTest {
     }
 
     @Test
+    void testCodexOptionWithExecutable() {
+        assertTrue(java.util.List.of(MainWindow.CLIENT_OPTIONS).contains("Codex (app da OpenAI)"));
+        String text = MainWindow.configText(option("Codex"), EXE);
+        assertTrue(text.contains("Comando para iniciar: " + EXE));
+        assertTrue(text.contains("     --stdio\n"), "--stdio como argumento do formulário: " + text);
+        assertTrue(text.contains("[mcp_servers.iped]"));
+        assertTrue(text.contains("command = '" + EXE + "'"), "caminho como literal TOML, sem escape: " + text);
+        assertTrue(text.contains("args = ['--stdio']"));
+        assertTrue(text.contains("%USERPROFILE%\\.codex\\config.toml"));
+        assertTrue(text.contains("chat comum do ChatGPT"), "deve avisar que o chat comum não usa o servidor");
+        assertTrue(text.contains("Copiar prompt"), "o Codex não lista prompts: deve indicar o Copiar prompt");
+    }
+
+    @Test
+    void testCodexOptionWithJar() {
+        String text = MainWindow.configText(option("Codex"), JAR);
+        assertTrue(text.contains("Comando para iniciar: java"));
+        assertTrue(text.contains("command = 'java'"));
+        int encoding = text.indexOf("'-Dfile.encoding=UTF-8'");
+        int jar = text.indexOf("'-jar'");
+        assertTrue(encoding > 0 && jar > encoding, "as opções da JVM vêm antes de -jar: " + text);
+        assertTrue(text.indexOf("'--stdio'") > text.indexOf("'" + JAR + "'"));
+    }
+
+    @Test
     void testLmStudioJsonFile() {
         String text = MainWindow.configText(option("LM Studio (Arquivo"), EXE);
         assertTrue(text.contains("\"servers\"") && text.contains("\"type\": \"stdio\"") && text.contains("\"--stdio\""));

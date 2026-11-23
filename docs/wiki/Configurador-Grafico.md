@@ -79,14 +79,16 @@ A situação é atualizada quando a janela volta ao primeiro plano, por exemplo 
 
 ## 🔄 3. Configuração do Cliente de IA
 
-No menu suspenso *"Selecione seu aplicativo de IA:"*, você encontra três opções correspondentes aos principais fluxos de trabalho:
+No menu suspenso *"Selecione seu aplicativo de IA:"*, você encontra quatro opções correspondentes aos principais fluxos de trabalho:
 
 1. **`LM Studio (Formulário Visual - Copiar Campos)`:**
-   * Instruções passo a passo com os campos exatos (Nome, Comando e Argumento) para preenchimento na interface visual do LM Studio. Os mesmos campos servem para o [Codex (app da OpenAI)](Cliente-Codex), em Plugins → MCPs.
+   * Instruções passo a passo com os campos exatos (Nome, Comando e Argumento) para preenchimento na interface visual do LM Studio.
 2. **`LM Studio (Arquivo ng-mcp.json)`:**
    * Bloco JSON pronto para inserção no arquivo de configuração do LM Studio.
 3. **`Claude Desktop / Antigravity (JSON)`:**
    * Bloco JSON padrão da especificação MCP (`mcpServers`) compatível com Claude Desktop e Antigravity.
+4. **`Codex (app da OpenAI)`:**
+   * Campos para preencher em **Configurações → Plugins → MCPs** do app da OpenAI e o trecho equivalente do `config.toml`, com o aviso de usar uma conversa do **Codex** (o chat comum do ChatGPT não usa o servidor). Veja o [guia do Codex](Cliente-Codex).
 
 A configuração tem apenas o argumento `--stdio`, e **não inclui caso**. Você configura o cliente de IA uma única vez, e o caso é escolhido em cada conversa.
 

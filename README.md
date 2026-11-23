@@ -45,7 +45,7 @@ Configurar o IPED Tools MCP com seu aplicativo de IA favorito leva menos de 2 mi
 1. **Baixe o Software:** Obtenha o instalador `.msi` ou o pacote `.zip` portátil em [www.mcp.ipedtools.com.br](https://www.mcp.ipedtools.com.br) e confirme o hash SHA-256 com `dist/SHA256SUMS.txt`.
 2. **Abra o Configurador Gráfico:** Dê um duplo-clique em `IPED-Tools-MCP.exe` na Área de Trabalho ou no diretório extraído.
 3. **Teste o MCP (opcional):** Em **"Testar o MCP"**, escolha a pasta raiz de um caso pericial indexado e clique em **"▶ Executar teste"**. O teste executa o servidor como o cliente de IA vai executá-lo.
-4. **Copie a Configuração (1-Click):** Escolha o seu aplicativo de IA no menu suspenso (Claude Desktop / Antigravity ou LM Studio); para o Claude Code e o Codex, siga o guia do cliente na wiki e clique em **"📋 Copiar Configuração para a Área de Transferência"**.
+4. **Copie a Configuração (1-Click):** Escolha o seu aplicativo de IA no menu suspenso (Claude Desktop / Antigravity, LM Studio ou Codex); para o Claude Code, siga o guia do cliente na wiki e clique em **"📋 Copiar Configuração para a Área de Transferência"**.
 5. **Inicie a Investigação:** Cole a configuração no seu aplicativo de IA. Para ativar a metodologia pericial e as regras de conduta, acione o prompt `start_case` pelo menu de prompts do seu cliente (no Claude Desktop, menu **+** da caixa de mensagem → `iped` → `start_case`). Digitado como texto comum, o prompt não é acionado.
 
 > 💡 **Nota:** Você só precisa configurar seu cliente de IA **uma única vez** (com o argumento `--stdio`). Cada conversa tem o seu próprio caso e começa sem caso aberto: peça ao modelo para abrir a pasta do caso, e ele chama a ferramenta `open_case`.

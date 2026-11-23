@@ -491,7 +491,8 @@ public class MainWindow extends JFrame {
     static final String[] CLIENT_OPTIONS = {
             "LM Studio (Formulário Visual - Copiar Campos)",
             "LM Studio (Arquivo ng-mcp.json)",
-            "Claude Desktop / Antigravity (JSON)"
+            "Claude Desktop / Antigravity (JSON)",
+            "Codex (app da OpenAI)"
     };
 
     /** The configuration text for a client option and the path of the executable (or runner JAR). */
@@ -542,6 +543,8 @@ use o botão 'Copiar prompt' (seção 2 desta janela) e cole o texto como primei
     }
   ]
 }""".formatted(jsonEscapedExec);
+        } else if (selectedClient.startsWith("Codex")) {
+            configSnippet = codexText(execPath, isJar);
         } else if (isJar) {
             StringBuilder args = new StringBuilder();
             for (String arg : StdioSelfTest.JAR_JVM_ARGS) {
@@ -574,6 +577,66 @@ use o botão 'Copiar prompt' (seção 2 desta janela) e cole o texto como primei
         }
 
         return configSnippet;
+    }
+
+    /**
+     * Codex mode of the OpenAI desktop app: the fields of Plugins → MCPs and the equivalent config.toml entry. Only
+     * Codex conversations use local MCP servers, and Codex does not list MCP prompts.
+     */
+    private static String codexText(String execPath, boolean isJar) {
+        java.util.List<String> args = new java.util.ArrayList<>();
+        String command;
+        if (isJar) {
+            command = "java";
+            args.addAll(StdioSelfTest.JAR_JVM_ARGS);
+            args.add("-jar");
+            args.add(execPath);
+        } else {
+            command = execPath;
+        }
+        args.add("--stdio");
+
+        StringBuilder formArgs = new StringBuilder();
+        for (String a : args) {
+            formArgs.append("     ").append(a).append('\n');
+        }
+        StringBuilder tomlArgs = new StringBuilder();
+        for (int i = 0; i < args.size(); i++) {
+            tomlArgs.append(i == 0 ? "" : ", ").append(tomlLiteral(args.get(i)));
+        }
+        return """
+=== CODEX (APP DA OPENAI): CONFIGURAÇÕES → PLUGINS → MCPs ===
+
+⚠️ Só as conversas do CODEX usam o servidor. O chat comum do ChatGPT, no mesmo app, não usa servidores MCP locais.
+
+1. Adicione um servidor (ou edite o servidor 'iped') e preencha:
+   • Nome: iped
+   • Comando para iniciar: %s
+   • Argumentos (um por linha, clicando em '+ Adicionar argumento'):
+%s   • Variáveis do ambiente e Diretório de trabalho: não são necessários.
+
+2. Salve. Numa conversa do Codex, selecione o servidor (aparece como IPED-Tools-MCP).
+
+--- Alternativa: trecho equivalente em %%USERPROFILE%%\\.codex\\config.toml ---
+
+[mcp_servers.iped]
+enabled = true
+command = %s
+args = [%s]
+
+💡 DICA FORENSE:
+O Codex não lista os prompts do servidor: para iniciar com a metodologia forense e as regras de conduta,
+use o botão 'Copiar prompt' (seção 2 desta janela) e cole o texto como primeira mensagem da conversa.
+O modelo roda na nuvem da OpenAI: ele vai avisar sobre o envio dos dados do caso e pedir o seu aceite.
+""".formatted(command, formArgs, tomlLiteral(command), tomlArgs);
+    }
+
+    /** TOML literal string (single quotes, no escapes), or a basic string when the value has a single quote. */
+    private static String tomlLiteral(String value) {
+        if (value.indexOf('\'') < 0) {
+            return "'" + value + "'";
+        }
+        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
     private static final org.slf4j.Logger WINDOW_LOGGER = org.slf4j.LoggerFactory.getLogger(MainWindow.class);
