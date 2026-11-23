@@ -38,8 +38,7 @@ O IPED Tools MCP conecta-se a casos digitais processados previamente pelo **IPED
 O servidor implementa o protocolo **Model Context Protocol (MCP)** sobre STDIO (entrada e saída padrão). As seguintes ferramentas e interfaces de IA são oficialmente suportadas e documentadas nesta wiki:
 
 1. **[Claude Desktop](Cliente-Claude-Desktop)** — Cliente desktop da Anthropic.
-2. **[Cursor](Cliente-Cursor)** — IDE com suporte nativo ao protocolo MCP.
-3. **[Antigravity](Cliente-Antigravity)** — Ambiente de desenvolvimento assistido por IA.
-4. **[LM Studio](Cliente-LM-Studio)** — Recomendado para **laboratórios periciais isolados (air-gapped)** utilizando modelos de linguagem 100% locais (offline).
-5. **[Claude Code](Cliente-Claude-Code)** — Interface de linha de comando para agentes periciais.
-6. **[Codex (app da OpenAI)](Cliente-Codex)** — Modo de agente do app desktop da OpenAI. Só as conversas do **Codex** usam o servidor; o chat comum do ChatGPT, no mesmo app, não usa servidores MCP locais. O modelo roda na nuvem da OpenAI.
+2. **[Antigravity](Cliente-Antigravity)** — Ambiente de desenvolvimento assistido por IA.
+3. **[LM Studio](Cliente-LM-Studio)** — Recomendado para **laboratórios periciais isolados (air-gapped)** utilizando modelos de linguagem 100% locais (offline).
+4. **[Claude Code](Cliente-Claude-Code)** — Interface de linha de comando para agentes periciais.
+5. **[Codex (app da OpenAI)](Cliente-Codex)** — Modo de agente do app desktop da OpenAI. Só as conversas do **Codex** usam o servidor; o chat comum do ChatGPT, no mesmo app, não usa servidores MCP locais. O modelo roda na nuvem da OpenAI.

@@ -85,8 +85,8 @@ No menu suspenso *"Selecione seu aplicativo de IA:"*, você encontra três opç�
    * Instruções passo a passo com os campos exatos (Nome, Comando e Argumento) para preenchimento na interface visual do LM Studio. Os mesmos campos servem para o [Codex (app da OpenAI)](Cliente-Codex), em Plugins → MCPs.
 2. **`LM Studio (Arquivo ng-mcp.json)`:**
    * Bloco JSON pronto para inserção no arquivo de configuração do LM Studio.
-3. **`Claude Desktop / Cursor / Antigravity (JSON)`:**
-   * Bloco JSON padrão da especificação MCP (`mcpServers`) compatível com Claude Desktop, Cursor e Antigravity.
+3. **`Claude Desktop / Antigravity (JSON)`:**
+   * Bloco JSON padrão da especificação MCP (`mcpServers`) compatível com Claude Desktop e Antigravity.
 
 A configuração tem apenas o argumento `--stdio`, e **não inclui caso**. Você configura o cliente de IA uma única vez, e o caso é escolhido em cada conversa.
 
