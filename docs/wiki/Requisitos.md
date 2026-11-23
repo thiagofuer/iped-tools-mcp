@@ -42,3 +42,4 @@ O servidor implementa o protocolo **Model Context Protocol (MCP)** sobre STDIO (
 3. **[Antigravity](Cliente-Antigravity)** — Ambiente de desenvolvimento assistido por IA.
 4. **[LM Studio](Cliente-LM-Studio)** — Recomendado para **laboratórios periciais isolados (air-gapped)** utilizando modelos de linguagem 100% locais (offline).
 5. **[Claude Code](Cliente-Claude-Code)** — Interface de linha de comando para agentes periciais.
+6. **[Codex (app da OpenAI)](Cliente-Codex)** — Modo de agente do app desktop da OpenAI. Só as conversas do **Codex** usam o servidor; o chat comum do ChatGPT, no mesmo app, não usa servidores MCP locais. O modelo roda na nuvem da OpenAI.

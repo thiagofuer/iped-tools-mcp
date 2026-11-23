@@ -10,6 +10,7 @@
   * [Cursor](Cliente-Cursor)
   * [Antigravity](Cliente-Antigravity)
   * [LM Studio (offline)](Cliente-LM-Studio)
+  * [Codex (app da OpenAI)](Cliente-Codex)
 * ➡️ [Próximo passo: Como Investigar com o MCP](Como-Investigar-com-o-MCP)
 
 ### 🔍 Investigação

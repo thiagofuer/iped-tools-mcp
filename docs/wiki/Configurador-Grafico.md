@@ -82,7 +82,7 @@ A situação é atualizada quando a janela volta ao primeiro plano, por exemplo 
 No menu suspenso *"Selecione seu aplicativo de IA:"*, você encontra três opções correspondentes aos principais fluxos de trabalho:
 
 1. **`LM Studio (Formulário Visual - Copiar Campos)`:**
-   * Instruções passo a passo com os campos exatos (Nome, Comando e Argumento) para preenchimento na interface visual do LM Studio.
+   * Instruções passo a passo com os campos exatos (Nome, Comando e Argumento) para preenchimento na interface visual do LM Studio. Os mesmos campos servem para o [Codex (app da OpenAI)](Cliente-Codex), em Plugins → MCPs.
 2. **`LM Studio (Arquivo ng-mcp.json)`:**
    * Bloco JSON pronto para inserção no arquivo de configuração do LM Studio.
 3. **`Claude Desktop / Cursor / Antigravity (JSON)`:**
