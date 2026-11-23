@@ -25,6 +25,20 @@ No Antigravity, acesse as configurações de servidores MCP através do menu de 
 
 ---
 
+## 🚀 Iniciar a investigação com o `start_case`
+
+O Antigravity lista os prompts dos servidores MCP no menu de barra. Na caixa de mensagem, digite `/mcp` e escolha:
+
+```text
+/mcp:iped:start_case
+```
+
+O item aparece com o ícone de balão de mensagem, que distingue os prompts MCP das skills e comandos do próprio Antigravity. Ao selecioná-lo, o cliente busca o prompt no servidor `iped` e coloca na conversa a metodologia de investigação e as regras de conduta. Em seguida, informe a pasta do caso. Se você registrou o servidor com outro nome, o comando muda junto (por exemplo, `/mcp:iped-dev:start_case`).
+
+> ⚠️ Digitar `start_case` como texto comum não aciona o prompt: escolha o item na lista do `/`.
+
+---
+
 ## 🛠️ Benefícios no Antigravity
 
 Com o servidor conectado no Antigravity:
