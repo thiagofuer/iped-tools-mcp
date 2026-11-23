@@ -23,7 +23,7 @@ Testado no app versão 26.1117.
    * **Variáveis do ambiente** e **Diretório de trabalho:** não são necessários.
 3. Salve.
 
-O caminho do executável é o mesmo que o [Configurador Gráfico](Configurador-Grafico) mostra no campo **Comando** da opção *LM Studio (Formulário Visual)*. Se você usa o pacote portátil, informe o caminho da pasta extraída.
+O [Configurador Gráfico](Configurador-Grafico) gera esses campos, com o caminho do executável da sua instalação, e o trecho do `config.toml` do Método 2: escolha **Codex (app da OpenAI)** na lista de clientes. Se você usa o pacote portátil, abra o configurador pela pasta extraída para que o caminho saia certo.
 
 ---
 
