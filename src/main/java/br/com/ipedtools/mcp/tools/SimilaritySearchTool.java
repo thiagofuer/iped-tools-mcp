@@ -19,8 +19,18 @@ public class SimilaritySearchTool {
             WHAT THIS TOOL DOES:
             - Compares perceptual image features (color channels, luminance, texture vectors) of the reference item against the case index.
             - Finds crops, resized copies, recompressed JPEGs, or color-adjusted variants of a reference photograph.
-            - Returns matching items ranked in descending order by visual similarity score (1.0 to 100.0, or 100.0 for identical hashes).
-            
+            - Returns matching items ranked in descending order by visual similarity score (1.0 to 100.0).
+
+            READING THE RESULTS:
+            - Results are ranked by score; the top of the list matters most.
+            - 100 means an identical image (same hash) or a nearly identical one; compare the 'hash' field with the
+              reference's hash to tell them apart.
+            - The default min_score of 1.0 is the IPED default: everything above it is returned, ranked. To keep only
+              copies and close variants, pass a high min_score (for example 80).
+            - Tiny or flat images such as icons are poor references: many unrelated icons score close to 100.
+            - The reference item itself is in the results with is_reference=true and is not an occurrence.
+              Report similar_found (similar items without the reference), not total_found.
+
             FORENSIC WORKFLOW GUIDANCE:
             - Use when tracking the dissemination of a specific illicit image, memes, forged documents, or logos across suspects' devices.
             """
@@ -35,7 +45,7 @@ public class SimilaritySearchTool {
     ) {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
-            return Map.of("error", "Nenhum caso está aberto no momento.");
+            return Map.of("error", IpedCoreService.NO_CASE_OPEN_MESSAGE);
         }
         try {
             float min = minScore != null && minScore > 0 ? minScore : 1.0f;
@@ -56,7 +66,9 @@ public class SimilaritySearchTool {
             WHAT THIS TOOL DOES:
             - Compares face encodings extracted from the reference photo against all face vectors indexed in the case.
             - Returns matching photos containing the same person, ranked by facial similarity score (threshold: 0 to 100, default min: 50).
-            
+            - The reference photo itself is in the results with is_reference=true and is not an occurrence.
+              Report similar_found (matches without the reference), not total_found.
+
             FORENSIC WORKFLOW GUIDANCE:
             - Use when identifying an unknown suspect or victim appearing in multiple photos, video frames, or messaging chats.
             """
@@ -71,7 +83,7 @@ public class SimilaritySearchTool {
     ) {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
-            return Map.of("error", "Nenhum caso está aberto no momento.");
+            return Map.of("error", IpedCoreService.NO_CASE_OPEN_MESSAGE);
         }
         try {
             float min = minScore != null && minScore > 0 ? minScore : 50.0f;
@@ -92,7 +104,8 @@ public class SimilaritySearchTool {
             WHAT THIS TOOL DOES:
             - Extracts top representative terms from the reference document's indexed content.
             - Locates other documents in the case sharing significant term overlap, ranked by relevance score.
-            
+            - The reference document is excluded from the results; similar_found is the number of similar documents.
+
             FORENSIC WORKFLOW GUIDANCE:
             - Use when tracking contract revisions, draft copies of leaked memos, fraudulent invoices, or phishing email templates.
             """
@@ -107,7 +120,7 @@ public class SimilaritySearchTool {
     ) {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
-            return Map.of("error", "Nenhum caso está aberto no momento.");
+            return Map.of("error", IpedCoreService.NO_CASE_OPEN_MESSAGE);
         }
         try {
             int percent = matchPercent != null && matchPercent > 0 ? matchPercent : 50;

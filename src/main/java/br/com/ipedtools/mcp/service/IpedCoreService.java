@@ -12,7 +12,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import javax.imageio.ImageIO;
@@ -22,7 +21,9 @@ import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.SortedSetDocValues;
+import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.QueryVisitor;
 import org.apache.lucene.util.BytesRef;
 import org.apache.tika.io.TikaInputStream;
 import org.apache.tika.metadata.Metadata;
@@ -36,19 +37,24 @@ import iped.data.IItem;
 import iped.data.IItemId;
 import iped.engine.config.Configuration;
 import iped.engine.config.ConfigurationManager;
+import iped.engine.data.BitmapBookmarks;
 import iped.engine.data.IPEDMultiSource;
 import iped.engine.data.IPEDSource;
 import iped.engine.data.ItemId;
 import iped.engine.lucene.DocValuesUtil;
 import iped.engine.search.IPEDSearcher;
 import iped.engine.search.ImageSimilarityScorer;
+import iped.engine.task.index.IndexItem;
+import iped.utils.LocalizedFormat;
 import iped.engine.search.MultiSearchResult;
 import iped.engine.search.SimilarDocumentSearch;
 import iped.engine.search.SimilarFacesSearch;
 import iped.engine.search.SimilarImagesSearch;
 import iped.engine.task.ParsingTask;
 import iped.engine.task.similarity.ImageSimilarityTask;
+import iped.parsers.ocr.OCRParser;
 import iped.parsers.standard.StandardParser;
+import iped.properties.ExtraProperties;
 import iped.search.SearchResult;
 import iped.utils.ImageUtil;
 
@@ -62,22 +68,6 @@ public class IpedCoreService {
     private static final Logger LOGGER = LoggerFactory.getLogger(IpedCoreService.class);
     private static IpedCoreService INSTANCE;
 
-    private static final Set<String> WHITELIST_PREFIXES = Set.of(
-            "communication:", "conversation:", "common:", "image:", "video:", "audio:",
-            "ufed:", "p2p:", "hashdb:", "meta:", "message-", "face",
-            "ai:", "nsfw", "hardware-wallet", "faceage"
-    );
-
-    private static final Set<String> EXPLICIT_ALLOWED_KEYS = Set.of(
-            "id", "name", "path", "category", "type", "ext", "size", "length",
-            "created", "modified", "accessed", "changed", "deleted", "carved", "isdir",
-            "hash", "md5", "sha-256", "sha-1", "contenttype",
-            "url", "visitdate", "downloaddate", "totalbytes", "receivedbytes", "localpath",
-            "from", "to", "cc", "bcc", "subject", "groupid", "isgroupmessage",
-            "latitude", "longitude",
-            "childpornhashhits", "sharedhashes", "shareditems", "linkeditems"
-    );
-
     private static final Set<String> BLACKLISTED_KEYS = Set.of(
             "content", "treenode", "offset", "timeout", "thumbnail", "thumbnailbase64",
             "subitem", "subitemid", "mftsequence", "filesystemid", "metaaddress",
@@ -85,21 +75,17 @@ public class IpedCoreService {
             "trackid", "timeeventords", "timeeventgroups", "x-reader", "ipedembeddefolder"
     );
 
-    private static final Map<String, List<Map<String, Object>>> FORENSIC_DOMAINS = initForensicDomains();
-
-    private static final Pattern EMAIL_PATTERN = Pattern.compile("[\\w.-]+@[\\w.-]+\\.\\w+");
-    private static final Pattern PHONE_PATTERN = Pattern.compile("\\+?\\d{10,13}");
-
-    public static final File ACTIVE_CASE_FILE = new File(
-            System.getProperty("user.home") + File.separator + ".iped-tools-mcp",
-            "active_case.txt"
-    );
+    /** Answer of every case tool while no case is open in this session: the case is opened only with open_case. */
+    public static final String NO_CASE_OPEN_MESSAGE = "Nenhum caso aberto nesta sessão. Peça ao usuário o caminho da pasta "
+            + "do caso do IPED e chame a ferramenta open_case.";
 
     private IPEDSource ipedSource;
     private File caseDirectory;
+    /** OCR text stored by IPED processing in the open case, read-only. */
+    private OcrTextStore ocrStore;
+    private static final java.util.concurrent.atomic.AtomicBoolean PARSING_OPTIONS_APPLIED =
+            new java.util.concurrent.atomic.AtomicBoolean();
     private String sourceId = "caso1";
-    private long lastActiveCaseFileCheck = 0;
-    private long lastActiveCaseFileModTime = 0;
 
     private IpedCoreService() {
     }
@@ -111,38 +97,47 @@ public class IpedCoreService {
         return INSTANCE;
     }
 
+    // =========================================================================
+    // CASE OPENING DIAGNOSTICS
+    // =========================================================================
+
+    private volatile Map<String, Object> lastOpenError;
+
+    /** Step, message and time of the last failed attempt to open a case, or null after a successful opening. */
+    public Map<String, Object> getLastOpenError() {
+        return lastOpenError;
+    }
+
+    private void recordOpenError(String step, String message) {
+        Map<String, Object> error = new LinkedHashMap<>();
+        error.put("step", step);
+        error.put("message", message);
+        error.put("time", Instant.now().truncatedTo(ChronoUnit.SECONDS).toString());
+        lastOpenError = error;
+    }
+
+    @FunctionalInterface
+    private interface Step<T> {
+        T run() throws Exception;
+    }
+
     /**
-     * Checks if the active case was updated by another process (e.g. GUI) and reloads it dynamically.
+     * Runs one step of case opening, logging its start before it runs and its end or failure with the duration.
+     * The start line is flushed to the log file before the step runs, so a native crash inside the step leaves
+     * the step name as the last line of the log. A failure is recorded as the last opening error and rethrown.
      */
-    public synchronized void syncActiveCaseIfNeeded() {
-        long now = System.currentTimeMillis();
-        if (now - lastActiveCaseFileCheck < 500) {
-            return;
-        }
-        lastActiveCaseFileCheck = now;
-
+    private <T> T caseStep(String name, Step<T> action) throws Exception {
+        long start = System.nanoTime();
+        LOGGER.info("[abertura do caso] início: {}", name);
         try {
-            if (!ACTIVE_CASE_FILE.exists()) {
-                return;
-            }
-            long modTime = ACTIVE_CASE_FILE.lastModified();
-            if (modTime == lastActiveCaseFileModTime) {
-                return;
-            }
-            lastActiveCaseFileModTime = modTime;
-
-            String path = java.nio.file.Files.readString(ACTIVE_CASE_FILE.toPath(), java.nio.charset.StandardCharsets.UTF_8).trim();
-            if (!path.isBlank()) {
-                File target = new File(path);
-                if (target.exists() && IPEDSource.checkIfIsCaseFolder(target)) {
-                    if (this.caseDirectory == null || !this.caseDirectory.getCanonicalPath().equalsIgnoreCase(target.getCanonicalPath())) {
-                        LOGGER.info("Sincronizando caso ativo detectado via GUI/Arquivo de Estado: {}", target.getAbsolutePath());
-                        openCaseInternal(target, false);
-                    }
-                }
-            }
-        } catch (Exception e) {
-            LOGGER.debug("Erro ao verificar arquivo active_case.txt: {}", e.getMessage());
+            T result = action.run();
+            LOGGER.info("[abertura do caso] fim: {} ({} ms)", name, (System.nanoTime() - start) / 1_000_000);
+            return result;
+        } catch (Exception | LinkageError e) {
+            LOGGER.error("[abertura do caso] falhou: {} ({} ms): {}", name, (System.nanoTime() - start) / 1_000_000,
+                    e.toString(), e);
+            recordOpenError(name, e.toString());
+            throw e instanceof Exception ex ? ex : new IllegalStateException(e);
         }
     }
 
@@ -150,18 +145,19 @@ public class IpedCoreService {
      * Opens and validates an IPED case folder.
      */
     public synchronized void openCase(File caseDir) {
-        openCaseInternal(caseDir, true);
-    }
-
-    private synchronized void openCaseInternal(File caseDir, boolean persistState) {
         if (caseDir == null || !caseDir.exists()) {
-            throw new IllegalArgumentException("O diretório do caso não existe: " + caseDir);
+            String message = "O diretório do caso não existe: " + caseDir;
+            recordOpenError("validação da pasta", message);
+            LOGGER.warn(message);
+            throw new IllegalArgumentException(message);
         }
 
         if (!IPEDSource.checkIfIsCaseFolder(caseDir)) {
-            throw new IllegalArgumentException(
-                    "O diretório selecionado não é uma pasta de caso válida do IPED (subpastas 'iped/index', 'iped/data' ou 'iped/lib' não encontradas): "
-                            + caseDir.getAbsolutePath());
+            String message = "O diretório selecionado não é uma pasta de caso válida do IPED (subpastas 'iped/index', 'iped/data' ou 'iped/lib' não encontradas): "
+                    + caseDir.getAbsolutePath();
+            recordOpenError("validação da pasta", message);
+            LOGGER.warn(message);
+            throw new IllegalArgumentException(message);
         }
 
         closeCase();
@@ -169,30 +165,50 @@ public class IpedCoreService {
         this.caseDirectory = caseDir;
         this.sourceId = caseDir.getName();
 
+        // The MCP needs no Python: keep IPED from starting JEP with whatever Python the environment offers.
+        PythonRuntimeGuard.disable();
+
         LOGGER.info("Carregando configurações do caso: {}", caseDir.getAbsolutePath());
         try {
-            Configuration.getInstance().loadConfigurables(caseDir.getAbsolutePath() + File.separator + "iped", true);
-        } catch (Throwable t) {
-            LOGGER.warn("Aviso ao carregar configuráveis do IPED (ignorado em JDKs modernos sem SecurityManager): {}", t.getMessage());
-        }
+            caseStep("configurações do IPED", () -> {
+                try {
+                    Configuration.getInstance().loadConfigurables(caseDir.getAbsolutePath() + File.separator + "iped", true);
+                } catch (Throwable t) {
+                    // Not fatal for reading the case; logged in full so support can see what failed.
+                    LOGGER.warn("Aviso ao carregar configuráveis do IPED (ignorado; a leitura do caso continua): {}",
+                            t.toString(), t);
+                }
+                return null;
+            });
 
-        LOGGER.info("Inicializando IPEDSource e abrindo leitores Lucene...");
-        this.ipedSource = new IPEDSource(caseDir);
+            applyParsingOptions();
+
+            // The QueryBuilder caches numeric PointsConfig per case instance the first time a query is parsed,
+            // which happens inside the IPEDSource constructor before it loads metadataTypes.txt. Loading the
+            // types first makes that cache include numeric extra properties (nudityScore, ocrCharCount...),
+            // otherwise their range queries become textual and match nothing (issue #7).
+            caseStep("tipos de metadados", () -> {
+                try {
+                    IndexItem.loadMetadataTypes(new File(caseDir, "iped" + File.separator + "conf"));
+                } catch (Exception e) {
+                    LOGGER.warn("Falha ao pré-carregar metadataTypes.txt do caso: {}", e.toString(), e);
+                }
+                return null;
+            });
+
+            LOGGER.info("Inicializando IPEDSource e abrindo leitores Lucene...");
+            this.ipedSource = caseStep("índice e marcadores", () -> new IPEDSource(caseDir));
+            this.ocrStore = new OcrTextStore(this.ipedSource.getModuleDir());
+        } catch (Exception e) {
+            this.ipedSource = null;
+            this.caseDirectory = null;
+            throw e instanceof RuntimeException re ? re
+                    : new IllegalStateException("Falha ao abrir o caso " + caseDir.getAbsolutePath() + ": " + e.getMessage(), e);
+        }
+        lastOpenError = null;
 
         LOGGER.info("Caso carregado com sucesso. Total de documentos no leitor: {}",
                 this.ipedSource.getReader().numDocs());
-
-        if (persistState) {
-            try {
-                if (ACTIVE_CASE_FILE.getParentFile() != null) {
-                    java.nio.file.Files.createDirectories(ACTIVE_CASE_FILE.getParentFile().toPath());
-                }
-                java.nio.file.Files.writeString(ACTIVE_CASE_FILE.toPath(), caseDir.getAbsolutePath(), java.nio.charset.StandardCharsets.UTF_8);
-                lastActiveCaseFileModTime = ACTIVE_CASE_FILE.lastModified();
-            } catch (Exception ex) {
-                LOGGER.debug("Falha ao salvar active_case.txt: {}", ex.getMessage());
-            }
-        }
     }
 
     /**
@@ -210,20 +226,51 @@ public class IpedCoreService {
                 this.caseDirectory = null;
             }
         }
+        if (this.ocrStore != null) {
+            this.ocrStore.close();
+            this.ocrStore = null;
+        }
+    }
+
+    /**
+     * Applies the IPED parsing options of the case once, before any {@link StandardParser} exists, as the IPED
+     * SearchApp does. {@code StandardParser} keeps its Tika configuration in a static field created on first use, so
+     * a parser created earlier would ignore the case parser configuration for the whole process. IPED OCR stays
+     * disabled: on a cache miss it would run tesseract and write to the case folder. The stored OCR text is read by
+     * {@link OcrTextStore} instead.
+     */
+    private static void applyParsingOptions() {
+        if (!PARSING_OPTIONS_APPLIED.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            ParsingTask.setupParsingOptions(ConfigurationManager.get());
+        } catch (Throwable t) {
+            LOGGER.warn("Falha ao aplicar as opções de parsing do IPED (a extração de texto segue com a configuração padrão): {}",
+                    t.toString(), t);
+        }
+        System.setProperty(OCRParser.ENABLE_PROP, "false");
+        try {
+            new StandardParser(); // fixes the static Tika configuration with the options above
+        } catch (Throwable t) {
+            LOGGER.warn("Falha ao preparar o parser do IPED: {}", t.toString(), t);
+        }
+    }
+
+    /** Whether a case index is open now, without opening the active case on demand. */
+    public synchronized boolean isCaseLoaded() {
+        return this.ipedSource != null && this.ipedSource.getReader() != null;
     }
 
     public synchronized boolean isCaseOpen() {
-        syncActiveCaseIfNeeded();
         return this.ipedSource != null && this.ipedSource.getReader() != null;
     }
 
     public synchronized File getCaseDirectory() {
-        syncActiveCaseIfNeeded();
         return this.caseDirectory;
     }
 
     public synchronized String getSourceId() {
-        syncActiveCaseIfNeeded();
         return this.sourceId;
     }
 
@@ -274,23 +321,6 @@ public class IpedCoreService {
         return sourcesList;
     }
 
-    private Map<String, Object> resolveContainerForDoc(Document doc, Map<String, Map<String, Object>> evidenceContainers) {
-        if (evidenceContainers == null || evidenceContainers.isEmpty() || doc == null) {
-            return null;
-        }
-        String path = doc.get("path");
-        if (path != null) {
-            String normPath = "/" + path.replace('\\', '/').replaceAll("^/+", "").toLowerCase();
-            for (Map.Entry<String, Map<String, Object>> entry : evidenceContainers.entrySet()) {
-                String cName = entry.getKey();
-                if (normPath.startsWith("/" + cName + "/") || normPath.equals("/" + cName)) {
-                    return entry.getValue();
-                }
-            }
-        }
-        return null;
-    }
-
     // =========================================================================
     // SEARCH OPERATIONS
     // =========================================================================
@@ -299,10 +329,19 @@ public class IpedCoreService {
      * Executes a Lucene query against the open IPED case index.
      */
     public Map<String, Object> executeSearch(String queryText, int limit) throws IOException {
+        return executeSearch(queryText, limit, 0);
+    }
+
+    /**
+     * Executes a Lucene query and returns the page {@code [offset, offset + limit)} of the matching items, in the
+     * index order produced by IPEDSearcher (stable across calls for the same case and query).
+     */
+    public Map<String, Object> executeSearch(String queryText, int limit, int offset) throws IOException {
         checkCaseOpen();
 
         int maxLimit = Math.clamp(limit, 1, 100);
-        String sanitizedQuery = (queryText == null || queryText.isBlank()) ? "*:*" : queryText.replaceAll("/", "\\\\/");
+        int start = Math.max(0, offset);
+        String sanitizedQuery = prepareQuery(queryText);
 
         IPEDSearcher searcher = new IPEDSearcher(ipedSource, sanitizedQuery);
         SearchResult result = searcher.search();
@@ -311,25 +350,139 @@ public class IpedCoreService {
         int totalFound = (allIds != null) ? allIds.length : 0;
 
         List<Map<String, Object>> items = new ArrayList<>();
-        if (allIds != null && totalFound > 0) {
-            int returnCount = Math.min(totalFound, maxLimit);
-            for (int i = 0; i < returnCount; i++) {
-                items.add(Map.of("source", sourceId, "id", allIds[i]));
-            }
+        int end = Math.min(totalFound, start + maxLimit);
+        for (int i = start; i < end; i++) {
+            items.add(Map.of("source", sourceId, "id", allIds[i]));
         }
+        boolean hasMore = start + items.size() < totalFound;
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("query", queryText);
         response.put("source_id", sourceId);
         response.put("total_found", totalFound);
+        response.put("offset", start);
         response.put("returned_count", items.size());
         response.put("limit", maxLimit);
+        response.put("has_more", hasMore);
+        if (hasMore) {
+            response.put("next_offset", start + items.size());
+        }
         response.put("items", items);
-        response.put("note", totalFound > items.size()
-                ? "Exibindo os primeiros " + items.size() + " de " + totalFound + " itens encontrados."
-                : "Todos os itens encontrados foram exibidos.");
+        response.put("note", pageNote(totalFound, start, items.size(), hasMore));
+
+        List<Map<String, Object>> warnings = unknownPropertyWarnings(searcher.getQuery());
+        if (totalFound == 0 && !NumericRangeSupport.extractRanges(sanitizedQuery).isEmpty()) {
+            Set<Object> alreadyWarned = new HashSet<>();
+            warnings.forEach(w -> alreadyWarned.add(w.get("property")));
+            for (Map<String, Object> w : NumericRangeSupport.zeroResultWarnings(sanitizedQuery,
+                    ipedSource.getReader(), field -> IndexItem.getMetadataTypes().get(field))) {
+                if (!alreadyWarned.contains(w.get("property"))) {
+                    warnings.add(w);
+                }
+            }
+        }
+        if (!warnings.isEmpty()) {
+            response.put("warnings", warnings);
+        }
 
         return response;
+    }
+
+    /** Field names referenced by a parsed query, including those under NOT clauses. */
+    static Set<String> queryFields(Query query) {
+        Set<String> fields = new LinkedHashSet<>();
+        if (query == null) {
+            return fields;
+        }
+        query.visit(new QueryVisitor() {
+            @Override
+            public boolean acceptField(String field) {
+                if (field != null && !field.isEmpty()) {
+                    fields.add(field);
+                }
+                return true;
+            }
+
+            @Override
+            public QueryVisitor getSubVisitor(BooleanClause.Occur occur, Query parent) {
+                return this;
+            }
+        });
+        return fields;
+    }
+
+    /**
+     * One warning per field of the query that does not exist in the case index, so that an empty or partial result
+     * is not read as absence of evidence.
+     */
+    private List<Map<String, Object>> unknownPropertyWarnings(Query query) throws IOException {
+        List<Map<String, Object>> warnings = new ArrayList<>();
+        PropertyCatalogService catalog = PropertyCatalogService.getInstance();
+        for (String field : queryFields(query)) {
+            if (catalog.fieldExists(field)) {
+                continue;
+            }
+            Map<String, Object> w = new LinkedHashMap<>();
+            w.put("type", "property_not_in_case");
+            w.put("property", field);
+            w.put("message", "A propriedade '" + field + "' não existe neste caso; essa parte da consulta não encontra "
+                    + "nada, o que não significa ausência de evidência. Use list_properties para descobrir as "
+                    + "propriedades existentes.");
+            List<String> similar = PropertyCatalogService.similarNames(field, catalog.caseFields().keySet());
+            if (!similar.isEmpty()) {
+                w.put("similar", similar);
+            }
+            warnings.add(w);
+        }
+        return warnings;
+    }
+
+    /** Note describing which positions were returned and how to get the next page. */
+    static String pageNote(int total, int offset, int returned, boolean hasMore) {
+        if (total == 0) {
+            return "Nenhum item encontrado.";
+        }
+        if (returned == 0) {
+            return "O offset " + offset + " está além do total de " + total + " itens encontrados; não há itens nesta página.";
+        }
+        String range = "Itens " + (offset + 1) + " a " + (offset + returned) + " de " + total + ".";
+        if (hasMore) {
+            return range + " Ainda há itens: para os próximos, chame search_documents com a mesma consulta e offset="
+                    + (offset + returned) + ". Não conclua que algo não existe antes de percorrer as páginas ou refinar a consulta.";
+        }
+        return offset == 0 ? "Todos os " + total + " itens encontrados foram exibidos."
+                : range + " Esta é a última página: todos os itens encontrados foram percorridos.";
+    }
+
+    /**
+     * Applies the query preparation used by {@code search_documents}: blank becomes {@code *:*}, slashes are
+     * escaped and dot decimals of Float/Double ranges are converted to the case locale.
+     */
+    static String prepareQuery(String queryText) {
+        String q = (queryText == null || queryText.isBlank()) ? "*:*" : queryText.replaceAll("/", "\\\\/");
+        return NumericRangeSupport.normalizeDecimalSeparators(q,
+                field -> IndexItem.getMetadataTypes().get(field), LocalizedFormat.getNumberInstance());
+    }
+
+    /**
+     * Runs a query exactly as {@code search_documents} does and returns the Lucene doc IDs of every matching item.
+     */
+    public int[] searchLuceneIds(String queryText) throws IOException {
+        checkCaseOpen();
+        SearchResult result = new IPEDSearcher(ipedSource, prepareQuery(queryText)).search();
+        int[] ids = result.getIds();
+        if (ids == null) {
+            return new int[0];
+        }
+        int[] luceneIds = new int[ids.length];
+        int n = 0;
+        for (int id : ids) {
+            int luceneId = ipedSource.getLuceneId(id);
+            if (luceneId >= 0) {
+                luceneIds[n++] = luceneId;
+            }
+        }
+        return Arrays.copyOf(luceneIds, n);
     }
 
     /**
@@ -364,6 +517,14 @@ public class IpedCoreService {
      * and surgical key filtering.
      */
     public Map<String, Object> getDocumentMetadata(int itemId, boolean raw, List<String> keys) throws IOException {
+        return getDocumentMetadata(itemId, raw, keys, null);
+    }
+
+    /**
+     * Retrieves metadata for a single item ID. Standard mode groups properties by catalog group; {@code groups}
+     * (canonical group names) keeps only those groups, in both modes.
+     */
+    public Map<String, Object> getDocumentMetadata(int itemId, boolean raw, List<String> keys, Set<String> groups) throws IOException {
         checkCaseOpen();
 
         int luceneId = ipedSource.getLuceneId(itemId);
@@ -404,6 +565,9 @@ public class IpedCoreService {
                 if (keys != null && !keys.isEmpty() && !matchesAnyKeyPattern(k, keys)) {
                     continue;
                 }
+                if (groups != null && !groups.isEmpty() && !groups.contains(PropertyCatalogService.group(k))) {
+                    continue;
+                }
                 rawFiltered.put(k, entry.getValue());
             }
             finalProps = rawFiltered;
@@ -417,7 +581,7 @@ public class IpedCoreService {
                     }
                 }
             }
-            finalProps = sanitizeProperties(candidateProps);
+            finalProps = sanitizeProperties(candidateProps, groups);
         }
 
         List<String> bookmarks = ipedSource.getBookmarks().getBookmarkList(itemId);
@@ -437,25 +601,35 @@ public class IpedCoreService {
     }
 
     /**
-     * Retrieves sanitized metadata in batch for a list of document IDs.
-     */
-    public List<Map<String, Object>> getDocumentMetadataBatch(List<Integer> itemIds) {
-        return getDocumentMetadataBatch(itemIds, false, null);
-    }
-
-    /**
      * Retrieves metadata in batch for a list of document IDs with raw and key filtering options.
      */
     public List<Map<String, Object>> getDocumentMetadataBatch(List<Integer> itemIds, boolean raw, List<String> keys) {
+        return getDocumentMetadataBatch(itemIds, raw, keys, null);
+    }
+
+    /**
+     * Retrieves metadata in batch, optionally restricted to catalog groups (e.g. ["AI", "Image"]).
+     */
+    public List<Map<String, Object>> getDocumentMetadataBatch(List<Integer> itemIds, boolean raw, List<String> keys,
+            List<String> groups) {
         checkCaseOpen();
         List<Map<String, Object>> list = new ArrayList<>();
+        List<String> unknown = new ArrayList<>();
+        Set<String> groupSet = resolveGroups(groups, unknown);
+        if (!unknown.isEmpty()) {
+            Map<String, Object> err = new LinkedHashMap<>();
+            err.put("error", "Grupo(s) desconhecido(s): " + unknown);
+            err.put("available_groups", PropertyGroups.names());
+            list.add(err);
+            return list;
+        }
         if (itemIds == null || itemIds.isEmpty()) {
             return list;
         }
 
         for (Integer id : itemIds) {
             try {
-                list.add(getDocumentMetadata(id, raw, keys));
+                list.add(getDocumentMetadata(id, raw, keys, groupSet));
             } catch (Exception e) {
                 list.add(Map.of("id", id, "source", sourceId, "error", "Falha ao ler metadados: " + e.getMessage()));
             }
@@ -482,9 +656,12 @@ public class IpedCoreService {
                 return "[Item não encontrado com o ID " + itemId + "]";
             }
 
+            // The case parsing options must exist before the first StandardParser (see applyParsingOptions).
+            applyParsingOptions();
             StandardParser parser = new StandardParser();
             ParsingTask expander = new ParsingTask(item, parser);
             expander.init(ConfigurationManager.get());
+            System.setProperty(OCRParser.ENABLE_PROP, "false"); // init re-enables it; IPED OCR never runs here
             ParseContext context = expander.getTikaContext(ipedSource);
             expander.setExtractEmbedded(false);
 
@@ -503,7 +680,7 @@ public class IpedCoreService {
                 LOGGER.debug("Erro na extração Tika para item {}: {}", itemId, e.getMessage());
             }
 
-            String fullText = baos.toString(StandardCharsets.UTF_8).trim();
+            String fullText = withStoredSections(itemId, item.getHash(), baos.toString(StandardCharsets.UTF_8).trim());
             if (fullText.isEmpty()) {
                 return "[Nenhum conteúdo textual extraído para este item]";
             }
@@ -529,6 +706,78 @@ public class IpedCoreService {
         }
     }
 
+    static final String OCR_SECTION = "=== Texto de OCR (IPED) ===";
+    static final String TRANSCRIPT_SECTION = "=== Transcrição de áudio (IPED) ===";
+    static final String EXTRACTED_SECTION = "=== Texto extraído do arquivo ===";
+
+    /**
+     * Puts before the extracted text, in labeled sections, the OCR text and the audio transcription that IPED
+     * processing stored for the item, as the IPED "Text" tab shows them. They come first so the first page holds
+     * them even when the file yields long binary strings (audio). Read-only: OCR comes from the case OCR database
+     * and the transcription from the indexed property.
+     */
+    private String withStoredSections(int itemId, String hash, String extracted) {
+        StringBuilder sb = new StringBuilder();
+        Document doc = null;
+        try {
+            int luceneId = ipedSource.getLuceneId(itemId);
+            if (luceneId >= 0) {
+                doc = ipedSource.getReader().document(luceneId);
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Falha ao ler o documento {} do índice: {}", itemId, e.toString());
+        }
+
+        Optional<String> ocr = ocrStore != null ? ocrStore.find(hash) : Optional.empty();
+        if (ocr.isPresent()) {
+            appendSection(sb, OCR_SECTION, ocr.get());
+        } else {
+            long ocrChars = longValue(doc, OCRParser.OCR_CHAR_COUNT);
+            if (ocrChars > 0) {
+                appendSection(sb, OCR_SECTION, "[O IPED reconheceu " + ocrChars
+                        + " caracteres de OCR neste item, mas o texto não está disponível no caso]");
+            }
+        }
+
+        String transcript = doc != null ? doc.get(ExtraProperties.TRANSCRIPT_ATTR) : null;
+        if (transcript != null && !transcript.isBlank() && !extracted.contains(transcript.trim())) {
+            appendSection(sb, TRANSCRIPT_SECTION, transcript.trim());
+        }
+        if (sb.length() == 0) {
+            sb.append(extracted);
+        } else if (!extracted.isEmpty()) {
+            appendSection(sb, EXTRACTED_SECTION, extracted);
+        }
+        LOGGER.debug("Texto do item {}: extraído {} caracteres, OCR {} caracteres, transcrição {} caracteres", itemId,
+                extracted.length(), ocr.map(String::length).orElse(0), transcript != null ? transcript.length() : 0);
+        return sb.toString().trim();
+    }
+
+    private static void appendSection(StringBuilder sb, String title, String body) {
+        if (sb.length() > 0) {
+            sb.append("\n\n");
+        }
+        sb.append(title).append('\n').append(body);
+    }
+
+    private static long longValue(Document doc, String field) {
+        if (doc == null) {
+            return 0;
+        }
+        IndexableField f = doc.getField(field);
+        if (f == null) {
+            return 0;
+        }
+        try {
+            if (f.numericValue() != null) {
+                return f.numericValue().longValue();
+            }
+            return f.stringValue() != null ? (long) Double.parseDouble(f.stringValue().trim()) : 0;
+        } catch (RuntimeException e) {
+            return 0;
+        }
+    }
+
     // =========================================================================
     // CATEGORIES & BOOKMARKS
     // =========================================================================
@@ -539,7 +788,8 @@ public class IpedCoreService {
         return categories != null ? categories : List.of();
     }
 
-    public List<String> listBookmarks() {
+    /** Names of the bookmarks of the open case, used by the case summary. */
+    public List<String> listBookmarkNames() {
         checkCaseOpen();
         Map<Integer, String> map = ipedSource.getBookmarks().getBookmarkMap();
         if (map == null || map.isEmpty()) {
@@ -548,45 +798,82 @@ public class IpedCoreService {
         return new ArrayList<>(map.values());
     }
 
-    public synchronized String addBookmark(String bookmarkName, List<Integer> docIds) {
+    /** The case bookmark state file ({@code <case>/iped/bookmarks.iped}). */
+    public synchronized File getBookmarksStateFile() {
         checkCaseOpen();
-        if (bookmarkName == null || bookmarkName.isBlank()) {
-            return "Erro: O nome do marcador não pode ser vazio.";
-        }
-        if (docIds == null || docIds.isEmpty()) {
-            return "Erro: Nenhum ID de documento fornecido para adicionar ao marcador.";
-        }
+        return new File(caseDirectory, IPEDSource.MODULE_DIR + "/" + BitmapBookmarks.STATEFILENAME);
+    }
 
+    /**
+     * Reloads the bookmark state from the case file, so that an operation starts from what is on disk (for
+     * example, changes saved by IPED Desktop). Does nothing when the file does not exist yet.
+     */
+    public synchronized void reloadBookmarks() throws IOException {
+        File stateFile = getBookmarksStateFile();
+        if (!stateFile.isFile()) {
+            return;
+        }
         try {
-            int bmId = ipedSource.getBookmarks().newBookmark(bookmarkName);
-            ipedSource.getBookmarks().addBookmark(docIds, bmId);
-            ipedSource.getBookmarks().saveState(true);
-            return "Sucesso: " + docIds.size() + " documento(s) adicionado(s) ao marcador '" + bookmarkName + "'.";
-        } catch (Exception e) {
-            LOGGER.error("Erro ao adicionar aos marcadores: {}", e.getMessage(), e);
-            return "Falha ao adicionar aos marcadores: " + e.getMessage();
+            ipedSource.getBookmarks().loadState(stateFile);
+        } catch (ClassNotFoundException e) {
+            throw new IOException("Formato de " + stateFile.getName() + " não reconhecido: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Saves the bookmark state to the case file before returning. Unlike {@code IBookmarks.saveState(boolean)},
+     * a failure is reported instead of being redirected to a temporary file: the state is written to a temporary
+     * file in the same folder and moved over {@code bookmarks.iped}, and on failure the in-memory state is reloaded
+     * from the unchanged file.
+     */
+    public synchronized void saveBookmarks() throws IOException {
+        File stateFile = getBookmarksStateFile();
+        File dir = stateFile.getParentFile();
+        java.nio.file.Path tmp = null;
+        try {
+            if (stateFile.exists() && !java.nio.file.Files.isWritable(stateFile.toPath())) {
+                throw new IOException("sem permissão de escrita em " + stateFile.getAbsolutePath());
+            }
+            if (dir == null || !java.nio.file.Files.isWritable(dir.toPath())) {
+                throw new IOException("sem permissão de escrita na pasta " + dir);
+            }
+            tmp = java.nio.file.Files.createTempFile(dir.toPath(), "bookmarks", ".tmp");
+            ipedSource.getBookmarks().saveState(tmp.toFile(), true);
+            try {
+                java.nio.file.Files.move(tmp, stateFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                java.nio.file.Files.move(tmp, stateFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException e) {
+            if (tmp != null) {
+                java.nio.file.Files.deleteIfExists(tmp);
+            }
+            try {
+                reloadBookmarks();
+            } catch (IOException reloadError) {
+                LOGGER.warn("Falha ao recarregar marcadores após erro de gravação: {}", reloadError.getMessage());
+            }
+            throw new IOException("Falha ao gravar " + stateFile.getName() + ": " + e.getMessage(), e);
         }
     }
 
     /**
      * Flags or unflags an item as checked (selected) in the IPED case state database,
      * mirroring the checkmark column in IPED Desktop.
-     * Persists the updated state immediately to disk.
+     * Persists the updated state to the case bookmark file before returning.
      */
     public synchronized Map<String, Object> setItemChecked(int itemId, boolean checked) throws IOException {
         checkCaseOpen();
-        int luceneId = ipedSource.getLuceneId(itemId);
+        int luceneId = safeGetLuceneId(itemId);
         if (luceneId < 0) {
             throw new IllegalArgumentException("Item ID não encontrado no caso aberto: " + itemId);
         }
 
+        reloadBookmarks();
         boolean previousState = ipedSource.getBookmarks().isChecked(itemId);
         ipedSource.getBookmarks().setChecked(checked, itemId);
-        try {
-            ipedSource.getBookmarks().saveState(true);
-        } catch (Exception e) {
-            LOGGER.warn("Aviso ao persistir estado de seleção do item {}: {}", itemId, e.getMessage());
-        }
+        saveBookmarks();
 
         Document doc = ipedSource.getReader().document(luceneId);
         String name = doc.get("name") != null ? doc.get("name") : "";
@@ -613,457 +900,6 @@ public class IpedCoreService {
     // =========================================================================
 
     /**
-     * Special forensic tool that identifies device ownership, user accounts,
-     * phone numbers, and hardware properties.
-     */
-    public Map<String, Object> getDeviceAndOwnerInfo() {
-        checkCaseOpen();
-        try {
-            Map<String, String> deviceProperties = new LinkedHashMap<>();
-            Map<String, String> systemInfo = new LinkedHashMap<>();
-            Set<String> likelyOwnerNames = new LinkedHashSet<>();
-            Set<String> ownerPhoneNumbers = new LinkedHashSet<>();
-            Set<String> ownerEmails = new LinkedHashSet<>();
-            List<Map<String, Object>> primaryAccounts = new ArrayList<>();
-            List<Map<String, Object>> userAccounts = new ArrayList<>();
-            Set<String> userProfileDirs = new LinkedHashSet<>();
-
-            final Set<String> SYSTEM_ACCOUNTS = Set.of(
-                    "defaultaccount", "guest", "wdagutilityaccount", "systemprofile",
-                    "localservice", "networkservice", "nobody", "daemon"
-            );
-
-            final Set<String> IGNORED_PROFILE_DIRS = Set.of(
-                    "all users", "default", "default user", "public", "público",
-                    "todos os usuários", "defaultapppool", "localappdata",
-                    "application data", "appdata"
-            );
-
-            // 0. Discover evidence containers (root items in the evidence tree, e.g. Mantooth.E01, E01Capture.E01)
-            Map<String, Map<String, Object>> evidenceContainers = new LinkedHashMap<>();
-            try {
-                IPEDSearcher rootSearcher = new IPEDSearcher(ipedSource, "isRoot:true");
-                rootSearcher.setTreeQuery(true);
-                int[] rootIds = rootSearcher.search().getIds();
-                if (rootIds != null) {
-                    for (int rId : rootIds) {
-                        int luceneId = ipedSource.getLuceneId(rId);
-                        if (luceneId >= 0) {
-                            Document doc = ipedSource.getReader().document(luceneId);
-                            String rName = doc.get("name");
-                            if (rName != null && !rName.isBlank()) {
-                                Map<String, Object> container = new LinkedHashMap<>();
-                                container.put("id", rId);
-                                container.put("name", rName);
-                                container.put("path", doc.get("path") != null ? doc.get("path") : "/" + rName);
-                                container.put("system_info", new LinkedHashMap<String, String>());
-                                container.put("device_properties", new LinkedHashMap<String, String>());
-                                container.put("likely_owners", new LinkedHashSet<String>());
-                                container.put("owner_phone_numbers", new LinkedHashSet<String>());
-                                container.put("owner_emails", new LinkedHashSet<String>());
-                                container.put("user_accounts", new ArrayList<Map<String, Object>>());
-                                container.put("primary_accounts", new ArrayList<Map<String, Object>>());
-                                evidenceContainers.put(rName.toLowerCase(), container);
-                            }
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                LOGGER.debug("Erro ao identificar raízes de evidência: {}", e.getMessage());
-            }
-
-            // 1. Mobile Device Information (UFED / Cellebrite)
-            SearchResult devRes = new IPEDSearcher(ipedSource, "category:\"device information\"").search();
-            int[] devIds = devRes.getIds();
-            if (devIds != null && devIds.length > 0) {
-                int count = Math.min(devIds.length, 40);
-                for (int i = 0; i < count; i++) {
-                    int luceneId = ipedSource.getLuceneId(devIds[i]);
-                    Document doc = ipedSource.getReader().document(luceneId);
-                    String entryName = doc.get("ufed:EntryName");
-                    String entryValue = doc.get("ufed:EntryValue");
-                    if (entryName != null && entryValue != null && !entryValue.isBlank()) {
-                        deviceProperties.put(entryName, entryValue);
-                        Map<String, Object> matchedContainer = resolveContainerForDoc(doc, evidenceContainers);
-                        if (matchedContainer != null) {
-                            @SuppressWarnings("unchecked")
-                            Map<String, String> cDevProps = (Map<String, String>) matchedContainer.get("device_properties");
-                            cDevProps.put(entryName, entryValue);
-                        }
-                    }
-                }
-            }
-
-            // 2. Computer & OS Identification (Windows / Linux / macOS)
-            SearchResult osRes = new IPEDSearcher(ipedSource,
-                    "registeredOwner:* OR computerName:* OR hostName:* OR productName:* OR (name:SOFTWARE AND path:*system32*)").search();
-            int[] osIds = osRes.getIds();
-            if (osIds != null && osIds.length > 0) {
-                int count = Math.min(osIds.length, 20);
-                for (int i = 0; i < count; i++) {
-                    int luceneId = ipedSource.getLuceneId(osIds[i]);
-                    Document doc = ipedSource.getReader().document(luceneId);
-                    Map<String, Object> matchedContainer = resolveContainerForDoc(doc, evidenceContainers);
-                    @SuppressWarnings("unchecked")
-                    Map<String, String> cSysInfo = matchedContainer != null ? (Map<String, String>) matchedContainer.get("system_info") : null;
-                    @SuppressWarnings("unchecked")
-                    Set<String> cLikelyOwners = matchedContainer != null ? (Set<String>) matchedContainer.get("likely_owners") : null;
-
-                    String compName = doc.get("computerName");
-                    if (compName == null || compName.isBlank()) compName = doc.get("hostName");
-                    if (compName == null || compName.isBlank()) compName = doc.get("system:computer_name");
-                    if (compName != null && !compName.isBlank() && !systemInfo.containsKey("computer_name")) {
-                        systemInfo.put("computer_name", compName.trim());
-                    }
-                    if (compName != null && !compName.isBlank() && cSysInfo != null && !cSysInfo.containsKey("computer_name")) {
-                        cSysInfo.put("computer_name", compName.trim());
-                    }
-
-                    String regOwner = doc.get("registeredOwner");
-                    if (regOwner != null && !regOwner.isBlank() && !systemInfo.containsKey("registered_owner")) {
-                        systemInfo.put("registered_owner", regOwner.trim());
-                        if (!regOwner.equalsIgnoreCase("Microsoft") && !regOwner.equalsIgnoreCase("Windows User")) {
-                            likelyOwnerNames.add(regOwner.trim());
-                        }
-                    }
-                    if (regOwner != null && !regOwner.isBlank() && cSysInfo != null && !cSysInfo.containsKey("registered_owner")) {
-                        cSysInfo.put("registered_owner", regOwner.trim());
-                        if (!regOwner.equalsIgnoreCase("Microsoft") && !regOwner.equalsIgnoreCase("Windows User") && cLikelyOwners != null) {
-                            cLikelyOwners.add(regOwner.trim());
-                        }
-                    }
-
-                    String regOrg = doc.get("registeredOrganization");
-                    if (regOrg != null && !regOrg.isBlank() && !systemInfo.containsKey("registered_organization")) {
-                        systemInfo.put("registered_organization", regOrg.trim());
-                    }
-                    if (regOrg != null && !regOrg.isBlank() && cSysInfo != null && !cSysInfo.containsKey("registered_organization")) {
-                        cSysInfo.put("registered_organization", regOrg.trim());
-                    }
-
-                    String prodName = doc.get("productName");
-                    if (prodName == null || prodName.isBlank()) prodName = doc.get("operatingSystem");
-                    if (prodName != null && !prodName.isBlank() && !systemInfo.containsKey("operating_system")) {
-                        systemInfo.put("operating_system", prodName.trim());
-                    }
-                    if (prodName != null && !prodName.isBlank() && cSysInfo != null && !cSysInfo.containsKey("operating_system")) {
-                        cSysInfo.put("operating_system", prodName.trim());
-                    }
-
-                    String installDate = doc.get("installDate");
-                    if (installDate == null || installDate.isBlank()) installDate = doc.get("installationDate");
-                    if (installDate != null && !installDate.isBlank() && !systemInfo.containsKey("install_date")) {
-                        systemInfo.put("install_date", installDate.trim());
-                    }
-                    if (installDate != null && !installDate.isBlank() && cSysInfo != null && !cSysInfo.containsKey("install_date")) {
-                        cSysInfo.put("install_date", installDate.trim());
-                    }
-                }
-            }
-
-            // 3. User Profile Directories (e.g. Users/john or home/john)
-            SearchResult profRes = new IPEDSearcher(ipedSource, "isDir:true AND (path:*Users* OR path:*home*)").search();
-            int[] profIds = profRes.getIds();
-            if (profIds != null && profIds.length > 0) {
-                int count = Math.min(profIds.length, 60);
-                for (int i = 0; i < count; i++) {
-                    int luceneId = ipedSource.getLuceneId(profIds[i]);
-                    Document doc = ipedSource.getReader().document(luceneId);
-                    String dirName = doc.get("name");
-                    String dirPath = doc.get("path");
-                    if (dirName != null && !dirName.isBlank() && dirPath != null) {
-                        String normPath = dirPath.replace('\\', '/').toLowerCase();
-                        if ((normPath.endsWith("/users/" + dirName.toLowerCase()) || normPath.endsWith("/home/" + dirName.toLowerCase()))
-                                && !IGNORED_PROFILE_DIRS.contains(dirName.toLowerCase())) {
-                            userProfileDirs.add(dirName);
-                            likelyOwnerNames.add(dirName);
-                            Map<String, Object> matchedContainer = resolveContainerForDoc(doc, evidenceContainers);
-                            if (matchedContainer != null) {
-                                @SuppressWarnings("unchecked")
-                                Set<String> cLikelyOwners = (Set<String>) matchedContainer.get("likely_owners");
-                                cLikelyOwners.add(dirName);
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 4. User Accounts & Messenger Configurations (SAM, passwd, Android/iOS preferences)
-            SearchResult accRes = new IPEDSearcher(ipedSource,
-                    "category:\"user accounts\" OR (name:*preferences.xml AND (name:*whatsapp* OR name:*telegram* OR name:*signal*))").search();
-            int[] accIds = accRes.getIds();
-            if (accIds != null && accIds.length > 0) {
-                int count = Math.min(accIds.length, 60);
-                for (int i = 0; i < count; i++) {
-                    int docId = accIds[i];
-                    int luceneId = ipedSource.getLuceneId(docId);
-                    Document doc = ipedSource.getReader().document(luceneId);
-                    Map<String, Object> matchedContainer = resolveContainerForDoc(doc, evidenceContainers);
-
-                    String name = doc.get("name") != null ? doc.get("name") : "";
-                    String user = doc.get("userName") != null ? doc.get("userName") : "";
-                    String acctType = doc.get("accountType") != null ? doc.get("accountType") : "";
-
-                    // Extract phone number from standard fields or IPED Regex fields
-                    String phone = doc.get("phoneNumber");
-                    if (phone == null || phone.isBlank()) phone = doc.get("Regex:PHONE");
-                    if (phone == null || phone.isBlank()) phone = doc.get("phone");
-                    if (phone == null || phone.isBlank()) phone = doc.get("cellPhone");
-                    if (phone == null || phone.isBlank()) phone = doc.get("telephone");
-                    if (phone == null || phone.isBlank()) phone = doc.get("contact:phone");
-                    if (phone == null) phone = "";
-                    phone = phone.trim();
-
-                    // Check all document fields for any Regex:PHONE match if phone is still empty
-                    if (phone.isBlank()) {
-                        for (IndexableField f : doc.getFields()) {
-                            String fName = f.name();
-                            if (fName.equalsIgnoreCase("Regex:PHONE") || fName.toLowerCase().endsWith(":phone")) {
-                                String val = f.stringValue();
-                                if (val != null && !val.isBlank()) {
-                                    phone = val.trim();
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    // Extract email from standard fields or IPED Regex fields
-                    String email = doc.get("email");
-                    if (email == null || email.isBlank()) email = doc.get("Regex:EMAIL");
-                    if (email != null && !email.isBlank()) {
-                        String em = email.trim();
-                        ownerEmails.add(em);
-                        if (matchedContainer != null) {
-                            @SuppressWarnings("unchecked")
-                            Set<String> cEmails = (Set<String>) matchedContainer.get("owner_emails");
-                            cEmails.add(em);
-                        }
-                    }
-
-                    String effectiveUser = user;
-                    if (effectiveUser.isBlank() && name.startsWith("UserAccount-")) {
-                        int bracketIdx = name.indexOf('[');
-                        if (bracketIdx > 0) {
-                            effectiveUser = name.substring("UserAccount-".length(), bracketIdx).trim();
-                        } else {
-                            effectiveUser = name.substring("UserAccount-".length()).trim();
-                        }
-                    }
-
-                    if (!effectiveUser.isBlank() && !SYSTEM_ACCOUNTS.contains(effectiveUser.toLowerCase())) {
-                        likelyOwnerNames.add(effectiveUser);
-                        if (matchedContainer != null) {
-                            @SuppressWarnings("unchecked")
-                            Set<String> cLikelyOwners = (Set<String>) matchedContainer.get("likely_owners");
-                            cLikelyOwners.add(effectiveUser);
-                        }
-                    }
-                    if (!phone.isBlank()) {
-                        ownerPhoneNumbers.add(phone);
-                        if (matchedContainer != null) {
-                            @SuppressWarnings("unchecked")
-                            Set<String> cPhones = (Set<String>) matchedContainer.get("owner_phone_numbers");
-                            cPhones.add(phone);
-                        }
-                    }
-
-                    Matcher emailMatcher = EMAIL_PATTERN.matcher(name);
-                    while (emailMatcher.find()) {
-                        String em = emailMatcher.group();
-                        ownerEmails.add(em);
-                        if (matchedContainer != null) {
-                            @SuppressWarnings("unchecked")
-                            Set<String> cEmails = (Set<String>) matchedContainer.get("owner_emails");
-                            cEmails.add(em);
-                        }
-                    }
-
-                    Matcher phoneMatcher = PHONE_PATTERN.matcher(name);
-                    while (phoneMatcher.find()) {
-                        String ph = phoneMatcher.group();
-                        ownerPhoneNumbers.add(ph);
-                        if (matchedContainer != null) {
-                            @SuppressWarnings("unchecked")
-                            Set<String> cPhones = (Set<String>) matchedContainer.get("owner_phone_numbers");
-                            cPhones.add(ph);
-                        }
-                    }
-
-                    String lowerName = name.toLowerCase();
-                    String detectedApp = acctType != null ? acctType.trim() : "";
-                    if (detectedApp.isBlank()) {
-                        if (lowerName.contains("whatsapp")) {
-                            detectedApp = "WhatsApp";
-                        } else if (lowerName.contains("telegram")) {
-                            detectedApp = "Telegram";
-                        } else if (lowerName.contains("signal")) {
-                            detectedApp = "Signal";
-                        } else if (name.contains("[SAM]")) {
-                            detectedApp = "Windows SAM";
-                        } else if (name.contains("-")) {
-                            String[] parts = name.split("-");
-                            detectedApp = parts.length > 1 ? parts[1].replace("[", "").replace("]", "").trim() : "App";
-                        } else {
-                            detectedApp = "General";
-                        }
-                    }
-
-                    Map<String, Object> acctItem = new LinkedHashMap<>();
-                    acctItem.put("id", docId);
-                    acctItem.put("app", detectedApp);
-                    acctItem.put("name", name);
-                    acctItem.put("user", effectiveUser.isBlank() ? user : effectiveUser);
-                    if (!phone.isBlank()) {
-                        acctItem.put("phone", phone);
-                    }
-                    userAccounts.add(acctItem);
-                    if (matchedContainer != null) {
-                        @SuppressWarnings("unchecked")
-                        List<Map<String, Object>> cUserAccts = (List<Map<String, Object>>) matchedContainer.get("user_accounts");
-                        cUserAccts.add(acctItem);
-                    }
-
-                    boolean isPrimary = name.contains("UserAccount-") || name.contains("Account:")
-                            || lowerName.contains("whatsapp") || lowerName.contains("telegram") || lowerName.contains("signal")
-                            || lowerName.endsWith("preferences.xml") || !phone.isBlank();
-                    if (isPrimary) {
-                        primaryAccounts.add(acctItem);
-                        if (matchedContainer != null) {
-                            @SuppressWarnings("unchecked")
-                            List<Map<String, Object>> cPrimAccts = (List<Map<String, Object>>) matchedContainer.get("primary_accounts");
-                            cPrimAccts.add(acctItem);
-                        }
-                    }
-                }
-            }
-
-            // 5. Evidence Container Classification & Packaging
-            List<Map<String, Object>> evidencesList = new ArrayList<>();
-            for (Map<String, Object> c : evidenceContainers.values()) {
-                @SuppressWarnings("unchecked")
-                Map<String, String> cDevProps = (Map<String, String>) c.get("device_properties");
-                @SuppressWarnings("unchecked")
-                Map<String, String> cSysInfo = (Map<String, String>) c.get("system_info");
-                @SuppressWarnings("unchecked")
-                Set<String> cPhones = (Set<String>) c.get("owner_phone_numbers");
-                @SuppressWarnings("unchecked")
-                List<Map<String, Object>> cPrimAccts = (List<Map<String, Object>>) c.get("primary_accounts");
-                @SuppressWarnings("unchecked")
-                List<Map<String, Object>> cUserAccts = (List<Map<String, Object>>) c.get("user_accounts");
-
-                boolean cMobile = !cDevProps.isEmpty() || !cPhones.isEmpty() || cPrimAccts.stream().anyMatch(a -> {
-                    String app = String.valueOf(a.get("app")).toLowerCase();
-                    return app.contains("whatsapp") || app.contains("telegram") || app.contains("signal") || app.contains("ufed");
-                });
-                boolean cComputer = !cSysInfo.isEmpty() || cUserAccts.stream().anyMatch(a -> {
-                    String app = String.valueOf(a.get("app")).toLowerCase();
-                    String aName = String.valueOf(a.get("name")).toLowerCase();
-                    return app.contains("sam") || aName.contains("[sam]") || aName.contains("windows");
-                });
-
-                String cType;
-                if (cMobile && cComputer) cType = "hybrid";
-                else if (cMobile) cType = "mobile";
-                else if (cComputer) cType = "computer";
-                else cType = "generic";
-
-                Map<String, Object> packaged = new LinkedHashMap<>();
-                packaged.put("id", c.get("id"));
-                packaged.put("name", c.get("name"));
-                packaged.put("path", c.get("path"));
-                packaged.put("type", cType);
-                packaged.put("system_info", cSysInfo);
-                packaged.put("device_properties", cDevProps);
-                @SuppressWarnings("unchecked")
-                Set<String> cLikelyOwners = (Set<String>) c.get("likely_owners");
-                packaged.put("likely_owners", new ArrayList<>(cLikelyOwners));
-                packaged.put("owner_phone_numbers", new ArrayList<>(cPhones));
-                @SuppressWarnings("unchecked")
-                Set<String> cEmails = (Set<String>) c.get("owner_emails");
-                packaged.put("owner_emails", new ArrayList<>(cEmails));
-                packaged.put("total_accounts_found", cUserAccts.size());
-                packaged.put("user_accounts", cUserAccts.stream().limit(20).collect(Collectors.toList()));
-                packaged.put("primary_accounts", cPrimAccts.stream().limit(12).collect(Collectors.toList()));
-                evidencesList.add(packaged);
-            }
-
-            // 6. Overall Evidence Type Classification
-            boolean hasMobile = !deviceProperties.isEmpty() || !ownerPhoneNumbers.isEmpty() || primaryAccounts.stream().anyMatch(a -> {
-                String app = String.valueOf(a.get("app")).toLowerCase();
-                return app.contains("whatsapp") || app.contains("telegram") || app.contains("signal") || app.contains("ufed");
-            });
-            boolean hasComputer = !systemInfo.isEmpty() || !userProfileDirs.isEmpty() || userAccounts.stream().anyMatch(a -> {
-                String app = String.valueOf(a.get("app")).toLowerCase();
-                String name = String.valueOf(a.get("name")).toLowerCase();
-                return app.contains("sam") || name.contains("[sam]") || name.contains("windows");
-            });
-
-            String evidenceType;
-            if ((hasMobile && hasComputer) || evidencesList.size() > 1) {
-                boolean anyMobile = evidencesList.stream().anyMatch(e -> "mobile".equals(e.get("type")) || "hybrid".equals(e.get("type")));
-                boolean anyComputer = evidencesList.stream().anyMatch(e -> "computer".equals(e.get("type")) || "hybrid".equals(e.get("type")));
-                if (anyMobile && anyComputer) {
-                    evidenceType = "hybrid";
-                } else if (hasMobile && hasComputer) {
-                    evidenceType = "hybrid";
-                } else if (hasMobile) {
-                    evidenceType = "mobile";
-                } else if (hasComputer) {
-                    evidenceType = "computer";
-                } else {
-                    evidenceType = "generic";
-                }
-            } else if (hasMobile) {
-                evidenceType = "mobile";
-            } else if (hasComputer) {
-                evidenceType = "computer";
-            } else {
-                evidenceType = "generic";
-            }
-
-            if (evidencesList.isEmpty()) {
-                Map<String, Object> defaultContainer = new LinkedHashMap<>();
-                defaultContainer.put("id", 0);
-                defaultContainer.put("name", sourceId);
-                defaultContainer.put("path", caseDirectory != null ? caseDirectory.getAbsolutePath() : "");
-                defaultContainer.put("type", evidenceType);
-                defaultContainer.put("system_info", systemInfo);
-                defaultContainer.put("device_properties", deviceProperties);
-                defaultContainer.put("likely_owners", new ArrayList<>(likelyOwnerNames));
-                defaultContainer.put("owner_phone_numbers", new ArrayList<>(ownerPhoneNumbers));
-                defaultContainer.put("owner_emails", new ArrayList<>(ownerEmails));
-                defaultContainer.put("total_accounts_found", userAccounts.size());
-                defaultContainer.put("user_accounts", userAccounts.stream().limit(20).collect(Collectors.toList()));
-                defaultContainer.put("primary_accounts", primaryAccounts.stream().limit(12).collect(Collectors.toList()));
-                evidencesList.add(defaultContainer);
-            }
-
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("source", sourceId);
-            result.put("evidence_type", evidenceType);
-            result.put("total_evidences", evidencesList.size());
-            result.put("evidences", evidencesList);
-            result.put("system_info", systemInfo);
-            result.put("likely_owner_names", new ArrayList<>(likelyOwnerNames));
-            result.put("user_profile_dirs", new ArrayList<>(userProfileDirs));
-            result.put("owner_phone_numbers", new ArrayList<>(ownerPhoneNumbers));
-            result.put("owner_emails", new ArrayList<>(ownerEmails));
-            result.put("device_properties", deviceProperties);
-            result.put("total_accounts_found", userAccounts.size());
-            result.put("user_accounts", userAccounts.stream().limit(20).collect(Collectors.toList()));
-            result.put("primary_accounts", primaryAccounts.stream().limit(12).collect(Collectors.toList()));
-
-            return result;
-
-        } catch (Exception e) {
-            LOGGER.error("Falha ao analisar proprietário do aparelho: {}", e.getMessage(), e);
-            return Map.of("error", "Falha ao obter dados do proprietário do dispositivo: " + e.getMessage());
-        }
-    }
-
-
-    /**
      * Returns an executive case summary.
      */
     public Map<String, Object> getCaseSummary() {
@@ -1077,7 +913,7 @@ public class IpedCoreService {
         summary.put("total_categories_count", categories.size());
         summary.put("top_categories", categories.stream().limit(20).collect(Collectors.toList()));
 
-        List<String> bookmarks = listBookmarks();
+        List<String> bookmarks = listBookmarkNames();
         summary.put("total_bookmarks_count", bookmarks.size());
         summary.put("bookmarks", bookmarks);
         summary.put("note", "Caso indexado e pronto para consultas forenses via IA.");
@@ -1722,7 +1558,7 @@ public class IpedCoreService {
 
     private void checkCaseOpen() {
         if (!isCaseOpen()) {
-            throw new IllegalStateException("Nenhum caso do IPED está aberto no momento. Use openCase(File) primeiro.");
+            throw new IllegalStateException(NO_CASE_OPEN_MESSAGE);
         }
     }
 
@@ -1826,187 +1662,56 @@ public class IpedCoreService {
     }
 
     // =========================================================================
-    // METADATA DICTIONARY & PROPERTY DISCOVERY
+    // METADATA GROUPING
     // =========================================================================
 
     /**
-     * Returns the forensic property dictionary for a specific domain or all domains.
-     * Supported domains: chats, browsers, emails, media, system, gps, ufed, ai, all.
+     * Groups properties by the catalog groups ({@link PropertyGroups}), dropping internal engine fields and applying
+     * the token-safety limits of {@link #sanitizeValue(Object)}. With {@code groups}, only those groups are kept.
      */
-    public Map<String, Object> getPropertyDictionary(String domain) {
-        String target = (domain == null || domain.isBlank()) ? "all" : domain.trim().toLowerCase();
-
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("escaping_note", "Campos com dois-pontos (ex: 'Communication:From') DEVEM ser escapados em consultas Lucene com barra invertida: Communication\\:From:*");
-
-        if (target.equals("all")) {
-            response.put("domains", FORENSIC_DOMAINS);
-            response.put("available_domains", new ArrayList<>(FORENSIC_DOMAINS.keySet()));
-            return response;
+    static Map<String, Object> sanitizeProperties(Map<String, Object> props, Set<String> groups) {
+        Map<String, Map<String, Object>> byGroup = new LinkedHashMap<>();
+        for (String g : PropertyGroups.names()) {
+            byGroup.put(g, new LinkedHashMap<>());
         }
-
-        if (FORENSIC_DOMAINS.containsKey(target)) {
-            response.put("domain", target);
-            response.put("properties", FORENSIC_DOMAINS.get(target));
-            response.put("available_domains", new ArrayList<>(FORENSIC_DOMAINS.keySet()));
-            return response;
-        }
-
-        response.put("error", "Domínio forense desconhecido: '" + domain + "'. Domínios válidos são: " + FORENSIC_DOMAINS.keySet());
-        response.put("available_domains", new ArrayList<>(FORENSIC_DOMAINS.keySet()));
-        return response;
-    }
-
-    /**
-     * Inspects populated metadata properties in the active case Lucene index for a given category.
-     */
-    public Map<String, Object> listAvailableProperties(String category) throws IOException {
-        checkCaseOpen();
-
-        String catClean = (category != null) ? category.trim() : "";
-        String queryStr;
-        if (catClean.isEmpty() || catClean.equalsIgnoreCase("all") || catClean.equals("*")) {
-            queryStr = "*:*";
-        } else {
-            queryStr = "category:\"" + catClean.replace("\"", "\\\"") + "\"";
-        }
-
-        IPEDSearcher searcher = new IPEDSearcher(ipedSource, queryStr);
-        SearchResult res = searcher.search();
-        int[] ids = res.getIds();
-        int totalFound = (ids != null) ? ids.length : 0;
-
-        int sampleLimit = Math.min(totalFound, 100);
-        Map<String, Integer> propCounts = new TreeMap<>();
-        Map<String, String> propSamples = new HashMap<>();
-
-        for (int i = 0; i < sampleLimit; i++) {
-            int luceneId = ipedSource.getLuceneId(ids[i]);
-            if (luceneId < 0) {
-                continue;
-            }
-
-            Document doc = ipedSource.getReader().document(luceneId);
-            for (IndexableField f : doc.getFields()) {
-                String name = f.name();
-                if (isBlacklistedKey(name)) {
-                    continue;
-                }
-                propCounts.put(name, propCounts.getOrDefault(name, 0) + 1);
-                if (!propSamples.containsKey(name)) {
-                    String val = doc.get(name);
-                    if (val != null && !val.isBlank()) {
-                        String cleanSample = val.trim();
-                        if (cleanSample.length() > 100) {
-                            cleanSample = cleanSample.substring(0, 100) + "...";
-                        }
-                        propSamples.put(name, cleanSample);
-                    }
-                }
-            }
-        }
-
-        List<Map<String, Object>> propList = new ArrayList<>();
-        for (Map.Entry<String, Integer> entry : propCounts.entrySet()) {
-            String propName = entry.getKey();
-            boolean escapeReq = propName.contains(":") || propName.contains(" ") || propName.contains("-");
-            String luceneExample = escapeReq
-                    ? propName.replace(":", "\\:").replace(" ", "\\ ") + ":*"
-                    : propName + ":*";
-
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("name", propName);
-            item.put("sample_count", entry.getValue());
-            item.put("sample_value", propSamples.getOrDefault(propName, ""));
-            item.put("escape_required", escapeReq);
-            item.put("lucene_example", luceneExample);
-            propList.add(item);
-        }
-
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("category", catClean.isEmpty() ? "all" : catClean);
-        response.put("total_matching_items", totalFound);
-        response.put("sampled_items", sampleLimit);
-        response.put("distinct_properties_count", propList.size());
-        response.put("properties", propList);
-
-        return response;
-    }
-
-    private Map<String, Object> sanitizeProperties(Map<String, Object> props) {
-        Map<String, Object> basicBlock = new LinkedHashMap<>();
-        Map<String, Object> commBlock = new LinkedHashMap<>();
-        Map<String, Object> geoBlock = new LinkedHashMap<>();
-        Map<String, Object> forensicBlock = new LinkedHashMap<>();
-        Map<String, Object> extraBlock = new LinkedHashMap<>();
-
         for (Map.Entry<String, Object> entry : props.entrySet()) {
             String key = entry.getKey();
-            if (!isAllowedKey(key)) {
+            if (isBlacklistedKey(key) || PropertyCatalogService.isInternal(key)) {
+                continue;
+            }
+            String group = PropertyCatalogService.group(key);
+            if (groups != null && !groups.isEmpty() && !groups.contains(group)) {
                 continue;
             }
             Object sanitizedVal = sanitizeValue(entry.getValue());
-            if (sanitizedVal == null) {
-                continue;
-            }
-
-            String lower = key.toLowerCase();
-
-            // 1. Geo
-            if (lower.equals("latitude") || lower.equals("longitude") || lower.startsWith("common:geo:")
-                    || lower.contains("coordinate") || lower.contains("gps")) {
-                geoBlock.put(key, sanitizedVal);
-            }
-            // 2. Communication
-            else if (lower.startsWith("communication:") || lower.startsWith("conversation:")
-                    || lower.startsWith("message-") || lower.equals("from") || lower.equals("to")
-                    || lower.equals("cc") || lower.equals("bcc") || lower.equals("subject")
-                    || lower.equals("groupid") || lower.equals("isgroupmessage")
-                    || ((lower.contains("user") || lower.contains("phone") || lower.contains("email") || lower.contains("account"))
-                    && !lower.startsWith("ufed:"))) {
-                commBlock.put(key, sanitizedVal);
-            }
-            // 3. Forensic
-            else if (lower.equals("hash") || lower.equals("md5") || lower.equals("sha-256") || lower.equals("sha-1")
-                    || lower.equals("deleted") || lower.equals("carved") || lower.equals("childpornhashhits")
-                    || lower.startsWith("hashdb:") || lower.startsWith("p2p:")
-                    || lower.startsWith("ai:") || lower.startsWith("nsfw")) {
-                forensicBlock.put(key, sanitizedVal);
-            }
-            // 4. Basic
-            else if (lower.equals("name") || lower.equals("path") || lower.equals("category")
-                    || lower.equals("type") || lower.equals("ext") || lower.equals("size")
-                    || lower.equals("length") || lower.equals("created") || lower.equals("modified")
-                    || lower.equals("accessed") || lower.equals("changed") || lower.equals("isdir")
-                    || lower.equals("contenttype") || lower.equals("url") || lower.equals("visitdate")
-                    || lower.equals("downloaddate") || lower.equals("totalbytes") || lower.equals("receivedbytes")
-                    || lower.equals("localpath")) {
-                basicBlock.put(key, sanitizedVal);
-            }
-            // 5. Extra (image:, video:, audio:, ufed:, etc.)
-            else {
-                extraBlock.put(key, sanitizedVal);
+            if (sanitizedVal != null) {
+                byGroup.computeIfAbsent(group, g -> new LinkedHashMap<>()).put(key, sanitizedVal);
             }
         }
-
         Map<String, Object> partitioned = new LinkedHashMap<>();
-        if (!basicBlock.isEmpty()) {
-            partitioned.put("basic", basicBlock);
-        }
-        if (!commBlock.isEmpty()) {
-            partitioned.put("communication", commBlock);
-        }
-        if (!geoBlock.isEmpty()) {
-            partitioned.put("geo", geoBlock);
-        }
-        if (!forensicBlock.isEmpty()) {
-            partitioned.put("forensic", forensicBlock);
-        }
-        if (!extraBlock.isEmpty()) {
-            partitioned.put("extra", extraBlock);
-        }
-
+        byGroup.forEach((g, m) -> {
+            if (!m.isEmpty()) {
+                partitioned.put(g, m);
+            }
+        });
         return partitioned;
+    }
+
+    /** Resolves group names given by the LLM (case-insensitive); unknown names are reported in {@code unknown}. */
+    static Set<String> resolveGroups(List<String> groups, List<String> unknown) {
+        if (groups == null || groups.isEmpty()) {
+            return null;
+        }
+        Set<String> resolved = new LinkedHashSet<>();
+        for (String g : groups) {
+            String r = PropertyGroups.resolve(g);
+            if (r != null) {
+                resolved.add(r);
+            } else if (g != null && !g.isBlank()) {
+                unknown.add(g);
+            }
+        }
+        return resolved;
     }
 
     public static boolean matchesAnyKeyPattern(String key, List<String> patterns) {
@@ -2028,29 +1733,11 @@ public class IpedCoreService {
         return false;
     }
 
-    private static boolean isBlacklistedKey(String key) {
+    static boolean isBlacklistedKey(String key) {
         if (key == null || key.isBlank() || key.startsWith("_")) {
             return true;
         }
         return BLACKLISTED_KEYS.contains(key.toLowerCase());
-    }
-
-    private static boolean isAllowedKey(String key) {
-        if (isBlacklistedKey(key)) {
-            return false;
-        }
-        String lower = key.toLowerCase();
-        for (String prefix : WHITELIST_PREFIXES) {
-            if (lower.startsWith(prefix)) {
-                return true;
-            }
-        }
-        if (EXPLICIT_ALLOWED_KEYS.contains(lower)) {
-            return true;
-        }
-        return lower.contains("user") || lower.contains("phone") || lower.contains("email")
-                || lower.contains("account") || lower.contains("owner") || lower.contains("author")
-                || lower.contains("coord") || lower.contains("gps") || lower.contains("exif");
     }
 
     private static Object sanitizeValue(Object val) {
@@ -2089,129 +1776,6 @@ public class IpedCoreService {
         };
     }
 
-    private static Map<String, Object> propDef(String field, String type, String desc, String example, boolean escape) {
-        Map<String, Object> def = new LinkedHashMap<>();
-        def.put("field", field);
-        def.put("type", type);
-        def.put("description", desc);
-        def.put("lucene_example", example);
-        def.put("escape_required", escape);
-        return def;
-    }
-
-    private static Map<String, List<Map<String, Object>>> initForensicDomains() {
-        Map<String, List<Map<String, Object>>> domains = new LinkedHashMap<>();
-
-        // 1. Chats
-        domains.put("chats", List.of(
-                propDef("Communication:Direction", "string", "Direção do fluxo da mensagem: INCOMING (recebida), OUTGOING (enviada) ou UNKNOWN", "Communication\\:Direction:INCOMING", true),
-                propDef("Communication:From", "string", "Remetente da mensagem (número de telefone, identificador ou nome)", "Communication\\:From:*11988887777*", true),
-                propDef("Communication:To", "string", "Destinatário da mensagem (número de telefone, identificador ou nome)", "Communication\\:To:*11988887777*", true),
-                propDef("Communication:Date", "date", "Data e hora do envio ou recebimento da mensagem", "Communication\\:Date:[2023-01-01 TO 2023-12-31]", true),
-                propDef("Communication:Participants", "string", "Lista de participantes associados à mensagem ou chamada", "Communication\\:Participants:*Silva*", true),
-                propDef("Conversation:id", "string", "Identificador unívoco do chat ou thread de conversa", "Conversation\\:id:*", true),
-                propDef("Conversation:Name", "string", "Nome da conversa, contato ou grupo de bate-papo", "Conversation\\:Name:*Operacao*", true),
-                propDef("Conversation:Account", "string", "Identificador da conta local/proprietária que originou o chat", "Conversation\\:Account:*", true),
-                propDef("GroupID", "string", "Identificador do grupo de mensagens (WhatsApp, Telegram)", "GroupID:*@g.us", false),
-                propDef("isGroupMessage", "boolean", "Indica se a mensagem pertence a um grupo (true ou false)", "isGroupMessage:true", false),
-                propDef("Message-Body", "text", "Corpo do texto da mensagem instantânea ou SMS", "Message-Body:*pix*", false)
-        ));
-
-        // 2. Browsers
-        domains.put("browsers", List.of(
-                propDef("url", "string", "URL completa da página web ou recurso", "url:*banco*", false),
-                propDef("visitDate", "date", "Data e hora da visita/acesso ao site no histórico do navegador", "visitDate:[2023-01-01 TO 2023-12-31]", false),
-                propDef("downloadDate", "date", "Data e hora em que o download de um arquivo foi realizado", "downloadDate:*", false),
-                propDef("totalBytes", "integer", "Tamanho total em bytes do arquivo baixado", "totalBytes:>1048576", false),
-                propDef("receivedBytes", "integer", "Quantidade de bytes efetivamente recebidos no download", "receivedBytes:>0", false),
-                propDef("localPath", "string", "Caminho local no disco para onde o arquivo baixado foi salvo", "localPath:*Downloads*", false)
-        ));
-
-        // 3. Emails
-        domains.put("emails", List.of(
-                propDef("from", "string", "Endereço ou nome do remetente do e-mail", "from:*@governo.gov.br", false),
-                propDef("to", "string", "Endereço ou nome do destinatário principal", "to:*@gmail.com", false),
-                propDef("cc", "string", "Destinatários em cópia carbono (CC)", "cc:*", false),
-                propDef("bcc", "string", "Destinatários em cópia oculta (BCC)", "bcc:*", false),
-                propDef("subject", "string", "Assunto do e-mail indexado", "subject:*sigiloso*", false),
-                propDef("Message-Subject", "string", "Assunto do e-mail padronizado pelo parser Tika", "Message-Subject:*urgente*", false),
-                propDef("Message-IsEmailAttachment", "boolean", "Indica se o arquivo é um anexo extraído de e-mail (true/false)", "Message-IsEmailAttachment:true", false),
-                propDef("Message-AttachmentCount", "integer", "Número de arquivos anexados à mensagem de e-mail", "Message-AttachmentCount:>0", false)
-        ));
-
-        // 4. Media
-        domains.put("media", List.of(
-                propDef("image:width", "integer", "Largura da imagem em pixels", "image\\:width:>1920", true),
-                propDef("image:height", "integer", "Altura da imagem em pixels", "image\\:height:>1080", true),
-                propDef("image:make", "string", "Fabricante da câmera ou dispositivo fotográfico (EXIF)", "image\\:make:Apple", true),
-                propDef("image:model", "string", "Modelo do dispositivo fotográfico (EXIF)", "image\\:model:iPhone*", true),
-                propDef("video:duration", "string", "Duração do arquivo de vídeo", "video\\:duration:*", true),
-                propDef("audio:transcription", "text", "Transcrição fonética/textual do áudio produzida por IA (Whisper/IPED)", "audio\\:transcription:*reunião*", true),
-                propDef("audio:transcriptConfidence", "number", "Nível de confiança da transcrição fonética (0.0 a 1.0)", "audio\\:transcriptConfidence:>0.8", true),
-                propDef("face_count", "integer", "Número de faces humanas detectadas na imagem ou vídeo", "face_count:>0", false),
-                propDef("faceAge:labels", "string", "Classificação etária estimada dos rostos detectados (ex: child, adult)", "faceAge\\:labels:child", true)
-        ));
-
-        // 5. System
-        domains.put("system", List.of(
-                propDef("name", "string", "Nome do arquivo ou item com extensão", "name:*.xlsx", false),
-                propDef("path", "string", "Caminho completo de diretório dentro da imagem forense", "path:*Windows*System32*", false),
-                propDef("category", "string", "Categoria forense atribuída pelo IPED", "category:\"chat messages\"", false),
-                propDef("type", "string", "Tipo MIME do conteúdo identificado por assinatura", "type:application/pdf", false),
-                propDef("size", "integer", "Tamanho do arquivo em bytes", "size:[1048576 TO 104857600]", false),
-                propDef("created", "date", "Data de criação no sistema de arquivos", "created:[2023-01-01 TO 2023-06-30]", false),
-                propDef("modified", "date", "Data da última alteração no sistema de arquivos", "modified:[2023-01-01 TO 2023-06-30]", false),
-                propDef("accessed", "date", "Data do último acesso registrado", "accessed:*", false),
-                propDef("deleted", "boolean", "Indica se o arquivo estava marcado como deletado no sistema de arquivos", "deleted:true", false),
-                propDef("carved", "boolean", "Indica se o arquivo foi recuperado por data carving do espaço não alocado", "carved:true", false),
-                propDef("isDir", "boolean", "Indica se o item é um diretório", "isDir:false", false)
-        ));
-
-        // 6. GPS
-        domains.put("gps", List.of(
-                propDef("common:geo:locations", "coordinates", "Localizações geográficas e coordenadas (latitude, longitude, topônimos)", "common\\:geo\\:locations:*", true),
-                propDef("latitude", "number", "Latitude decimal em coordenadas WGS84", "latitude:[-23.6 TO -23.5]", false),
-                propDef("longitude", "number", "Longitude decimal em coordenadas WGS84", "longitude:[-46.7 TO -46.6]", false),
-                propDef("ufed:coordinate_id", "string", "ID de coordenadas geográficas extraído de relatórios Cellebrite UFED", "ufed\\:coordinate_id:*", true)
-        ));
-
-        // 7. UFED
-        domains.put("ufed", List.of(
-                propDef("ufed:EntryName", "string", "Nome da propriedade do dispositivo em extrações Cellebrite UFED (ex: Device Serial, IMEI)", "ufed\\:EntryName:\"Device IMEI\"", true),
-                propDef("ufed:EntryValue", "string", "Valor da propriedade do dispositivo na extração UFED", "ufed\\:EntryValue:*", true),
-                propDef("ufed:id", "string", "Identificador do registro na extração Cellebrite UFED", "ufed\\:id:*", true),
-                propDef("ufed:file_id", "string", "Identificador do arquivo de origem na extração UFED", "ufed\\:file_id:*", true),
-                propDef("ufed:jumpTargets", "string", "Alvos de hiperlink e navegação cruzada UFED", "ufed\\:jumpTargets:*", true)
-        ));
-
-        // 8. AI
-        domains.put("ai", List.of(
-                propDef("audio:transcription", "text", "Transcrição textual de mensagens de voz e arquivos de áudio por IA", "audio\\:transcription:*dinheiro*", true),
-                propDef("audio:transcriptConfidence", "number", "Nível de confiança da transcrição de áudio por IA", "audio\\:transcriptConfidence:>0.8", true),
-                propDef("face_count", "integer", "Quantidade de faces detectadas na imagem por visão computacional", "face_count:>0", false),
-                propDef("faceAge:labels", "string", "Predição de faixa etária das faces detectadas (ex: child, teen, adult)", "faceAge\\:labels:*child*", true),
-                propDef("faceAge:count:Child", "integer", "Contagem de faces classificadas na faixa etária de crianças (0-12 anos)", "faceAge\\:count\\:Child:>0", true),
-                propDef("ai:csamDetector:csam", "number", "Score de probabilidade de CSAM calculado por rede neural (0.0 a 1.0)", "ai\\:csamDetector\\:csam:>0.6", true),
-                propDef("ai:csamDetector:label", "string", "Rótulo atribuído pelo detector CSAM (csam, porn, other)", "ai\\:csamDetector\\:label:csam", true),
-                propDef("ai:csamDetector:triggerFrame", "integer", "Índice do quadro de vídeo que disparou o alerta de CSAM", "ai\\:csamDetector\\:triggerFrame:*", true),
-                propDef("nsfw_nudity_score", "number", "Pontuação percentual de nudez/conteúdo explícito via NSFWNudityDetect (0 a 100)", "nsfw_nudity_score:>50", false),
-                propDef("childPornHashHits", "integer", "Contagem de correspondências com bancos de hashes de exploração sexual infantil", "childPornHashHits:>0", false),
-                propDef("hashDb:status", "string", "Status forense no banco de hashes conhecido (ex: alert, ignore)", "hashDb\\:status:alert", true),
-                propDef("hashDb:set", "string", "Nome da base forense de hashes onde houve match", "hashDb\\:set:*", true)
-        ));
-
-        // 9. Crypto & Hardware Wallets
-        domains.put("crypto", List.of(
-                propDef("Hardware-Wallet-Found", "string", "Sinalizador booleano indicando detecção de indícios de carteira de hardware", "Hardware-Wallet-Found:true", false),
-                propDef("Hardware-Wallet-VendorID", "string", "USB Vendor ID (VID) da carteira de hardware (ex: Trezor, Ledger)", "Hardware-Wallet-VendorID:*", false),
-                propDef("Hardware-Wallet-ProductID", "string", "USB Product ID (PID) do modelo da carteira de hardware", "Hardware-Wallet-ProductID:*", false),
-                propDef("Hardware-Wallet-VendorName", "string", "Nome do fabricante da carteira de hardware de criptomoedas", "Hardware-Wallet-VendorName:*Ledger*", false),
-                propDef("Hardware-Wallet-DeviceName", "string", "Nome comercial ou modelo da carteira de hardware", "Hardware-Wallet-DeviceName:*Nano*", false)
-        ));
-
-        return Collections.unmodifiableMap(domains);
-    }
-
     // =========================================================================
     // MULTIMODAL & COMPUTER VISION CAPABILITIES
     // =========================================================================
@@ -2227,49 +1791,19 @@ public class IpedCoreService {
             throw new IllegalArgumentException("Item com ID " + itemId + " não encontrado no caso ativo.");
         }
 
-        byte[] thumbBytes = item.getThumb();
-        BufferedImage image = null;
-
-        if (thumbBytes != null && thumbBytes.length > 0) {
-            try (ByteArrayInputStream bais = new ByteArrayInputStream(thumbBytes)) {
-                image = ImageIO.read(bais);
-            } catch (Exception e) {
-                LOGGER.debug("Erro ao decodificar thumbnail em cache do item {}: {}", itemId, e.getMessage());
-            }
-        }
-
-        // Fallback 1: try reading directly from item stream (if image or document)
-        if (image == null) {
-            try (InputStream is = item.getBufferedInputStream()) {
-                if (is != null) {
-                    image = ImageIO.read(is);
-                }
-            } catch (Exception e) {
-                LOGGER.debug("Erro ao ler imagem original do item {}: {}", itemId, e.getMessage());
-            }
-        }
-
-        // Fallback 2: try viewFile
-        if (image == null && item.getViewFile() != null && item.getViewFile().exists()) {
-            try {
-                image = ImageIO.read(item.getViewFile());
-            } catch (Exception e) {
-                LOGGER.debug("Erro ao ler viewFile do item {}: {}", itemId, e.getMessage());
-            }
-        }
-
-        if (image == null) {
+        File viewFile = item.getViewFile();
+        ExternalImageConversion.prepare();
+        ItemImageLoader.Loaded loaded = ItemImageLoader.load(item.getThumb(), item::getBufferedInputStream,
+                ExternalImageConversion.converter(), item.getLength(), viewFile, maxDim);
+        if (loaded == null) {
             throw new IllegalStateException("O item ID " + itemId + " (" + item.getName() + ") não possui miniatura visual pré-computada nem pôde ser decodificado como imagem.");
         }
-
-        int targetMax = maxDim > 0 ? Math.min(maxDim, 2048) : 512;
+        BufferedImage image = loaded.image();
         int origW = image.getWidth();
         int origH = image.getHeight();
 
         // Ensure RGB color space for clean JPEG output without alpha artifacts
-        if (origW > targetMax || origH > targetMax) {
-            image = ImageUtil.resizeImage(image, targetMax, targetMax, BufferedImage.TYPE_INT_RGB);
-        } else if (image.getType() != BufferedImage.TYPE_INT_RGB) {
+        if (image.getType() != BufferedImage.TYPE_INT_RGB) {
             BufferedImage rgb = new BufferedImage(origW, origH, BufferedImage.TYPE_INT_RGB);
             Graphics2D g2d = rgb.createGraphics();
             try {
@@ -2294,8 +1828,36 @@ public class IpedCoreService {
         res.put("width", image.getWidth());
         res.put("height", image.getHeight());
         res.put("size_bytes", jpegBytes.length);
+        res.put("source", loaded.source());
+        int[] originalSize = loaded.originalWidth() > 0
+                ? new int[] { loaded.originalWidth(), loaded.originalHeight() }
+                : indexedImageSize(itemId); // formats Java cannot read: dimensions IPED recorded
+        if (originalSize[0] > 0) {
+            res.put("original_width", originalSize[0]);
+            res.put("original_height", originalSize[1]);
+        }
+        res.put("requested_max_dimension", ItemImageLoader.target(maxDim));
+        res.put("thumbnail_fallback", loaded.thumbnailFallback());
         res.put("base64", base64);
         return res;
+    }
+
+    /** Image width and height recorded by IPED processing ({@code image:Width}, {@code image:Height}), or -1. */
+    private int[] indexedImageSize(int itemId) {
+        try {
+            int luceneId = ipedSource.getLuceneId(itemId);
+            if (luceneId >= 0) {
+                Document doc = ipedSource.getReader().document(luceneId);
+                long w = longValue(doc, "image:Width");
+                long h = longValue(doc, "image:Height");
+                if (w > 0 && h > 0) {
+                    return new int[] { (int) w, (int) h };
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Falha ao ler as dimensões do item {}: {}", itemId, e.toString());
+        }
+        return new int[] { -1, -1 };
     }
 
     /**
@@ -2365,13 +1927,14 @@ public class IpedCoreService {
         }
 
         matches.sort((a, b) -> Float.compare(((Number) b.get("similarity_score")).floatValue(), ((Number) a.get("similarity_score")).floatValue()));
+        markReference(matches, itemId);
         List<Map<String, Object>> returnedList = matches.stream().limit(maxLimit).collect(Collectors.toList());
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("reference_id", itemId);
         result.put("reference_name", refItem.getName());
         result.put("min_score", threshold);
-        result.put("total_found", matches.size());
+        putReferenceCounts(result, matches, itemId);
         result.put("returned_count", returnedList.size());
         result.put("items", returnedList);
         return result;
@@ -2439,13 +2002,14 @@ public class IpedCoreService {
         }
 
         matches.sort((a, b) -> Float.compare(((Number) b.get("similarity_score")).floatValue(), ((Number) a.get("similarity_score")).floatValue()));
+        markReference(matches, itemId);
         List<Map<String, Object>> returnedList = matches.stream().limit(maxLimit).collect(Collectors.toList());
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("reference_id", itemId);
         result.put("reference_name", refImage.getName());
         result.put("min_score", targetMinScore);
-        result.put("total_found", matches.size());
+        putReferenceCounts(result, matches, itemId);
         result.put("returned_count", returnedList.size());
         result.put("items", returnedList);
         return result;
@@ -2501,16 +2065,35 @@ public class IpedCoreService {
             }
         }
 
+        markReference(matches, itemId);
         List<Map<String, Object>> returnedList = matches.stream().limit(maxLimit).collect(Collectors.toList());
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("reference_id", itemId);
         result.put("reference_name", refDoc.getName());
         result.put("match_percent", percent);
-        result.put("total_found", matches.size());
+        putReferenceCounts(result, matches, itemId);
         result.put("returned_count", returnedList.size());
         result.put("items", returnedList);
         return result;
+    }
+
+    /** Marks the reference item among similarity results ({@code is_reference}). */
+    static void markReference(List<Map<String, Object>> matches, int referenceId) {
+        for (Map<String, Object> m : matches) {
+            m.put("is_reference", Integer.valueOf(referenceId).equals(m.get("id")));
+        }
+    }
+
+    /**
+     * Adds {@code total_found}, {@code reference_in_results} and {@code similar_found} (similar items without the
+     * reference), computed over all results above the threshold, before the limit is applied.
+     */
+    static void putReferenceCounts(Map<String, Object> result, List<Map<String, Object>> matches, int referenceId) {
+        boolean referenceIn = matches.stream().anyMatch(m -> Integer.valueOf(referenceId).equals(m.get("id")));
+        result.put("total_found", matches.size());
+        result.put("reference_in_results", referenceIn);
+        result.put("similar_found", matches.size() - (referenceIn ? 1 : 0));
     }
 
     private Map<String, Object> buildSimilarItemEntry(int id, float score) {
@@ -2541,219 +2124,4 @@ public class IpedCoreService {
             return null;
         }
     }
-
-    // =========================================================================
-    // AI DETECTIONS DISCOVERY & QUERY
-    // =========================================================================
-
-    public static class AiFilterDef {
-        public final String id;
-        public final String name;
-        public final String description;
-        public final String query;
-        public final String scoreField;
-
-        public AiFilterDef(String id, String name, String description, String query, String scoreField) {
-            this.id = id;
-            this.name = name;
-            this.description = description;
-            this.query = query;
-            this.scoreField = scoreField;
-        }
-    }
-
-    private static final Map<String, AiFilterDef> AI_FILTERS = new LinkedHashMap<>();
-    static {
-        AI_FILTERS.put("weapons", new AiFilterDef(
-                "weapons",
-                "Armas de Fogo e Munições",
-                "Itens com detecção positiva de armas de fogo ou munições por modelo de visão computacional ou categoria.",
-                "hasWeapon:true OR category:\"weapons\" OR category:\"armas\"",
-                null
-        ));
-        AI_FILTERS.put("drugs", new AiFilterDef(
-                "drugs",
-                "Drogas e Entorpecentes",
-                "Itens identificados como substâncias ilícitas ou materiais associados ao tráfico de drogas.",
-                "hasDrug:true OR category:\"drugs\" OR category:\"drogas\"",
-                null
-        ));
-        AI_FILTERS.put("nudity", new AiFilterDef(
-                "nudity",
-                "Nudez e Conteúdo Adulto",
-                "Imagens e vídeos detectados com pontuação de conteúdo explícito pelo modelo Deep Image Evaluator (DIE).",
-                "isNudity:true OR category:\"nudity\" OR nudityScore:[0.5 TO 1.0]",
-                "nudityScore"
-        ));
-        AI_FILTERS.put("faces", new AiFilterDef(
-                "faces",
-                "Faces Humanas Detectadas",
-                "Imagens e quadros de vídeo onde foram localizadas e vetorizadas faces humanas pelo FaceNet/dlib.",
-                "hasFace:true OR face_count:[1 TO *]",
-                "face_count"
-        ));
-        AI_FILTERS.put("audio_transcripts", new AiFilterDef(
-                "audio_transcripts",
-                "Transcrições de Áudio (IA)",
-                "Áudios, mensagens de voz e vídeos com transcrição fonética gerada por inteligência artificial (Whisper/Vosk).",
-                "hasAudioTranscript:true OR audio\\:transcription:*",
-                "audio:transcriptConfidence"
-        ));
-        AI_FILTERS.put("csam", new AiFilterDef(
-                "csam",
-                "Exploração Sexual Infantil (CSAM)",
-                "Arquivos com correspondência em bases de hashes forenses conhecidas de exploração infantil ou detecção por rede neural (CSAMDetector).",
-                "childPornHashHits:[1 TO *] OR hashDb\\:status:alert OR ai\\:csamDetector\\:csam:[0.6 TO 1.0] OR ai\\:csamDetector\\:label:csam",
-                "ai:csamDetector:csam"
-        ));
-        AI_FILTERS.put("crypto_wallets", new AiFilterDef(
-                "crypto_wallets",
-                "Carteiras de Hardware Cripto",
-                "Dispositivos e registros de carteiras de hardware cripto (Ledger, Trezor, KeepKey) detectados pelo SearchHardwareWallets.",
-                "Hardware-Wallet-Found:true OR bookmark:\"Possible Hardware Wallets\"",
-                null
-        ));
-        AI_FILTERS.put("age_estimation", new AiFilterDef(
-                "age_estimation",
-                "Estimativa de Faixa Etária (Crianças/Menores)",
-                "Imagens e vídeos contendo faces classificadas como crianças ou adolescentes pelo AgeEstimationTask.",
-                "faceAge\\:count\\:Child:[1 TO *] OR faceAge\\:labels:*child*",
-                "faceAge:count:Child"
-        ));
-        AI_FILTERS.put("nsfw", new AiFilterDef(
-                "nsfw",
-                "Conteúdo Explícito / Nudez (NSFW)",
-                "Imagens e vídeos detectados com conteúdo adulto pelos modelos DIE e NSFWNudityDetectTask.",
-                "isNudity:true OR category:\"nudity\" OR nudityScore:[0.5 TO 1.0] OR nsfw_nudity_score:[50 TO 100]",
-                "nsfw_nudity_score"
-        ));
-        AI_FILTERS.put("ocr", new AiFilterDef(
-                "ocr",
-                "Documentos com OCR Reconhecido",
-                "Imagens digitalizadas e documentos onde textos gráficos foram extraídos via Tesseract OCR.",
-                "hasOCR:true OR hasOcrText:true",
-                null
-        ));
-    }
-
-    /**
-     * Lists available AI detection categories in the case with counts.
-     */
-    public Map<String, Object> listAiFilters() {
-        checkCaseOpen();
-        List<Map<String, Object>> filterList = new ArrayList<>();
-        for (AiFilterDef def : AI_FILTERS.values()) {
-            Map<String, Object> fMap = new LinkedHashMap<>();
-            fMap.put("filter_type", def.id);
-            fMap.put("name", def.name);
-            fMap.put("description", def.description);
-            fMap.put("lucene_query", def.query);
-            int count = 0;
-            try {
-                IPEDSearcher s = new IPEDSearcher(ipedSource, def.query);
-                count = s.search().getLength();
-            } catch (Exception e) {
-                LOGGER.debug("Erro ao consultar contagem para filtro AI {}: {}", def.id, e.getMessage());
-            }
-            fMap.put("count", count);
-            filterList.add(fMap);
-        }
-
-        Map<String, Object> res = new LinkedHashMap<>();
-        res.put("total_filters", filterList.size());
-        res.put("filters", filterList);
-        return res;
-    }
-
-    /**
-     * Queries evidence items detected by automated AI and machine learning models.
-     */
-    public Map<String, Object> queryAiDetections(String filterType, Float minScore, int limit, int offset) throws IOException {
-        checkCaseOpen();
-        if (filterType == null || filterType.isBlank()) {
-            throw new IllegalArgumentException("filter_type é obrigatório. Tipos disponíveis: " + String.join(", ", AI_FILTERS.keySet()));
-        }
-        String cleanType = filterType.trim().toLowerCase();
-        AiFilterDef def = AI_FILTERS.get(cleanType);
-        if (def == null) {
-            throw new IllegalArgumentException("Tipo de filtro AI '" + filterType + "' inválido. Tipos disponíveis: " + String.join(", ", AI_FILTERS.keySet()));
-        }
-
-        String effectiveQuery = def.query;
-        if (minScore != null && minScore > 0 && def.scoreField != null) {
-            if ("nudityScore".equalsIgnoreCase(def.scoreField)) {
-                effectiveQuery = "nudityScore:[" + minScore + " TO 1.0]";
-            } else if ("nsfw_nudity_score".equalsIgnoreCase(def.scoreField)) {
-                float val = minScore <= 1.0f ? minScore * 100f : minScore;
-                effectiveQuery = "nsfw_nudity_score:[" + val + " TO 100] OR nudityScore:[" + (val / 100f) + " TO 1.0]";
-            } else if ("audio:transcriptConfidence".equalsIgnoreCase(def.scoreField)) {
-                effectiveQuery = "audio\\:transcriptConfidence:[" + minScore + " TO 1.0]";
-            } else if ("face_count".equalsIgnoreCase(def.scoreField)) {
-                effectiveQuery = "face_count:[" + (int) minScore.floatValue() + " TO *]";
-            } else if ("childPornHashHits".equalsIgnoreCase(def.scoreField) || "ai:csamDetector:csam".equalsIgnoreCase(def.scoreField)) {
-                float scoreVal = minScore > 1.0f ? minScore / 100f : minScore;
-                effectiveQuery = "childPornHashHits:[1 TO *] OR hashDb\\:status:alert OR ai\\:csamDetector\\:csam:[" + scoreVal + " TO 1.0]";
-            } else if ("faceAge:count:Child".equalsIgnoreCase(def.scoreField)) {
-                effectiveQuery = "faceAge\\:count\\:Child:[" + (int) minScore.floatValue() + " TO *]";
-            }
-        }
-
-        int maxLimit = limit > 0 ? Math.min(limit, 500) : 50;
-        int safeOffset = Math.max(0, offset);
-
-        SearchResult sRes;
-        try {
-            IPEDSearcher searcher = new IPEDSearcher(ipedSource, effectiveQuery);
-            sRes = searcher.search();
-        } catch (Exception e) {
-            LOGGER.debug("Filtro AI '{}' com query '{}' gerou exceção na pesquisa: {}", def.id, effectiveQuery, e.getMessage());
-            Map<String, Object> emptyRes = new LinkedHashMap<>();
-            emptyRes.put("filter_type", def.id);
-            emptyRes.put("filter_name", def.name);
-            emptyRes.put("query_applied", effectiveQuery);
-            emptyRes.put("min_score", minScore);
-            emptyRes.put("total_found", 0);
-            emptyRes.put("offset", safeOffset);
-            emptyRes.put("returned_count", 0);
-            emptyRes.put("items", List.of());
-            return emptyRes;
-        }
-
-        int totalHits = sRes.getLength();
-        int[] docIds = sRes.getIds();
-
-        List<Map<String, Object>> items = new ArrayList<>();
-        if (docIds != null && docIds.length > safeOffset) {
-            int end = Math.min(safeOffset + maxLimit, docIds.length);
-            for (int i = safeOffset; i < end; i++) {
-                int cId = docIds[i];
-                int luceneId = ipedSource.getLuceneId(cId);
-                if (luceneId < 0) continue;
-                Document doc = ipedSource.getReader().document(luceneId);
-                Map<String, Object> itemMap = buildFileEntry(cId, doc);
-                if (doc.get("nudityScore") != null) {
-                    itemMap.put("nudity_score", doc.get("nudityScore"));
-                }
-                if (doc.get("face_count") != null) {
-                    itemMap.put("face_count", doc.get("face_count"));
-                }
-                if (doc.get("audio:transcription") != null) {
-                    itemMap.put("audio_transcription", doc.get("audio:transcription"));
-                }
-                items.add(itemMap);
-            }
-        }
-
-        Map<String, Object> res = new LinkedHashMap<>();
-        res.put("filter_type", def.id);
-        res.put("filter_name", def.name);
-        res.put("query_applied", effectiveQuery);
-        res.put("min_score", minScore);
-        res.put("total_found", totalHits);
-        res.put("offset", safeOffset);
-        res.put("returned_count", items.size());
-        res.put("items", items);
-        return res;
-    }
 }
-

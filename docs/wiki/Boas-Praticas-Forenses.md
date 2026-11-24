@@ -28,25 +28,42 @@ A preservação da integridade da evidência digital e a rastreabilidade metodol
 Para que as descobertas da IA tenham utilidade prática no fluxo pericial oficial, o servidor permite exclusivamente duas ações de persistência:
 
 1. **Marcadores Periciais (`bookmarks.iped`):**
-   * A ferramenta `add_to_bookmark` permite agrupar IDs de documentos relevantes sob nomes de marcadores (ex: *"Contratos Suspeitos"* ou *"Perícia AI"*).
+   * A ferramenta `add_to_bookmark` permite agrupar IDs de documentos relevantes sob nomes de marcadores escolhidos pelo perito (ex: *"Contratos Suspeitos"* ou *"Comunicações com o Fornecedor"*), com cor e comentário opcionais.
+   * As ferramentas `remove_from_bookmark`, `update_bookmark` e `delete_bookmark` corrigem o registro: tiram itens de um marcador, mudam nome, cor ou comentário, e excluem marcadores. Os itens do caso nunca são apagados.
+   * Toda gravação vai para `bookmarks.iped` antes da resposta. Se o arquivo não puder ser gravado (por exemplo, caso em mídia somente leitura), a ferramenta devolve erro em vez de dizer que registrou.
 2. **Status de Conferência (`set_item_checked`):**
    * A ferramenta `set_item_checked` alterna o estado da caixa de seleção (*checkbox*) do item, idêntica à coluna de conferência do IPED Desktop.
 
-> 🔍 **Revisão Humana Obrigatória:** Ambas as modificações são gravadas diretamente no arquivo `iped/bookmarks.iped` do caso e são imediatamente visíveis no IPED Desktop oficial, onde o perito humano fará a conferência detalhada de cada item antes de sua inclusão no laudo pericial definitivo.
+> 🔍 **Revisão Humana Obrigatória:** Ambas as modificações são gravadas diretamente no arquivo `iped/bookmarks.iped` do caso e ficam visíveis no IPED Desktop oficial ao abrir o caso, onde o perito humano fará a conferência detalhada de cada item antes de sua inclusão no laudo pericial definitivo.
+
+> ⚠️ **IPED Desktop aberto ao mesmo tempo:** o IPED Desktop e o MCP gravam o mesmo `bookmarks.iped`, e quem grava por último prevalece. O MCP relê o arquivo antes de cada operação, mas o IPED Desktop não vê as mudanças feitas pelo chat enquanto está aberto e pode sobrescrevê-las ao salvar. Depois de registrar pelo chat, feche e reabra o caso no IPED Desktop antes de mexer nos marcadores por lá.
 
 ---
 
-## 🚫 4. Fronteiras Operacionais e Não-Metas (Non-Goals)
+## 🧭 4. Regras de Conduta da IA
+
+O prompt `start_case` e as instruções que o servidor envia ao cliente na conexão orientam a IA a seguir quatro regras:
+
+1. **Checagem de conteúdo sensível:** antes de analisar itens, a IA conta (sem abrir os itens) os sinais de CSAM e de nudez existentes no caso e alerta o perito. Sinais cujos módulos não foram executados são relatados como "não verificados", nunca como zero.
+2. **Consentimento em modelos de nuvem:** se a IA roda num provedor de nuvem, ou não sabe onde roda, ela avisa que prosseguir envia dados do caso ao provedor e que conteúdo sinalizado pode violar os termos de uso dele, e só continua com a concordância expressa do perito. Em modelos locais, prosseguir também é decisão do perito.
+3. **Aceite por sessão:** o aceite vale para a conversa atual; ao trocar de caso ou iniciar outra conversa, a IA pede de novo.
+4. **Confirmação de escritas:** antes de criar, alterar ou excluir marcadores, incluir ou remover itens, ou marcar itens, a IA mostra o que vai mudar (itens, nome do marcador e, se houver, cor e comentário) e aguarda a confirmação do perito. Nome, cor e comentário são os que o perito escolher; a IA pode sugerir, sem indicar autoria de IA.
+
+> ⚠️ **Orientação, não bloqueio:** essas regras orientam a IA, mas o servidor não bloqueia chamadas. A garantia final continua sendo a revisão humana no IPED Desktop. Para que as regras completas entrem na conversa, acione o `start_case` pelo menu de prompts do cliente (ver [Como Investigar com o MCP](Como-Investigar-com-o-MCP)).
+
+---
+
+## 🚫 5. Fronteiras Operacionais e Não-Metas (Non-Goals)
 
 Para manter o assistente MCP leve, performático e seguro, foram deliberadamente estabelecidos os seguintes limites:
 
 * **Não-Meta 1: Exportação Física em Massa:** O IPED Tools MCP não é uma ferramenta para descompactar ou exportar terabytes de arquivos físicos para o disco do usuário. Essa tarefa continua sob responsabilidade do IPED Desktop.
 * **Não-Meta 2: Geração de Laudos Oficiais em PDF/HTML:** A diagramação formal e a assinatura digital do Laudo Pericial pertencem ao fluxo de trabalho oficial do perito no IPED Desktop.
-* **Não-Meta 3: Execução de Comandos no Host:** O servidor proíbe terminantemente que a IA tente invocar ferramentas de linha de comando (`dir`, `ls`, scripts de sistema) diretamente no disco da máquina para ler dados do caso, forçando o uso exclusivo das 28 ferramentas MCP auditáveis.
+* **Não-Meta 3: Execução de Comandos no Host:** O servidor proíbe terminantemente que a IA tente invocar ferramentas de linha de comando (`dir`, `ls`, scripts de sistema) diretamente no disco da máquina para ler dados do caso, forçando o uso exclusivo das 30 ferramentas MCP auditáveis.
 
 ---
 
-## 📋 5. Padrão de Citação de Evidências
+## 📋 6. Padrão de Citação de Evidências
 
 Ao redigir análises ou respostas baseadas nas informações retornadas pelas ferramentas, a IA é orientada pelo prompt `start_case` a sempre estruturar a citação com os quatro pilares periciais:
 

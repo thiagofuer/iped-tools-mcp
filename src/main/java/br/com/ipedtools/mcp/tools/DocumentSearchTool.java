@@ -17,64 +17,62 @@ public class DocumentSearchTool {
             Searches for documents, files, and forensic artifacts in IPED using Apache Lucene query syntax.
             Supports full-text keywords, metadata filters, boolean operators (AND, OR, NOT), wildcards (*), and ranges.
             
-            AVAILABLE IPED CATEGORIES (use 'category:<name>' in query):
-              - category:whatsapp               -> WhatsApp chat messages, audios, and media
-              - category:"whatsapp calls"       -> WhatsApp call logs
-              - category:telegram               -> Telegram chat messages, channels, and media
-              - category:signal                 -> Signal private messages
-              - category:skype                  -> Skype messages and calls
-              - category:"instant messages"     -> SMS, MMS, and generic instant messaging
-              - category:contacts               -> Extracted contact book entries
-              - category:"phone calls"          -> Cellular call logs (incoming, outgoing, missed)
-              - category:emails                 -> Emails (Outlook, Thunderbird, EML, MSG)
-              - category:"email attachments"    -> Files attached to emails
-              - category:"device information"   -> Device identifiers (IMEI, serial, model, phone number)
-              - category:"user accounts"        -> User accounts configured on device (Google, Apple, etc.)
-              - category:"financial accounts"   -> Financial data, bank accounts, credit cards, PIX keysag
-              - category:"credit cards"         -> Credit card numbers and details
-              - category:"internet history"     -> Web history and visited URLs
-              - category:"web bookmarks"        -> Browser bookmarks
-              - category:cookies                -> Web cookies
-              - category:searches               -> Web search terms entered by the user
-              - category:locations              -> GPS coordinates, waypoints, geolocations
-              - category:journeys               -> Traveled routes and movement journeys
-              - category:"social media activities" -> Facebook, Instagram, TikTok, Snapchat actions
-              - category:passwords              -> Stored passwords and credentials
-              - category:autofill               -> Browser autofill entries
-              - category:"pdf documents"        -> PDF files
-              - category:"text documents"       -> Word, TXT, RTF, markdown documents
-              - category:spreadsheets           -> Excel, CSV, Calc spreadsheets
-              - category:"other images"         -> Photos, pictures, screenshots
-              - category:videos                 -> Video recordings
-              - category:audios                 -> Audio files and voice recordings
-              - category:"compressed archives"  -> ZIP, RAR, 7Z, TAR archives
-              - category:databases              -> SQLite databases, DB files
-            
+            BEFORE BUILDING A QUERY, DISCOVER THE NAMES USED BY THIS CASE:
+              - Categories: call list_categories and use the exact names (e.g. category:"Instant Messages").
+                Category names depend on the IPED version and language of the case; do not guess them.
+              - Properties: call list_properties (groups, names, types, counts) and describe_property (meaning,
+                scale, min/max or frequent values). Results of AI modules (nudity, faces, age, CSAM, OCR, audio
+                transcription, UFED media classes) are in the 'AI' group of list_properties.
+
             LUCENE QUERY EXAMPLES:
-              - 'contrato AND fraude'                           -> Full-text search for both words
-              - 'category:emails AND "transferência bancária"'   -> Emails containing exact phrase
-              - 'category:whatsapp AND (dinheiro OR pagamento)' -> WhatsApp messages with either keyword
-              - 'name:*.pdf AND size:>1000000'                  -> PDF files larger than 1MB
-              - 'category:"internet history" AND url:*banco*'   -> Browser history matching URLs with 'banco'
-              - 'hash:d41d8cd98f00b204e9800998ecf8427e'        -> Lookup by exact MD5 hash
-            
+              - 'contrato AND fraude'                                 -> Full-text search for both words
+              - 'category:"Instant Messages" AND (dinheiro OR pix)'   -> Messages with either keyword
+              - 'name:*.pdf AND size:[1000000 TO *]'                  -> PDF files of 1 MB or more
+              - 'url:*banco*'                                         -> Items whose URL contains 'banco'
+              - 'hash:d41d8cd98f00b204e9800998ecf8427e'              -> Lookup by exact hash
+              - 'Communication\\:From:*11988887777*'                 -> Escape colons of property names with a backslash
+
+            NUMERIC RANGES ON PROCESSING PROPERTIES:
+              - 'nudityScore:[650 TO *]'                        -> Images scored as likely nudity (scale 0-1000)
+              - 'ocrCharCount:[1 TO *]'                         -> Items with OCR-recognized text
+              - 'audio\\:transcriptConfidence:[0.5 TO *]'      -> Transcriptions with confidence >= 0.5
+              Always write decimals with a dot (0.5); the server converts it for the case locale.
+              When a range finds nothing, the response 'warnings' field tells whether the property is absent
+              from the case or gives its minimum and maximum values, so you can adjust the range.
+
+            PAGINATION (results are never silently truncated):
+              - 'total_found' is the exact number of matching items. Each call returns at most 'limit' items
+                (default 30, max 100) starting at 'offset' (default 0).
+              - When 'has_more' is true, call search_documents again with the SAME query and offset=next_offset
+                to get the following items. The last page has has_more=false and no next_offset.
+              - Items come in the index order of the case, the same in every call. The order is NOT relevance
+                or date: do not draw conclusions from an item's position.
+              - Do not conclude that something does not exist while has_more is true: read the remaining pages,
+                or narrow the query when the total is large. Report total_found, not the number of items you saw.
+
+            WARNINGS: when the query names a property that does not exist in the case, 'warnings' reports it
+            (type 'property_not_in_case', with similar existing names). That part of the query matches nothing,
+            which is not the same as absence of evidence.
+
             CRITICAL WARNING:
-            - To identify who owns the device, DO NOT search for 'proprietario' or 'dono';
-              call 'get_device_and_owner_info' instead!
+            - To identify who uses or owns the device, DO NOT search for 'proprietario' or 'dono';
+              call 'get_device_and_accounts' and compare the recorded identifiers and their sources instead!
             """
     )
     public Map<String, Object> searchDocuments(
-            @ToolArg(name = "query", description = "Lucene search query string (e.g. 'category:whatsapp AND pix', 'name:*.docx')", required = true)
+            @ToolArg(name = "query", description = "Lucene search query string (e.g. 'category:\"Instant Messages\" AND pix', 'name:*.docx')")
             String query,
-            @ToolArg(name = "limit", description = "Max document IDs to return (default 30, max 100)", required = false, defaultValue = "30")
-            int limit
+            @ToolArg(name = "limit", description = "Max document IDs to return in this page (default 30, max 100)", required = false, defaultValue = "30")
+            int limit,
+            @ToolArg(name = "offset", description = "Position of the first item to return (default 0). Use the next_offset of the previous response to read the next page.", required = false)
+            Integer offset
     ) {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
-            return Map.of("error", "Nenhum caso está aberto no momento.");
+            return Map.of("error", IpedCoreService.NO_CASE_OPEN_MESSAGE);
         }
         try {
-            return service.executeSearch(query, limit);
+            return service.executeSearch(query, limit, offset == null ? 0 : offset);
         } catch (IOException e) {
             return Map.of("error", "Erro ao executar busca Lucene: " + e.getMessage(), "query", query);
         }

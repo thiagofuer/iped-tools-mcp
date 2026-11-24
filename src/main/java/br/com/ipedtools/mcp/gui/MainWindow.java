@@ -3,42 +3,40 @@ package br.com.ipedtools.mcp.gui;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.io.File;
-import java.text.NumberFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.Locale;
+import java.util.List;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
 
 import br.com.ipedtools.mcp.McpApplication;
 import br.com.ipedtools.mcp.VersionInfo;
-import br.com.ipedtools.mcp.service.IpedCoreService;
+import br.com.ipedtools.mcp.prompts.StartPromptStore;
 
 /**
  * Modern Swing configuration and diagnostic GUI for IPED Tools MCP.
- * Allows non-technical forensic examiners to select their processed IPED case,
- * inspect status, and copy client configuration JSON in a single click.
+ * Lets forensic examiners test the server as their AI client runs it (STDIO mode) and copy the client
+ * configuration in a single click. The window never opens a case in its own process: each conversation opens its
+ * case with open_case.
  */
 public class MainWindow extends JFrame {
 
-    private final JTextField casePathField;
-    private final JButton browseButton;
-    private final JButton loadButton;
+    private final JTextField testCaseField;
+    private final JButton testBrowseButton;
+    private final JButton runTestButton;
+    private final JButton cancelTestButton;
+    private final JTextArea testResultArea;
+    private volatile StdioSelfTest currentTest;
 
-    private final JLabel statusBadgeLabel;
-    private final JLabel itemsCountLabel;
-    private final JLabel categoriesCountLabel;
-    private final JLabel bookmarksCountLabel;
+    private final StartPromptPanel startPromptPanel;
 
     private final JComboBox<String> clientSelectCombo;
-    private final JCheckBox pinCaseCheck;
     private final JTextArea configJsonArea;
     private final JButton copyConfigButton;
 
     private final JTextArea logArea;
     private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss");
-    private final NumberFormat numberFormat = NumberFormat.getIntegerInstance(Locale.of("pt", "BR"));
 
     public MainWindow() {
         super("IPED Tools MCP v" + VersionInfo.getVersion() + " — Assistente de Inteligência Artificial Forense");
@@ -49,8 +47,8 @@ public class MainWindow extends JFrame {
         }
 
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(850, 720);
-        setMinimumSize(new Dimension(750, 600));
+        setSize(880, 900);
+        setMinimumSize(new Dimension(780, 760));
         setLocationRelativeTo(null);
 
         initAppIcons();
@@ -62,54 +60,60 @@ public class MainWindow extends JFrame {
         JPanel headerPanel = createHeaderPanel();
         mainPanel.add(headerPanel, BorderLayout.NORTH);
 
-        // 2. Center Content Panel (Case Selection + Case Stats + Client Config)
+        // 2. Center Content Panel (Local STDIO test + Client Config)
         JPanel contentPanel = new JPanel();
         contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
 
-        // Case selector section
-        JPanel selectorPanel = new JPanel(new BorderLayout(8, 8));
-        selectorPanel.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createEtchedBorder(), " 1. Selecionar Caso IPED ",
+        // Local test of the server as the AI client runs it
+        JPanel testPanel = new JPanel(new BorderLayout(6, 6));
+        testPanel.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createEtchedBorder(), " 1. Testar o MCP (modo STDIO) ",
                 TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION,
                 new Font("SansSerif", Font.BOLD, 12)
         ));
 
-        casePathField = new JTextField();
-        casePathField.setFont(new Font("Monospaced", Font.PLAIN, 12));
-        browseButton = new JButton("Procurar Pasta...");
-        loadButton = new JButton("Carregar Caso");
-        loadButton.setFont(new Font("SansSerif", Font.BOLD, 11));
+        JLabel testHintLabel = new JLabel("<html>Executa o servidor do mesmo jeito que o cliente de IA vai executá-lo. "
+                + "A pasta do caso é opcional: ela é aberta só no processo do teste e não muda o caso de nenhuma "
+                + "conversa.</html>");
+        testHintLabel.setFont(new Font("SansSerif", Font.PLAIN, 11));
 
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
-        buttonPanel.add(browseButton);
-        buttonPanel.add(loadButton);
+        testCaseField = new JTextField();
+        testCaseField.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        testCaseField.setToolTipText("Pasta de um caso processado pelo IPED (opcional)");
+        testBrowseButton = new JButton("Procurar Pasta...");
+        runTestButton = new JButton("▶ Executar teste");
+        runTestButton.setFont(new Font("SansSerif", Font.BOLD, 11));
+        cancelTestButton = new JButton("Cancelar");
+        cancelTestButton.setEnabled(false);
 
-        selectorPanel.add(casePathField, BorderLayout.CENTER);
-        selectorPanel.add(buttonPanel, BorderLayout.EAST);
-        contentPanel.add(selectorPanel);
+        JPanel testButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+        testButtons.add(testBrowseButton);
+        testButtons.add(runTestButton);
+        testButtons.add(cancelTestButton);
+
+        JPanel testCaseRow = new JPanel(new BorderLayout(8, 0));
+        testCaseRow.add(new JLabel("Pasta do caso (opcional): "), BorderLayout.WEST);
+        testCaseRow.add(testCaseField, BorderLayout.CENTER);
+        testCaseRow.add(testButtons, BorderLayout.EAST);
+
+        JPanel testTop = new JPanel(new BorderLayout(0, 4));
+        testTop.add(testHintLabel, BorderLayout.NORTH);
+        testTop.add(testCaseRow, BorderLayout.SOUTH);
+
+        testResultArea = new JTextArea(5, 40);
+        testResultArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        testResultArea.setEditable(false);
+        testResultArea.setBackground(new Color(248, 249, 250));
+        testResultArea.setText("Nenhum teste executado.");
+
+        testPanel.add(testTop, BorderLayout.NORTH);
+        testPanel.add(new JScrollPane(testResultArea), BorderLayout.CENTER);
+        contentPanel.add(testPanel);
         contentPanel.add(Box.createVerticalStrut(8));
 
-        // Case stats section
-        JPanel statsPanel = new JPanel(new GridLayout(2, 2, 10, 6));
-        statsPanel.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createEtchedBorder(), " 2. Status do Caso Selecionado ",
-                TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION,
-                new Font("SansSerif", Font.BOLD, 12)
-        ));
-
-        statusBadgeLabel = new JLabel("⚪ Nenhum caso carregado");
-        statusBadgeLabel.setFont(new Font("SansSerif", Font.BOLD, 12));
-        statusBadgeLabel.setForeground(Color.DARK_GRAY);
-
-        itemsCountLabel = new JLabel("• Itens indexados: -");
-        categoriesCountLabel = new JLabel("• Categorias encontradas: -");
-        bookmarksCountLabel = new JLabel("• Marcadores existentes: -");
-
-        statsPanel.add(statusBadgeLabel);
-        statsPanel.add(itemsCountLabel);
-        statsPanel.add(categoriesCountLabel);
-        statsPanel.add(bookmarksCountLabel);
-        contentPanel.add(statsPanel);
+        // start_case prompt: copy for clients without MCP prompts, edit or restore the methodology
+        startPromptPanel = new StartPromptPanel(StartPromptStore.forUser(), this::log);
+        contentPanel.add(startPromptPanel);
         contentPanel.add(Box.createVerticalStrut(8));
 
         // Config generation section
@@ -122,24 +126,13 @@ public class MainWindow extends JFrame {
 
         JPanel configTopPanel = new JPanel(new BorderLayout(5, 5));
         JLabel clientLabel = new JLabel("Selecione seu aplicativo de IA: ");
-        clientSelectCombo = new JComboBox<>(new String[]{
-                "LM Studio (Formulário Visual - Copiar Campos)",
-                "LM Studio (Arquivo ng-mcp.json)",
-                "Claude Desktop / Cursor / Antigravity (JSON)"
-        });
-
-        pinCaseCheck = new JCheckBox("Fixar caso no comando (--case)");
-        pinCaseCheck.setFont(new Font("SansSerif", Font.PLAIN, 11));
-        pinCaseCheck.setToolTipText("Desmarcado (Recomendado): O servidor MCP acompanha automaticamente qualquer caso aberto na janela ou via chat. Marcado: Bloqueia o comando com o caminho fixo.");
-
-        JPanel comboAndCheck = new JPanel(new BorderLayout(8, 0));
-        comboAndCheck.add(clientSelectCombo, BorderLayout.CENTER);
-        comboAndCheck.add(pinCaseCheck, BorderLayout.EAST);
+        clientSelectCombo = new JComboBox<>(CLIENT_OPTIONS);
 
         configTopPanel.add(clientLabel, BorderLayout.WEST);
-        configTopPanel.add(comboAndCheck, BorderLayout.CENTER);
+        configTopPanel.add(clientSelectCombo, BorderLayout.CENTER);
 
-        JLabel configHintLabel = new JLabel("💡 Dica: Configure seu aplicativo de IA apenas 1 VEZ (--stdio). No chat, utilize o prompt '/start_case' para carregar a metodologia forense!");
+        JLabel configHintLabel = new JLabel("<html>💡 Configure o aplicativo de IA apenas 1 vez (--stdio). Na conversa, "
+                + "peça ao modelo para abrir a pasta do caso (open_case) ou use o prompt start_case.</html>");
         configHintLabel.setFont(new Font("SansSerif", Font.BOLD, 11));
         configHintLabel.setForeground(new Color(41, 128, 185));
         configHintLabel.setBorder(new EmptyBorder(2, 4, 2, 4));
@@ -148,7 +141,7 @@ public class MainWindow extends JFrame {
         topContainer.add(configTopPanel, BorderLayout.NORTH);
         topContainer.add(configHintLabel, BorderLayout.SOUTH);
 
-        configJsonArea = new JTextArea(8, 40);
+        configJsonArea = new JTextArea(7, 40);
         configJsonArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
         configJsonArea.setEditable(false);
         configJsonArea.setBackground(new Color(248, 249, 250));
@@ -189,45 +182,22 @@ public class MainWindow extends JFrame {
 
         log("IPED Tools MCP iniciado em modo gráfico.");
 
-        // Restaura automaticamente o último caso ativo (se existir)
-        File activeFile = IpedCoreService.ACTIVE_CASE_FILE;
-        if (activeFile.exists()) {
-            try {
-                String savedPath = java.nio.file.Files.readString(activeFile.toPath(), java.nio.charset.StandardCharsets.UTF_8).trim();
-                if (!savedPath.isBlank()) {
-                    File caseDir = new File(savedPath);
-                    if (caseDir.exists() && iped.engine.data.IPEDSource.checkIfIsCaseFolder(caseDir)) {
-                        casePathField.setText(savedPath);
-                        log("Restaurando último caso ativo: " + savedPath);
-                        loadCaseAsync(caseDir);
-                    }
-                }
-            } catch (Exception ex) {
-                log("Aviso ao ler caso ativo: " + ex.getMessage());
-            }
-        }
-
         updateGeneratedConfig();
 
-        // Monitor de sincronização em tempo real (atualiza a janela se a IA trocar de caso pelo chat)
-        Timer externalCaseWatcher = new Timer(1500, evt -> {
-            try {
-                if (activeFile.exists()) {
-                    String currentOnDisk = java.nio.file.Files.readString(activeFile.toPath(), java.nio.charset.StandardCharsets.UTF_8).trim();
-                    String currentInField = casePathField.getText().trim();
-                    if (!currentOnDisk.isBlank() && !currentOnDisk.equalsIgnoreCase(currentInField)) {
-                        File newCaseDir = new File(currentOnDisk);
-                        if (newCaseDir.exists() && iped.engine.data.IPEDSource.checkIfIsCaseFolder(newCaseDir)) {
-                            log("Caso atualizado externamente via Chat de IA: " + currentOnDisk);
-                            casePathField.setText(currentOnDisk);
-                            loadCaseAsync(newCaseDir);
-                        }
-                    }
-                }
-            } catch (Exception ignored) {
+        // A test still running when the window closes must not leave its server process behind.
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosing(java.awt.event.WindowEvent e) {
+                cancelRunningTest();
+            }
+
+            // The prompt file may have been edited outside the window.
+            @Override
+            public void windowActivated(java.awt.event.WindowEvent e) {
+                startPromptPanel.refreshStatus();
             }
         });
-        externalCaseWatcher.start();
+        Runtime.getRuntime().addShutdownHook(new Thread(this::cancelRunningTest, "mcp-selftest-cleanup"));
     }
 
     private JPanel createHeaderPanel() {
@@ -365,34 +335,29 @@ public class MainWindow extends JFrame {
     }
 
     private void setupListeners() {
-        browseButton.addActionListener(e -> {
+        testBrowseButton.addActionListener(e -> {
             JFileChooser chooser = new JFileChooser();
             chooser.setDialogTitle("Selecione a Pasta do Caso Processado pelo IPED");
             chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
             chooser.setAcceptAllFileFilterUsed(false);
-
-            if (!casePathField.getText().isBlank()) {
-                chooser.setCurrentDirectory(new File(casePathField.getText()));
+            if (!testCaseField.getText().isBlank()) {
+                chooser.setCurrentDirectory(new File(testCaseField.getText().trim()));
             }
-
             if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-                File selected = chooser.getSelectedFile();
-                casePathField.setText(selected.getAbsolutePath());
-                loadCaseAsync(selected);
+                testCaseField.setText(chooser.getSelectedFile().getAbsolutePath());
             }
         });
 
-        loadButton.addActionListener(e -> {
-            String path = casePathField.getText().trim();
-            if (path.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "Selecione uma pasta de caso antes de carregar.", "Aviso", JOptionPane.WARNING_MESSAGE);
-                return;
+        runTestButton.addActionListener(e -> runSelfTest());
+        cancelTestButton.addActionListener(e -> {
+            StdioSelfTest test = currentTest;
+            if (test != null) {
+                log("Cancelando o teste...");
+                test.cancel();
             }
-            loadCaseAsync(new File(path));
         });
 
         clientSelectCombo.addActionListener(e -> updateGeneratedConfig());
-        pinCaseCheck.addActionListener(e -> updateGeneratedConfig());
 
         copyConfigButton.addActionListener(e -> {
             String configText = configJsonArea.getText();
@@ -407,105 +372,141 @@ public class MainWindow extends JFrame {
         });
     }
 
-    private void loadCaseAsync(File caseDir) {
-        loadButton.setEnabled(false);
-        browseButton.setEnabled(false);
-        statusBadgeLabel.setText("⏳ Carregando índice do caso...");
-        statusBadgeLabel.setForeground(new Color(230, 126, 34));
-        log("Iniciando abertura do caso: " + caseDir.getAbsolutePath());
+    private void cancelRunningTest() {
+        StdioSelfTest test = currentTest;
+        if (test != null) {
+            test.cancel();
+        }
+    }
 
-        SwingWorker<Boolean, Void> worker = new SwingWorker<>() {
-            private String errorMessage = null;
+    /** Runs the local STDIO test in a background thread, showing each step as it ends. */
+    private void runSelfTest() {
+        List<String> command = StdioSelfTest.command(McpApplication.getAppExecutableOrJarPath(),
+                StdioSelfTest.currentJava());
+        if (command == null) {
+            JOptionPane.showMessageDialog(this, "O teste precisa da aplicação empacotada (executável ou JAR).\n"
+                    + "Gere o pacote e abra a janela por ele.", "Teste indisponível", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        String path = testCaseField.getText().trim();
+        File caseDir = null;
+        if (!path.isEmpty()) {
+            caseDir = new File(path);
+            if (!caseDir.isDirectory() || !iped.engine.data.IPEDSource.checkIfIsCaseFolder(caseDir)) {
+                JOptionPane.showMessageDialog(this, "A pasta informada não é uma pasta de caso do IPED:\n" + path,
+                        "Pasta inválida", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+        }
+
+        testResultArea.setText("");
+        runTestButton.setEnabled(false);
+        testBrowseButton.setEnabled(false);
+        cancelTestButton.setEnabled(true);
+        log("Teste STDIO iniciado: " + String.join(" ", command)
+                + (caseDir != null ? " | caso: " + caseDir.getAbsolutePath() : " | sem caso"));
+
+        StdioSelfTest.Listener listener = new StdioSelfTest.Listener() {
+            @Override
+            public void stepStarted(String name) {
+                SwingUtilities.invokeLater(() -> testResultArea.append(runningLine(name)));
+            }
 
             @Override
-            protected Boolean doInBackground() {
-                try {
-                    IpedCoreService.getInstance().openCase(caseDir);
-                    return true;
-                } catch (Exception ex) {
-                    errorMessage = ex.getMessage();
-                    return false;
-                }
+            public void stepFinished(StdioSelfTest.StepResult result) {
+                SwingUtilities.invokeLater(() -> showStep(result));
+            }
+        };
+        StdioSelfTest test = new StdioSelfTest(command, caseDir, VersionInfo.getVersion(),
+                StdioSelfTest.Timeouts.DEFAULT, listener);
+        currentTest = test;
+
+        new SwingWorker<List<StdioSelfTest.StepResult>, Void>() {
+            @Override
+            protected List<StdioSelfTest.StepResult> doInBackground() {
+                return test.run();
             }
 
             @Override
             protected void done() {
-                loadButton.setEnabled(true);
-                browseButton.setEnabled(true);
-
+                currentTest = null;
+                runTestButton.setEnabled(true);
+                testBrowseButton.setEnabled(true);
+                cancelTestButton.setEnabled(false);
                 try {
-                    if (get()) {
-                        IpedCoreService service = IpedCoreService.getInstance();
-                        statusBadgeLabel.setText("✔ Caso carregado com sucesso (" + service.getSourceId() + ")");
-                        statusBadgeLabel.setForeground(new Color(39, 174, 96));
-
-                        int totalItems = service.getTotalIndexedItems();
-                        int totalCats = service.listCategories().size();
-                        int totalBms = service.listBookmarks().size();
-
-                        itemsCountLabel.setText("• Itens indexados: " + numberFormat.format(totalItems));
-                        categoriesCountLabel.setText("• Categorias encontradas: " + numberFormat.format(totalCats));
-                        bookmarksCountLabel.setText("• Marcadores existentes: " + numberFormat.format(totalBms));
-
-                        log("Caso aberto com sucesso! " + numberFormat.format(totalItems) + " itens, " + totalCats + " categorias.");
-                        updateGeneratedConfig();
-                    } else {
-                        statusBadgeLabel.setText("❌ Erro ao carregar caso");
-                        statusBadgeLabel.setForeground(new Color(192, 57, 43));
-                        log("Falha ao abrir caso: " + errorMessage);
-                        JOptionPane.showMessageDialog(MainWindow.this,
-                                "Não foi possível carregar o caso selecionado:\n" + errorMessage,
-                                "Erro ao Carregar Caso", JOptionPane.ERROR_MESSAGE);
+                    List<StdioSelfTest.StepResult> results = get();
+                    boolean ok = results.stream().allMatch(r -> r.status() == StdioSelfTest.Status.PASSED);
+                    if (ok) {
+                        testResultArea.append("\n✔ O MCP está funcionando como o cliente de IA vai executá-lo.\n");
+                        log("Teste STDIO concluído com sucesso.");
+                        return;
                     }
+                    testResultArea.append("\n❌ O teste falhou. Os detalhes estão no console de diagnóstico.\n");
+                    log("Teste STDIO falhou. Últimas linhas do log do servidor:");
+                    for (String line : test.stderrTail()) {
+                        log("  [servidor] " + line);
+                    }
+                    log("Log do servidor do teste: " + (test.logFile() != null ? test.logFile()
+                            : new File(System.getProperty("user.home"), ".iped-tools-mcp" + File.separator + "logs")
+                                    .getAbsolutePath()));
                 } catch (Exception ex) {
-                    log("Erro inesperado: " + ex.getMessage());
+                    log("Erro inesperado no teste: " + ex);
                 }
             }
-        };
+        }.execute();
+    }
 
-        worker.execute();
+    private static String runningLine(String step) {
+        return "⏳ " + step + " ...\n";
+    }
+
+    /** Replaces the "running" line of a step by its result. */
+    private void showStep(StdioSelfTest.StepResult r) {
+        String text = testResultArea.getText();
+        String running = runningLine(r.name());
+        if (text.endsWith(running)) {
+            testResultArea.setText(text.substring(0, text.length() - running.length()));
+        }
+        String icon = switch (r.status()) {
+            case PASSED -> "✔";
+            case FAILED -> "❌";
+            case NOT_RUN -> "–";
+        };
+        String time = r.status() == StdioSelfTest.Status.NOT_RUN ? "" : String.format(" (%,d ms)", r.millis());
+        testResultArea.append(icon + " " + r.name() + time + ": " + r.detail() + "\n");
+        testResultArea.setCaretPosition(testResultArea.getDocument().getLength());
+        if (r.status() != StdioSelfTest.Status.NOT_RUN) {
+            log("Teste STDIO | " + r.name() + " | " + r.status() + time + " | " + r.detail());
+        }
     }
 
     private void updateGeneratedConfig() {
-        String casePath = casePathField.getText().trim();
-        if (casePath.isEmpty()) {
-            casePath = "D:\\caminho\\para\\seu_caso_iped";
-        }
+        String configSnippet = configText((String) clientSelectCombo.getSelectedItem(),
+                McpApplication.getAppExecutableOrJarPath());
+        configJsonArea.setText(configSnippet);
+        configJsonArea.setCaretPosition(0);
+    }
 
-        String execPath = McpApplication.getAppExecutableOrJarPath();
-        String jsonEscapedCase = casePath.replace("\\", "\\\\");
+    /** Client options of the configurator; only clients with a guide in the wiki are named. */
+    static final String[] CLIENT_OPTIONS = {
+            "LM Studio (Formulário Visual - Copiar Campos)",
+            "LM Studio (Arquivo ng-mcp.json)",
+            "Claude Desktop / Antigravity (JSON)",
+            "Codex (app da OpenAI)"
+    };
+
+    /** The configuration text for a client option and the path of the executable (or runner JAR). */
+    static String configText(String selectedClient, String execPath) {
         String jsonEscapedExec = execPath.replace("\\", "\\\\");
-
         boolean isJar = execPath.toLowerCase().endsWith(".jar");
-        boolean pinCase = pinCaseCheck != null && pinCaseCheck.isSelected();
-        String selectedClient = (String) clientSelectCombo.getSelectedItem();
         if (selectedClient == null) {
             selectedClient = "";
         }
 
         String configSnippet;
         if (selectedClient.contains("Formulário Visual")) {
-            if (pinCase) {
-                configSnippet = """
-=== PREENCHIMENTO NO FORMULÁRIO DO LM STUDIO (CASO FIXO) ===
-
-1. No LM Studio, acesse a aba 'MCP' e adicione ou edite o servidor 'iped':
-   • Nome: iped
-   • Conexão: Neste computador
-   • Comando: %s
-   • Argumentos (adicione um por linha clicando em '+ Adicionar argumento'):
-     1º argumento: --stdio
-     2º argumento: --case
-     3º argumento: %s
-
-* ATENÇÃO: Digite os caminhos com barra normal (ex: %s), NUNCA use barras duplas (\\\\) nos campos de texto do formulário!
-
-💡 DICA FORENSE:
-No chat com o modelo, chame o prompt '/start_case' para carregar automaticamente a metodologia forense, instruções de busca e regras de custódia!
-""".formatted(execPath, casePath, casePath);
-            } else {
-                configSnippet = """
-=== PREENCHIMENTO NO FORMULÁRIO DO LM STUDIO (CONFIGURAÇÃO ÚNICA RECOMENDADA) ===
+            configSnippet = """
+=== PREENCHIMENTO NO FORMULÁRIO DO LM STUDIO (CONFIGURAÇÃO ÚNICA) ===
 
 1. No LM Studio, acesse a aba 'MCP' e adicione ou edite o servidor 'iped':
    • Nome: iped
@@ -516,37 +517,15 @@ No chat com o modelo, chame o prompt '/start_case' para carregar automaticamente
 
 2. Salve e ative a chavinha da conexão.
 
-✨ PRONTO! COM APENAS O ARGUMENTO '--stdio', VOCÊ NUNCA MAIS PRECISA RECONFIGURAR O LM STUDIO!
-O servidor MCP sincronizará automaticamente com o caso que você carregar nesta janela ou com qualquer caso que você pedir para a IA abrir no chat (ex: 'abra o caso D:\\meu_caso').
+✨ PRONTO! COM APENAS O ARGUMENTO '--stdio', VOCÊ NÃO PRECISA RECONFIGURAR O LM STUDIO PARA TROCAR DE CASO.
+Cada conversa tem o seu próprio caso: peça ao modelo para abrir a pasta do caso (ex: 'abra o caso D:\\meu_caso').
 
 💡 DICA FORENSE:
-No chat com o modelo, chame o prompt '/start_case' para carregar automaticamente a metodologia forense, instruções de busca e regras de custódia!
+O LM Studio não lista os prompts do servidor: para iniciar com a metodologia forense e as regras de conduta,
+use o botão 'Copiar prompt' (seção 2 desta janela) e cole o texto como primeira mensagem da conversa.
 """.formatted(execPath);
-            }
         } else if (selectedClient.contains("ng-mcp.json")) {
-            if (pinCase) {
-                configSnippet = """
-{
-  "servers": [
-    {
-      "id": "iped-tools-mcp",
-      "name": "iped",
-      "enabled": true,
-      "connection": {
-        "type": "stdio",
-        "command": "%s",
-        "args": [
-          "--stdio",
-          "--case",
-          "%s"
-        ],
-        "env": {}
-      }
-    }
-  ]
-}""".formatted(jsonEscapedExec, jsonEscapedCase);
-            } else {
-                configSnippet = """
+            configSnippet = """
 {
   "servers": [
     {
@@ -564,52 +543,14 @@ No chat com o modelo, chame o prompt '/start_case' para carregar automaticamente
     }
   ]
 }""".formatted(jsonEscapedExec);
-            }
+        } else if (selectedClient.startsWith("Codex")) {
+            configSnippet = codexText(execPath, isJar);
         } else if (isJar) {
-            String argsList = pinCase
-                    ? """
-                        "-Dfile.encoding=UTF-8",
-                        "-Dstdout.encoding=UTF-8",
-                        "-Dstderr.encoding=UTF-8",
-                        "-Dstdin.encoding=UTF-8",
-                        "-Djava.security.manager=allow",
-                        "--add-opens=java.base/java.lang=ALL-UNNAMED",
-                        "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
-                        "--add-opens=java.base/java.math=ALL-UNNAMED",
-                        "--add-opens=java.base/java.util=ALL-UNNAMED",
-                        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
-                        "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
-                        "--add-opens=java.base/java.net=ALL-UNNAMED",
-                        "--add-opens=java.base/java.text=ALL-UNNAMED",
-                        "--add-opens=java.base/java.nio=ALL-UNNAMED",
-                        "--add-opens=java.base/java.io=ALL-UNNAMED",
-                        "-jar",
-                        "%s",
-                        "--stdio",
-                        "--case",
-                        "%s"
-                      """.formatted(jsonEscapedExec, jsonEscapedCase)
-                    : """
-                        "-Dfile.encoding=UTF-8",
-                        "-Dstdout.encoding=UTF-8",
-                        "-Dstderr.encoding=UTF-8",
-                        "-Dstdin.encoding=UTF-8",
-                        "-Djava.security.manager=allow",
-                        "--add-opens=java.base/java.lang=ALL-UNNAMED",
-                        "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
-                        "--add-opens=java.base/java.math=ALL-UNNAMED",
-                        "--add-opens=java.base/java.util=ALL-UNNAMED",
-                        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
-                        "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
-                        "--add-opens=java.base/java.net=ALL-UNNAMED",
-                        "--add-opens=java.base/java.text=ALL-UNNAMED",
-                        "--add-opens=java.base/java.nio=ALL-UNNAMED",
-                        "--add-opens=java.base/java.io=ALL-UNNAMED",
-                        "-jar",
-                        "%s",
-                        "--stdio"
-                      """.formatted(jsonEscapedExec);
-
+            StringBuilder args = new StringBuilder();
+            for (String arg : StdioSelfTest.JAR_JVM_ARGS) {
+                args.append("        \"").append(arg).append("\",\n");
+            }
+            args.append("        \"-jar\",\n        \"").append(jsonEscapedExec).append("\",\n        \"--stdio\"");
             configSnippet = """
 {
   "mcpServers": {
@@ -620,24 +561,9 @@ No chat com o modelo, chame o prompt '/start_case' para carregar automaticamente
       ]
     }
   }
-}""".formatted(argsList);
+}""".formatted(args);
         } else {
-            if (pinCase) {
-                configSnippet = """
-{
-  "mcpServers": {
-    "iped": {
-      "command": "%s",
-      "args": [
-        "--stdio",
-        "--case",
-        "%s"
-      ]
-    }
-  }
-}""".formatted(jsonEscapedExec, jsonEscapedCase);
-            } else {
-                configSnippet = """
+            configSnippet = """
 {
   "mcpServers": {
     "iped": {
@@ -648,14 +574,76 @@ No chat com o modelo, chame o prompt '/start_case' para carregar automaticamente
     }
   }
 }""".formatted(jsonEscapedExec);
-            }
         }
 
-        configJsonArea.setText(configSnippet);
-        configJsonArea.setCaretPosition(0);
+        return configSnippet;
     }
 
+    /**
+     * Codex mode of the OpenAI desktop app: the fields of Plugins → MCPs and the equivalent config.toml entry. Only
+     * Codex conversations use local MCP servers, and Codex does not list MCP prompts.
+     */
+    private static String codexText(String execPath, boolean isJar) {
+        java.util.List<String> args = new java.util.ArrayList<>();
+        String command;
+        if (isJar) {
+            command = "java";
+            args.addAll(StdioSelfTest.JAR_JVM_ARGS);
+            args.add("-jar");
+            args.add(execPath);
+        } else {
+            command = execPath;
+        }
+        args.add("--stdio");
+
+        StringBuilder formArgs = new StringBuilder();
+        for (String a : args) {
+            formArgs.append("     ").append(a).append('\n');
+        }
+        StringBuilder tomlArgs = new StringBuilder();
+        for (int i = 0; i < args.size(); i++) {
+            tomlArgs.append(i == 0 ? "" : ", ").append(tomlLiteral(args.get(i)));
+        }
+        return """
+=== CODEX (APP DA OPENAI): CONFIGURAÇÕES → PLUGINS → MCPs ===
+
+⚠️ Só as conversas do CODEX usam o servidor. O chat comum do ChatGPT, no mesmo app, não usa servidores MCP locais.
+
+1. Adicione um servidor (ou edite o servidor 'iped') e preencha:
+   • Nome: iped
+   • Comando para iniciar: %s
+   • Argumentos (um por linha, clicando em '+ Adicionar argumento'):
+%s   • Variáveis do ambiente e Diretório de trabalho: não são necessários.
+
+2. Salve. Numa conversa do Codex, selecione o servidor (aparece como IPED-Tools-MCP).
+
+--- Alternativa: trecho equivalente em %%USERPROFILE%%\\.codex\\config.toml ---
+
+[mcp_servers.iped]
+enabled = true
+command = %s
+args = [%s]
+
+💡 DICA FORENSE:
+O Codex não lista os prompts do servidor: para iniciar com a metodologia forense e as regras de conduta,
+use o botão 'Copiar prompt' (seção 2 desta janela) e cole o texto como primeira mensagem da conversa.
+O modelo roda na nuvem da OpenAI: ele vai avisar sobre o envio dos dados do caso e pedir o seu aceite.
+""".formatted(command, formArgs, tomlLiteral(command), tomlArgs);
+    }
+
+    /** TOML literal string (single quotes, no escapes), or a basic string when the value has a single quote. */
+    private static String tomlLiteral(String value) {
+        if (value.indexOf('\'') < 0) {
+            return "'" + value + "'";
+        }
+        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+    }
+
+    private static final org.slf4j.Logger WINDOW_LOGGER = org.slf4j.LoggerFactory.getLogger(MainWindow.class);
+
     public void log(String message) {
+        // Everything shown in the window also goes to the GUI log file (~/.iped-tools-mcp/logs)
+        WINDOW_LOGGER.info(message);
         String timestamp = timeFormat.format(new Date());
         logArea.append("[" + timestamp + "] " + message + "\n");
         logArea.setCaretPosition(logArea.getDocument().getLength());

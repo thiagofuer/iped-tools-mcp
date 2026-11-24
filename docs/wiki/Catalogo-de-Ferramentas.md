@@ -1,13 +1,13 @@
-# Catálogo de Ferramentas Forenses (28 MCP Tools)
+# Catálogo de Ferramentas Forenses (30 MCP Tools)
 
-O **IPED Tools MCP** expõe 28 ferramentas periciais especializadas agrupadas em 9 domínios operacionais. Abaixo está a referência completa de cada ferramenta, seus objetivos e exemplos práticos de perguntas em português que o examinador pode fazer no chat.
+O **IPED Tools MCP** expõe 30 ferramentas periciais especializadas agrupadas em 8 domínios operacionais. Abaixo está a referência completa de cada ferramenta, seus objetivos e exemplos práticos de perguntas em português que o examinador pode fazer no chat.
 
 ---
 
 ## 1. Conectividade e Gestão de Casos
 
 ### `get_server_status`
-* **Propósito:** Retorna o status operacional do servidor MCP, versão instalada do produto, versão do IPED Core e informações do caso ativo aberto.
+* **Propósito:** Retorna o status operacional do servidor MCP, versão instalada do produto, versão do IPED Core e informações do caso aberto nesta conversa. Sem caso aberto, orienta o modelo a pedir a pasta do caso ao usuário e chamar `open_case`.
 * **Exemplo de Pergunta:** *"O servidor está ativo e qual versão do IPED está sendo utilizada?"*
 
 ### `check_connection`
@@ -23,20 +23,22 @@ O **IPED Tools MCP** expõe 28 ferramentas periciais especializadas agrupadas em
 * **Exemplo de Pergunta:** *"Quantos arquivos no total existem neste caso e quais são as principais categorias encontradas?"*
 
 ### `open_case`
-* **Propósito:** Carrega ou alterna dinamicamente o caso pericial ativo em tempo de execução sem reiniciar o processo ou reconfigurar o cliente de IA.
+* **Propósito:** Abre ou troca o caso pericial **desta conversa**, sem reiniciar o processo ou reconfigurar o cliente de IA. É a única forma de abrir um caso: cada conversa começa sem caso aberto, e o caso aberto numa conversa não muda o de outra. Se a pasta não for de um caso do IPED, devolve erro e o caso já aberto continua aberto.
 * **Exemplo de Pergunta:** *"Abra o caso pericial localizado em C:\casos_forenses\caso_operacao_02."*
 
 ---
 
-## 2. Dicionário e Descoberta de Metadados
+## 2. Catálogo de Propriedades do Caso
 
-### `get_property_dictionary`
-* **Propósito:** Retorna o catálogo canônico de metadados do IPED agrupados por domínios (`chats`, `browsers`, `emails`, `media`, `system`, `gps`, `ufed`, `ai`, `crypto`), informando tipos de dados e sintaxes de consulta.
-* **Exemplo de Pergunta:** *"Quais propriedades de geolocalização e GPS estão disponíveis para busca?"*
+O catálogo mostra as propriedades que **existem neste caso**, lidas do índice, com contagens exatas. A descoberta segue o fluxo `list_properties` → `describe_property` → `search_documents`. Os grupos seguem as colunas do IPED (Basic, Communication, Image, UFED, Regex...) mais o grupo **AI**, que reúne os resultados dos módulos de IA (nudez, faces e idade, detector de CSAM, OCR, transcrição de áudio, classes de mídia do UFED). Detalhes em [Consultas Lucene e Propriedades](Consultas-Lucene-e-Propriedades).
 
-### `list_available_properties`
-* **Propósito:** Descobre dinamicamente os nomes exatos das propriedades que de fato foram indexadas para uma categoria específica presente no caso.
-* **Exemplo de Pergunta:** *"Quais metadados específicos foram extraídos para a categoria 'whatsapp'?"*
+### `list_properties`
+* **Propósito:** Sem parâmetros, lista os grupos de propriedades presentes no caso e quantas propriedades cada um tem. Com `group` ou `pattern`, lista as propriedades com tipo, quantidade exata de itens, descrição (quando curada) e um exemplo de consulta já escapado. Com `category`, as contagens ficam restritas à categoria.
+* **Exemplos de Pergunta:** *"Quais resultados de inteligência artificial existem neste caso?"* · *"Quais propriedades de comunicação existem nas mensagens instantâneas?"*
+
+### `describe_property`
+* **Propósito:** Detalha uma propriedade: significado, escala ou unidade, quantidade de itens, mínimo e máximo (números e datas) ou valores mais frequentes (texto) e exemplos de consulta. Com `query`, calcula a distribuição apenas sobre os itens da consulta. Quando a propriedade não existe no caso, diz isso explicitamente e sugere nomes parecidos.
+* **Exemplos de Pergunta:** *"O que significa nudityScore e qual a faixa de valores neste caso?"* · *"Quais faixas etárias foram estimadas nas imagens da categoria Other Images?"*
 
 ---
 
@@ -44,35 +46,62 @@ O **IPED Tools MCP** expõe 28 ferramentas periciais especializadas agrupadas em
 
 ### `search_documents`
 * **Propósito:** Executa consultas estruturadas no índice Apache Lucene do caso, suportando operadores booleanos, filtros de categoria, campos periciais e curingas.
-* **Exemplo de Pergunta:** *"Busque mensagens de chat que contenham o termo 'pagamento' ou 'transferência'."*
+* **Paginação:** cada resposta informa o total exato (`total_found`) e traz até 100 itens a partir de `offset`. Quando ainda há itens (`has_more`), a resposta indica o `next_offset` para pedir a página seguinte com a mesma consulta. A ordem é a do índice do caso, a mesma em todas as chamadas, e não indica relevância nem data.
+* **Exemplos de Pergunta:** *"Busque mensagens de chat que contenham o termo 'pagamento' ou 'transferência'."* · *"Mostre os próximos resultados dessa busca."*
 
 ### `get_document_metadata`
-* **Propósito:** Recupera metadados técnicos de um ou mais itens, com agrupamento semântico (`basic`, `communication`, `geo`, `forensic`, `extra`), extração sem truncamento (`raw: true`) ou filtragem por campos (`keys`).
+* **Propósito:** Recupera metadados técnicos de um ou mais itens, agrupados pelos mesmos grupos de `list_properties` (`Basic`, `Communication`, `AI`, `Image`, `UFED`...), com seleção de grupos (`groups`), extração sem truncamento (`raw: true`) ou filtragem por campos (`keys`). Resultados de IA como `nudityScore` e `ocrCharCount` aparecem no modo padrão.
 * **Exemplo de Pergunta:** *"Mostre todos os metadados técnicos e dados forenses do item ID 15420."*
 
 ### `get_document_text`
-* **Propósito:** Extrai o conteúdo textual completo de um arquivo processado pelo IPED/OCR com paginação controlada (`offset` e `max_chars`).
-* **Exemplo de Pergunta:** *"Leia os primeiros 2000 caracteres do documento ID 8412."*
+* **Propósito:** Extrai o conteúdo textual completo de um item com paginação controlada (`offset` e `max_chars`).
+* **OCR e transcrição:** a resposta começa pelo que o processamento do IPED gravou no caso, o mesmo que a aba "Texto" do IPED mostra:
+  * `=== Texto de OCR (IPED) ===`: texto reconhecido em imagens, PDFs digitalizados e imagens embutidas;
+  * `=== Transcrição de áudio (IPED) ===`: transcrição de áudios.
+
+  Depois vem `=== Texto extraído do arquivo ===`. Um item com `ocrCharCount` maior que zero ou com `audio:transcription` tem esse texto aqui. O MCP só lê o que o IPED gravou: não executa OCR nem transcrição e não grava na pasta do caso.
+* **Exemplo de Pergunta:** *"Leia os primeiros 2000 caracteres do documento ID 8412."* ou *"O que está escrito na imagem ID 3021?"*
 
 ### `list_categories`
 * **Propósito:** Lista todas as categorias de evidências catalogadas pelo IPED no caso e a contagem de itens em cada uma.
 * **Exemplo de Pergunta:** *"Quais tipos de evidência foram classificados e quantos itens cada categoria possui?"*
 
 ### `list_bookmarks`
-* **Propósito:** Lista todos os marcadores periciais existentes no arquivo `bookmarks.iped` do caso e o quantitativo de itens marcados.
-* **Exemplo de Pergunta:** *"Quais marcadores periciais já foram criados neste caso?"*
+* **Propósito:** Lista os marcadores periciais do caso (`bookmarks.iped`) com nome, quantidade de itens, comentário e cor (`#RRGGBB`, ou vazio quando o marcador não tem cor). Também devolve `unused_standard_colors`, as cores da paleta padrão do IPED que nenhum marcador usa, para a IA sugerir uma cor.
+* **Exemplo de Pergunta:** *"Quais marcadores periciais já foram criados neste caso e quantos itens tem cada um?"*
+
+### `list_bookmark_items`
+* **Propósito:** Lista os itens de um marcador (ID, nome, caminho e categoria) em ordem de ID, paginados com `offset`, `total_found`, `has_more` e `next_offset`. Somente leitura.
+* **Exemplo de Pergunta:** *"Quais itens estão no marcador 'Contratos Suspeitos'?"*
 
 ### `add_to_bookmark`
-* **Propósito:** Adiciona um ou mais itens a um marcador pericial existente ou cria um novo marcador de auditoria no caso.
-* **Exemplo de Pergunta:** *"Adicione os itens 1250 e 1251 ao marcador 'Contratos Suspeitos'."*
+* **Propósito:** Adiciona um ou mais itens a um marcador existente ou cria o marcador, opcionalmente com cor e comentário. A resposta informa se o marcador foi criado e lista os IDs que não existem no caso. Cor e comentário só valem na criação; para alterar um marcador existente, use `update_bookmark`.
+* **Cor:** a cor é escolha do perito. A IA pode sugerir uma cor livre da paleta, que entra na confirmação. Sem escolha, o marcador é criado sem cor e o IPED Desktop o exibe na cor padrão (lilás).
+* **Exemplo de Pergunta:** *"Adicione os itens 1250 e 1251 ao marcador 'Contratos Suspeitos', em vermelho, com o comentário 'Minutas enviadas ao fornecedor'."*
+
+### `remove_from_bookmark`
+* **Propósito:** Remove itens de um marcador. O marcador continua existindo, mesmo vazio, e os itens continuam no caso com os demais marcadores e a seleção inalterados. A resposta lista os IDs que não estavam no marcador.
+* **Exemplo de Pergunta:** *"Tire o item 1251 do marcador 'Contratos Suspeitos'; ele foi incluído por engano."*
+
+### `update_bookmark`
+* **Propósito:** Renomeia um marcador e altera a cor ou o comentário, mantendo os itens. Um novo nome igual a outro marcador (sem diferenciar maiúsculas) é recusado. Comentário vazio limpa o comentário.
+* **Exemplo de Pergunta:** *"Renomeie o marcador 'Contratos Suspeitos' para 'Contratos Fraudulentos' e mude a cor para azul."*
+
+### `delete_bookmark`
+* **Propósito:** Exclui um marcador com nome, cor e comentário. Os itens continuam no caso, com os demais marcadores e a seleção inalterados. A resposta informa quantos itens o marcador tinha.
+* **Exemplo de Pergunta:** *"Exclua o marcador 'Rascunho de Triagem'."*
+
+> ✍️ **Confirmação de escritas:** antes de `add_to_bookmark`, `remove_from_bookmark`, `update_bookmark`, `delete_bookmark` ou `set_item_checked`, a IA mostra o que vai mudar e aguarda a confirmação do perito. Na remoção e na exclusão, ela mostra o que sai do marcador e avisa que a mudança não pode ser desfeita pelo MCP.
 
 ---
 
 ## 4. Inteligência de Comunicações e Dispositivos
 
-### `get_device_and_owner_info`
-* **Propósito:** Extrai informações do proprietário do dispositivo periciado, contas vinculadas, identificadores de hardware (IMEI), números de telefone e e-mails associados.
-* **Exemplo de Pergunta:** *"Quem é o proprietário identificado deste celular e quais são seus números de telefone e IMEI?"*
+### `get_device_and_accounts`
+* **Propósito:** Devolve os identificadores **registrados** na evidência, cada um com a origem: entradas de informações do aparelho (IMEI, IMSI, ICCID, MSISDN, modelo), telefones, e-mails, IDs de mensageiro e usernames das contas de usuário (contas do Cellebrite/UFED e contas decodificadas pelo IPED, como WhatsApp e Telegram), além de perfis de usuário e hives do registro em computadores. Cada identificador informa os itens de origem e quantos apps o sustentam.
+* **O que ela não faz:** não aponta o dono do aparelho. Valores achados por expressão regular ou em nomes de arquivo não entram. A conclusão sobre quem usa o aparelho é da IA e do perito, comparando as fontes: um telefone presente em várias contas independentes pesa mais que um valor isolado, e contas de outras pessoas podem estar logadas no mesmo aparelho.
+* **Sem identificadores estruturados:** em mídias como cartões de memória, a resposta diz isso explicitamente e sugere examinar EXIF, pastas e conteúdo.
+* **Exemplos de Pergunta:** *"Quais números de telefone e contas estão registrados neste celular, e em quantos aplicativos cada um aparece?"* · *"Qual é o IMEI e o modelo do aparelho?"*
 
 ### `get_top_contacts`
 * **Propósito:** Gera o ranking dos interlocutores mais frequentes em mensagens, chamadas e e-mails, com contagens por direção, por canal e por mês, primeira e última interação, dias ativos e `evidence_ids`.
@@ -139,12 +168,24 @@ As três ferramentas acima usam o mesmo modelo de eventos, derivado somente das 
 ## 8. Análise Multimodal e Similaridade
 
 ### `get_item_thumbnail`
-* **Propósito:** Recupera a miniatura gráfica de imagens e vídeos codificada em Base64 JPEG como bloco multimodal do protocolo MCP.
-* **Exemplo de Pergunta:** *"Exiba a miniatura visual da foto ID 25830."*
+* **Propósito:** Devolve a imagem do item em JPEG, como bloco multimodal do protocolo MCP, no tamanho pedido em `max_dimension`: padrão de 512 px, máximo de 2048 px, sem ampliar.
+* **Resolução:** a miniatura gravada pelo IPED costuma ter só 256 px. Quando o tamanho pedido é maior, a imagem vem do arquivo original, com a orientação EXIF aplicada. Para ler texto pequeno (documentos fotografados, comprovantes, capturas de tela), a IA pede de 1536 a 2048 px.
+* **Formatos:**
+  * Lidos direto pelo Java: JPEG, PNG, GIF, WebP, BMP, TIFF, PSD e ICO.
+  * Convertidos com a ferramenta de imagens que o IPED usa para o caso (ImageMagick em `iped	ools`), quando `enableExternalConv` está ativo no caso: HEIC (fotos de iPhone), SVG e outros formatos que o Java não lê.
+
+  A conversão tem tempo limite e não grava nada na pasta do caso.
+* **Origem:** o texto que acompanha a imagem informa a origem (original, convertida, arquivo de visualização ou miniatura do IPED) e o tamanho original. Quando nem a conversão funciona, vem a miniatura, com esse aviso.
+* **Exemplo de Pergunta:** *"Exiba a miniatura visual da foto ID 25830."* ou *"Mostre a imagem ID 3021 em alta resolução para eu ler o documento."*
+
+> 📌 **Referência sempre do caso:** as buscas de similaridade partem de um item já processado no caso (`item_id`), usando as características calculadas pelo IPED no processamento. Não há busca a partir de imagem externa ao caso; para isso, inclua a imagem num processamento do IPED e busque a partir do item. A busca de faces só encontra resultados se o caso foi processado com o reconhecimento facial habilitado, e a de imagens, com a similaridade de imagens habilitada.
+
+> 🎯 **Referência e contagem:** nas respostas, o item de referência vem marcado com `is_reference: true` e não conta como ocorrência. O campo `similar_found` traz o total de similares sem a referência; `total_found` inclui a referência quando ela aparece. A busca de documentos já não devolve o documento de referência.
 
 ### `search_similar_images`
 * **Propósito:** Realiza busca reversa por imagens visualmente semelhantes através de hashes perceptuais (pHash).
-* **Exemplo de Pergunta:** *"Localize imagens visualmente parecidas com a foto ID 1200."*
+* **Como ler a pontuação:** os resultados vêm ordenados por pontuação, de 1 a 100, e o topo é o que importa. 100 indica imagem idêntica (mesmo hash) ou quase idêntica; compare o `hash` com o da referência. O mínimo padrão (`min_score` 1.0) é o mesmo do IPED e traz tudo, ordenado. Para ficar só com cópias e variações próximas, peça um mínimo alto, por exemplo 80. Ícones e imagens muito pequenas ou lisas são más referências: muitos ícones sem relação pontuam perto de 100.
+* **Exemplo de Pergunta:** *"Localize imagens visualmente parecidas com a foto ID 1200."* · *"Só cópias quase idênticas da foto ID 1200, com pontuação mínima 80."*
 
 ### `search_similar_faces`
 * **Propósito:** Localiza outras fotos no caso que contenham rostos similares ao rosto identificado na foto de referência via redes de reconhecimento facial.
@@ -153,15 +194,3 @@ As três ferramentas acima usam o mesmo modelo de eventos, derivado somente das 
 ### `search_similar_documents`
 * **Propósito:** Encontra documentos textualmente semelhantes ao arquivo de referência utilizando o algoritmo Lucene MoreLikeThis.
 * **Exemplo de Pergunta:** *"Busque relatórios ou minutas com conteúdo semelhante ao documento ID 8900."*
-
----
-
-## 9. Filtros de Inteligência Artificial e Reconhecimento
-
-### `list_ai_filters`
-* **Propósito:** Lista as categorias de detecções neurais e de IA computadas pelo IPED disponíveis no caso (armas, drogas, nudez, faces, transcrições de áudio, CSAM, carteiras cripto, estimativa de idade).
-* **Exemplo de Pergunta:** *"Quais filtros de IA e modelos de visão computacional foram processados neste caso?"*
-
-### `query_ai_detections`
-* **Propósito:** Consulta itens classificados por filtros de redes neurais específicos com pontuações de confiança e limiares de detecção.
-* **Exemplo de Pergunta:** *"Mostre as fotos classificadas pelo filtro de armas com confiança acima de 80%."*

@@ -20,9 +20,13 @@ class ForensicPromptsTest {
 
     private ForensicPrompts prompts;
 
+    /** An empty profile folder, so a user copy of the methodology on this machine does not change the tests. */
+    @org.junit.jupiter.api.io.TempDir
+    java.nio.file.Path profile;
+
     @BeforeEach
     void setUp() {
-        prompts = new ForensicPrompts();
+        prompts = new ForensicPrompts(new StartPromptStore(profile.toFile()));
     }
 
     @Test
@@ -83,10 +87,26 @@ class ForensicPromptsTest {
         // 3. Phased investigation methodology
         assertTrue(text.contains("get_server_status"), "Deve orientar início com get_server_status");
         assertTrue(text.contains("get_case_summary"), "Deve indicar get_case_summary");
+        assertTrue(text.contains("peça ao examinador o caminho absoluto da pasta do caso do IPED e chame `open_case`"),
+                "Sem caso aberto, deve orientar pedir a pasta ao examinador e chamar open_case");
+        assertTrue(text.contains("uma sessão nova começa sem caso aberto"), "Deve dizer que a sessão começa sem caso");
+        assertFalse(text.toLowerCase().contains("configurador"), "Não deve mandar carregar o caso no configurador");
         assertTrue(text.contains("list_sources"), "Deve indicar list_sources");
-        assertTrue(text.contains("get_device_and_owner_info"), "Deve orientar consulta do proprietário");
-        assertTrue(text.contains("get_property_dictionary"), "Deve orientar consulta ao dicionário");
+        assertTrue(text.contains("get_device_and_accounts"), "Deve orientar o levantamento dos identificadores");
+        assertTrue(text.contains("compare as fontes"), "Deve orientar a comparação das fontes");
+        assertTrue(text.contains("cite os `item_id`"), "Deve orientar a citação dos itens de origem");
+        assertTrue(text.contains("\"proprietário\" ou \"dono\""), "Deve manter a proibição de busca por dono em texto livre");
+        assertFalse(text.contains("get_device_and_owner_info"), "Prompt não deve citar a ferramenta removida");
+        assertTrue(text.contains("list_properties"), "Deve orientar a descoberta pelo catálogo de propriedades");
+        assertTrue(text.contains("describe_property"), "Deve orientar o detalhamento de propriedades");
+        assertTrue(text.contains("grupo `AI`"), "Deve orientar a busca de resultados de IA pelo grupo AI");
+        for (String removed : java.util.List.of("list_ai_filters", "query_ai_detections", "get_property_dictionary",
+                "list_available_properties")) {
+            assertFalse(text.contains(removed), "Prompt não deve citar ferramenta removida: " + removed);
+        }
         assertTrue(text.contains("search_documents"), "Deve orientar busca estruturada");
+        assertTrue(text.contains("next_offset"), "Deve orientar a paginação da busca");
+        assertTrue(text.contains("total_found"), "Deve orientar a relatar o total exato");
         assertTrue(text.contains("Escape de Caracteres Lucene"), "Deve conter regras de escape Lucene");
         assertTrue(text.contains("get_document_metadata"), "Deve orientar inspeção progressiva de metadados");
         assertTrue(text.contains("get_document_text"), "Deve orientar paginação de texto com offset e max_chars");
@@ -144,5 +164,151 @@ class ForensicPromptsTest {
         assertTrue(text.contains("Acompanhe ativamente o idioma do examinador"), "Deve instruir a espelhar o idioma do usuário");
         assertTrue(text.contains("Português do Brasil"), "Deve referenciar Português do Brasil para usuários em português");
         assertTrue(text.contains("Inglês"), "Deve permitir resposta em inglês quando o examinador falar em inglês");
+    }
+
+    private String defaultPrompt() {
+        return prompts.buildStartCasePrompt(null, null);
+    }
+
+    /** Text of the sensitive content check (section 2.1 of the prompt). */
+    static String sensitiveCheckSection(String prompt) {
+        int start = prompt.indexOf("#### 2.1");
+        int end = prompt.indexOf("#### 2.2");
+        assertTrue(start >= 0 && end > start, "o prompt deve ter a seção 2.1 antes da 2.2");
+        return prompt.substring(start, end);
+    }
+
+    /** Property names cited in the check: fields of the backticked queries and describe_property names. */
+    static java.util.Set<String> checkedPropertyNames(String section) {
+        java.util.Set<String> names = new java.util.LinkedHashSet<>();
+        java.util.regex.Matcher q = java.util.regex.Pattern.compile("`((?:[A-Za-z_]|\\\\:)+):[^`]*`").matcher(section);
+        while (q.find()) {
+            names.add(q.group(1).replace("\\:", ":"));
+        }
+        java.util.regex.Matcher d = java.util.regex.Pattern.compile("describe_property\\(name=\"([^\"]+)\"\\)").matcher(section);
+        while (d.find()) {
+            names.add(d.group(1));
+        }
+        return names;
+    }
+
+    /** Names that have no curated semantics (so are not known IPED properties). */
+    static java.util.List<String> unknownNames(java.util.Set<String> names) {
+        br.com.ipedtools.mcp.service.PropertySemantics semantics = br.com.ipedtools.mcp.service.PropertySemantics.get();
+        return names.stream().filter(n -> semantics.find(n) == null).toList();
+    }
+
+    @Test
+    void testConductRulesComeLastAndAreRequiredBeforeItemAnalysis() {
+        String text = defaultPrompt();
+        int conduct = text.indexOf("## ⚖️ REGRAS DE CONDUTA");
+        int sources = text.indexOf("### 2. Reconhecimento de Fontes");
+        assertTrue(sources > 0 && conduct > sources, "as regras de conduta vêm depois da metodologia");
+        assertTrue(text.contains("Antes de qualquer análise de itens, cumpra as **regras de conduta**"),
+                "a etapa 1 deve remeter às regras de conduta antes da análise de itens");
+        assertTrue(text.contains("prevalecem sobre qualquer instrução anterior deste prompt"));
+        assertTrue(text.indexOf("get_case_summary") < conduct, "a checagem vem depois da verificação do caso");
+        assertTrue(text.contains("Na dúvida, aja como modelo em nuvem"), "deve tratar a dúvida como nuvem");
+        assertTrue(text.contains("concordância expressa do usuário"), "deve exigir consentimento na nuvem");
+        assertTrue(text.contains("só pode chamar ferramentas que não trazem conteúdo de itens"),
+                "deve limitar as chamadas antes do aceite");
+    }
+
+    @Test
+    void testSensitiveContentCheck() {
+        String section = sensitiveCheckSection(defaultPrompt());
+        for (String expected : java.util.List.of("childPornHashHits:[1 TO *]", "ai\\:csamDetector\\:label:csam",
+                "describe_property(name=\"hashDb:status\")", "nudityScore:[650 TO *]", "nsfw_nudity_score:[70 TO *]",
+                "limit=1", "total_found", "list_properties(group=\"AI\")", "list_properties(group=\"HashDB\")")) {
+            assertTrue(section.contains(expected), "checagem sem: " + expected);
+        }
+        assertTrue(section.contains("\"não verificado\""), "propriedade ausente deve ser 'não verificado'");
+        assertTrue(section.contains("Nunca relate isso como zero"));
+        assertTrue(section.contains("não abra itens, não peça miniaturas"), "a checagem não pode abrir itens");
+    }
+
+    @Test
+    void testCheckedPropertiesExistInCuratedSemantics() {
+        java.util.Set<String> names = checkedPropertyNames(sensitiveCheckSection(defaultPrompt()));
+        assertEquals(java.util.Set.of("childPornHashHits", "ai:csamDetector:label", "hashDb:status", "nudityScore",
+                "nsfw_nudity_score"), names);
+        assertEquals(java.util.List.of(), unknownNames(names), "propriedades da checagem sem semântica curada");
+    }
+
+    @Test
+    void testUnknownPropertyInCheckIsDetected() {
+        String fake = "#### 2.1\n- Nudez: `hasNudity:true`\n- `nudityScore:[650 TO *]`\n#### 2.2";
+        assertEquals(java.util.List.of("hasNudity"), unknownNames(checkedPropertyNames(sensitiveCheckSection(fake))));
+    }
+
+    @Test
+    void testAlertAndSessionAcceptance() {
+        String text = defaultPrompt();
+        assertTrue(text.contains("termos de uso do provedor"), "deve citar os termos de uso do provedor");
+        assertTrue(text.contains("Pare e só prossiga"), "deve pausar até a concordância");
+        assertTrue(text.contains("O aceite vale para esta conversa"), "aceite por sessão");
+        assertTrue(text.contains("Uma nova sessão (nova conversa) sempre exige um novo aceite"));
+        assertTrue(text.contains("Ao trocar de caso com `open_case`, faça uma nova checagem"));
+        assertTrue(text.contains("Prosseguir é decisão do usuário"), "modelo local: decisão do usuário");
+    }
+
+    /** Server instructions as Quarkus reads them from application.properties (UTF-8). */
+    static String serverInstructions() throws java.io.IOException {
+        java.util.Properties props = new java.util.Properties();
+        try (java.io.Reader r = new java.io.InputStreamReader(
+                ForensicPromptsTest.class.getResourceAsStream("/application.properties"),
+                java.nio.charset.StandardCharsets.UTF_8)) {
+            props.load(r);
+        }
+        String text = props.getProperty("quarkus.mcp.server.server-info.instructions");
+        assertNotNull(text, "application.properties deve definir quarkus.mcp.server.server-info.instructions");
+        return text;
+    }
+
+    @Test
+    void testServerInstructionsStateTheFourRules() throws Exception {
+        String instructions = serverInstructions();
+        assertTrue(instructions.contains("start_case"), "deve recomendar o prompt start_case");
+        assertTrue(instructions.contains("se o cliente não tiver menu de prompts")
+                && instructions.contains("\"Copiar prompt\" do configurador"),
+                "deve indicar o Copiar prompt para clientes sem menu de prompts");
+        assertTrue(instructions.contains("A sessão começa sem caso aberto"), "deve dizer que a sessão começa sem caso");
+        assertTrue(instructions.contains("chame open_case"), "deve orientar a abertura do caso com open_case");
+        // 1. sensitive content check, with the same signals as the prompt
+        assertTrue(instructions.contains("\"não verificado\", nunca zero"));
+        // the signals of the conduct rules shipped with the application, which every prompt contains
+        java.util.Set<String> promptSignals = checkedPropertyNames(sensitiveCheckSection(StartPromptStore.conduct()));
+        for (String signal : promptSignals) {
+            assertTrue(instructions.contains(signal), "instructions sem o sinal da checagem: " + signal);
+        }
+        // 2. cloud consent
+        assertTrue(instructions.contains("ou na dúvida"));
+        assertTrue(instructions.contains("concordância expressa do usuário"));
+        // 3. per-session acceptance
+        assertTrue(instructions.contains("Aceite por sessão"));
+        // 4. writes
+        for (String tool : java.util.List.of("add_to_bookmark", "remove_from_bookmark", "update_bookmark",
+                "delete_bookmark", "set_item_checked")) {
+            assertTrue(instructions.contains(tool), "instructions sem a escrita " + tool);
+        }
+        assertTrue(instructions.contains("cor e comentário"), "instructions devem incluir a cor na confirmação");
+        assertTrue(instructions.contains("confirmação expressa do usuário"));
+        assertTrue(instructions.contains("sem indicar autoria de IA"));
+        assertTrue(instructions.contains("\n2. Modelo em nuvem"), "as regras devem vir em linhas separadas");
+    }
+
+    @Test
+    void testWritesRequireConfirmation() {
+        String text = defaultPrompt();
+        assertTrue(text.contains("Nunca escreva no caso por iniciativa própria"));
+        assertTrue(text.contains("aguarde a confirmação expressa"));
+        assertTrue(text.contains("não use nem acrescente termos que indiquem autoria de IA"));
+        for (String tool : java.util.List.of("remove_from_bookmark", "update_bookmark", "delete_bookmark")) {
+            assertTrue(text.contains(tool), "prompt sem a escrita " + tool);
+        }
+        assertTrue(text.contains("A cor é escolha do usuário"), "prompt deve deixar a cor com o usuário");
+        assertTrue(text.contains("não pode ser desfeita pelo MCP"));
+        assertFalse(text.contains("adicione-os aos marcadores oficiais usando `add_to_bookmark`"),
+                "não pode restar a orientação de marcar sem perguntar");
     }
 }

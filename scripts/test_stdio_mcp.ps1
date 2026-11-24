@@ -23,13 +23,16 @@ if (-not $CasePath -or -not (Test-Path $CasePath)) {
 }
 $CasePath = (Resolve-Path $CasePath).Path
 
-if (-not $JarPath -or -not (Test-Path $JarPath)) {
-    $candidates = Get-ChildItem -Path "target" -Filter "iped-tools-mcp-*-runner.jar" -File
-    if ($candidates -and $candidates.Count -gt 0) {
-        $JarPath = $candidates[0].FullName
-    } else {
-        $JarPath = "target\iped-tools-mcp-1.0.1-runner.jar"
-    }
+# A versao esperada vem somente do pom.xml
+$projectRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot "version.ps1")
+$ExpectedVersion = Get-PomVersion -ProjectRoot $projectRoot
+
+if (-not $JarPath) {
+    $JarPath = Get-RunnerJarPath -ProjectRoot $projectRoot -Version $ExpectedVersion
+} elseif (-not (Test-Path $JarPath)) {
+    Write-Host "ERRO: JAR informado nao existe: $JarPath" -ForegroundColor Red
+    exit 1
 }
 
 Write-Host "==========================================================" -ForegroundColor Cyan
@@ -42,20 +45,21 @@ if (-not (Test-Path $JavaPath)) {
     $JavaPath = (Get-Command java).Source
 }
 
-# Teste prévio: flag --version
-Write-Host "[0/26] Testando flag '--version'..." -NoNewline
-$verOutput = & $JavaPath -jar $JarPath --version
-if ($verOutput -match "IPED Tools MCP v1\.\d+\.\d+" -and $verOutput -match "ipedtools\.com\.br") {
-    Write-Host (" PASS (" + $verOutput[0] + ")") -ForegroundColor Green
-} else {
-    Write-Host " FAIL: $verOutput" -ForegroundColor Red; exit 1
-}
+# A versao e conferida pelo protocolo (initialize e get_server_status): o executavel nao imprime
+# nada no terminal, porque o lancador do jpackage nao tem console.
+
+# Perfil temporario: o prompt personalizado do usuario (~/.iped-tools-mcp/prompts) nao interfere no teste,
+# e o teste do prompt grava a copia personalizada so nesta pasta
+$TestHome = Join-Path ([IO.Path]::GetTempPath()) ("iped-tools-mcp-stdio-" + [Guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Force $TestHome | Out-Null
 
 $jvmArgs = @(
+    "-Duser.home=`"$TestHome`"",
     "-Dfile.encoding=UTF-8",
     "-Dstdout.encoding=UTF-8",
     "-Dstderr.encoding=UTF-8",
     "-Dstdin.encoding=UTF-8",
+    "-Djava.util.logging.manager=org.jboss.logmanager.LogManager",
     "--add-opens=java.base/java.lang=ALL-UNNAMED",
     "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
     "--add-opens=java.base/java.math=ALL-UNNAMED",
@@ -66,8 +70,11 @@ $jvmArgs = @(
     "--add-opens=java.base/java.text=ALL-UNNAMED",
     "--add-opens=java.base/java.nio=ALL-UNNAMED",
     "--add-opens=java.base/java.io=ALL-UNNAMED",
+    "--add-exports=java.desktop/sun.awt.image=ALL-UNNAMED",
+    "--add-exports=java.desktop/com.sun.imageio.plugins.common=ALL-UNNAMED",
     "-jar", $JarPath,
-    "--stdio", "--case", $CasePath
+    # '--case' de configuracoes antigas deve ser ignorado: a sessao comeca sem caso e o caso e aberto com open_case
+    "--stdio", "--case", "`"$CasePath`""
 )
 
 $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -80,6 +87,9 @@ $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
 $psi.UseShellExecute = $false
 $psi.CreateNoWindow = $true
 
+# O .NET Framework cria o StandardInput com a codificacao do console; se ela for
+# UTF-8 com BOM, o BOM vai antes da primeira mensagem e o JSON chega invalido.
+[Console]::InputEncoding = New-Object System.Text.UTF8Encoding($false)
 $proc = [System.Diagnostics.Process]::Start($psi)
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $writer = New-Object System.IO.StreamWriter($proc.StandardInput.BaseStream, $utf8NoBom)
@@ -123,10 +133,11 @@ try {
         capabilities = @{}
         clientInfo = @{ name = "mcp-test-suite"; version = "1.0" }
     }
-    if ($init.result.serverInfo.name -eq "iped-tools-mcp" -and $init.result.serverInfo.version -like "1.0.1*") {
+    $initMismatch = Get-VersionMismatch -Reported $init.result.serverInfo.version -Expected $ExpectedVersion
+    if ($init.result.serverInfo.name -eq "iped-tools-mcp" -and -not $initMismatch) {
         Write-Host (" PASS (versao: " + $init.result.serverInfo.version + ")") -ForegroundColor Green
     } else {
-        Write-Host (" FAIL (esperava v1.0.1*, obteve " + $init.result.serverInfo.version + ")") -ForegroundColor Red; exit 1
+        Write-Host (" FAIL (" + $initMismatch + ")") -ForegroundColor Red; exit 1
     }
 
     # 2. Handshake Initialized Notification
@@ -136,43 +147,69 @@ try {
     Write-Host "[2/25] Testando tools/list..." -NoNewline
     $toolsList = Send-RpcRequest "tools/list"
     $toolCount = $toolsList.result.tools.Count
-    $expectedTools = 28
+    $expectedTools = 30
     $toolNames = $toolsList.result.tools | ForEach-Object { $_.name }
-    if ($toolCount -eq $expectedTools -and ($toolNames -contains "get_contact_relationship")) {
+    if ($toolCount -eq $expectedTools -and ($toolNames -contains "get_contact_relationship") -and ($toolNames -contains "list_properties")) {
         Write-Host (" PASS (" + $toolCount + " ferramentas registradas)") -ForegroundColor Green
     } else {
-        Write-Host (" FAIL (" + $toolCount + " ferramentas, esperado " + $expectedTools + " incluindo get_contact_relationship)") -ForegroundColor Red; exit 1
+        Write-Host (" FAIL (" + $toolCount + " ferramentas, esperado " + $expectedTools + " incluindo get_contact_relationship e list_properties)") -ForegroundColor Red; exit 1
     }
 
-    # 4. Call get_property_dictionary
-    Write-Host "[3/15] Testando call get_property_dictionary (dominio: chats)..." -NoNewline
-    $dictCall = Send-RpcRequest "tools/call" @{ name = "get_property_dictionary"; arguments = @{ domain = "chats" } }
-    $dictData = $dictCall.result.content[0].text | ConvertFrom-Json
-    if ($dictData.properties -and $dictData.properties.Count -gt 0 -and $dictData.escaping_note) {
-        Write-Host (" PASS (" + $dictData.properties.Count + " propriedades catalogadas)") -ForegroundColor Green
+    # 3a. Prompt start_case: metodologia padrao e, depois, a copia do usuario, sempre com as regras de conduta
+    Write-Host "[2a/25] Testando prompts/list e prompts/get start_case (padrao e personalizado)..." -NoNewline
+    $promptNames = (Send-RpcRequest "prompts/list").result.prompts | ForEach-Object { $_.name }
+    $defaultText = (Send-RpcRequest "prompts/get" @{ name = "start_case"; arguments = @{} }).result.messages[0].content.text
+    $userPrompt = Join-Path $TestHome ".iped-tools-mcp\prompts\start_case.md"
+    New-Item -ItemType Directory -Force (Split-Path $userPrompt) | Out-Null
+    [IO.File]::WriteAllText($userPrompt, "# Metodologia de teste do roteiro`n", (New-Object System.Text.UTF8Encoding($false)))
+    $customText = (Send-RpcRequest "prompts/get" @{ name = "start_case"; arguments = @{} }).result.messages[0].content.text
+    if (($promptNames -contains "start_case") -and $defaultText -match "METODOLOGIA DE INVESTIGA" -and $defaultText -match "REGRAS DE CONDUTA" `
+            -and $customText.StartsWith("# Metodologia de teste do roteiro") -and $customText -match "REGRAS DE CONDUTA" `
+            -and $customText -notmatch "METODOLOGIA DE INVESTIGA") {
+        Write-Host " PASS (padrao e copia do usuario, ambos com as regras de conduta)" -ForegroundColor Green
     } else {
-        Write-Host " FAIL" -ForegroundColor Red; exit 1
+        Write-Host " FAIL (prompt sem a metodologia esperada ou sem as regras de conduta)" -ForegroundColor Red; exit 1
     }
 
-    # 5. Call list_available_properties
-    Write-Host "[4/15] Testando call list_available_properties..." -NoNewline
-    $availCall = Send-RpcRequest "tools/call" @{ name = "list_available_properties"; arguments = @{ category = "whatsapp" } }
-    $availData = $availCall.result.content[0].text | ConvertFrom-Json
-    if ($availData.distinct_properties_count -eq 0) {
-        $availCall = Send-RpcRequest "tools/call" @{ name = "list_available_properties"; arguments = @{ category = "" } }
-        $availData = $availCall.result.content[0].text | ConvertFrom-Json
+    # 3b. Sessao sem caso: '--case' ignorado, e o caso so abre com open_case
+    Write-Host "[2b/25] Testando sessao sem caso e open_case..." -NoNewline
+    $noCase = (Send-RpcRequest "tools/call" @{ name = "get_server_status"; arguments = @{} }).result.content[0].text | ConvertFrom-Json
+    if ($noCase.case_open) {
+        Write-Host " FAIL (o servidor iniciou com caso aberto; '--case' deveria ser ignorado)" -ForegroundColor Red; exit 1
     }
-    if ($availData.properties -ne $null -and $availData.distinct_properties_count -gt 0) {
-        Write-Host (" PASS (" + $availData.distinct_properties_count + " propriedades distintas na categoria '" + $availData.category + "')") -ForegroundColor Green
+    $openCall = Send-RpcRequest "tools/call" @{ name = "open_case"; arguments = @{ case_path = $CasePath } }
+    $openData = $openCall.result.content[0].text | ConvertFrom-Json
+    if ($openData.status -eq "success") {
+        Write-Host (" PASS (sem caso no inicio; open_case abriu " + $openData.total_items + " itens)") -ForegroundColor Green
     } else {
-        Write-Host (" FAIL: " + ($availCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
+        Write-Host (" FAIL: " + ($openCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
+    }
+
+    # 4. Call list_properties (group overview)
+    Write-Host "[3/25] Testando call list_properties (visao geral)..." -NoNewline
+    $groupsCall = Send-RpcRequest "tools/call" @{ name = "list_properties"; arguments = @{} }
+    $groupsData = $groupsCall.result.content[0].text | ConvertFrom-Json
+    if ($groupsData.groups -and $groupsData.groups.Count -gt 0 -and $groupsData.total_properties -gt 0) {
+        Write-Host (" PASS (" + $groupsData.groups.Count + " grupos, " + $groupsData.total_properties + " propriedades)") -ForegroundColor Green
+    } else {
+        Write-Host (" FAIL: " + ($groupsCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
+    }
+
+    # 5. Call list_properties (group Basic)
+    Write-Host "[4/25] Testando call list_properties (grupo Basic)..." -NoNewline
+    $basicCall = Send-RpcRequest "tools/call" @{ name = "list_properties"; arguments = @{ group = "Basic" } }
+    $basicData = $basicCall.result.content[0].text | ConvertFrom-Json
+    if ($basicData.properties -and $basicData.total -gt 0 -and $basicData.properties[0].query_example) {
+        Write-Host (" PASS (" + $basicData.total + " propriedades no grupo Basic)") -ForegroundColor Green
+    } else {
+        Write-Host (" FAIL: " + ($basicCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
     # 6. Call get_server_status
     Write-Host "[5/15] Testando call get_server_status..." -NoNewline
     $statusCall = Send-RpcRequest "tools/call" @{ name = "get_server_status"; arguments = @{} }
     $statusData = $statusCall.result.content[0].text | ConvertFrom-Json
-    if ($statusData.connected -and $statusData.case_open -and $statusData.server_version -like "1.0.1*") {
+    if ($statusData.connected -and $statusData.case_open -and -not (Get-VersionMismatch -Reported $statusData.server_version -Expected $ExpectedVersion)) {
         Write-Host (" PASS (Versao: " + $statusData.server_version + " | Fonte: " + $statusData.case_source_id + ")") -ForegroundColor Green
     } else {
         Write-Host " FAIL" -ForegroundColor Red; exit 1
@@ -188,16 +225,16 @@ try {
         Write-Host " FAIL" -ForegroundColor Red; exit 1
     }
 
-    # 8. Call get_device_and_owner_info
-    Write-Host "[7/15] Testando call get_device_and_owner_info..." -NoNewline
-    $ownerCall = Send-RpcRequest "tools/call" @{ name = "get_device_and_owner_info"; arguments = @{} }
-    $ownerData = $ownerCall.result.content[0].text | ConvertFrom-Json
-    if ($ownerData.likely_owner_names.Count -gt 0 -or $ownerData.owner_phone_numbers.Count -gt 0) {
-        $ownerStr = ($ownerData.likely_owner_names -join ", ")
-        $phoneStr = ($ownerData.owner_phone_numbers -join ", ")
-        Write-Host (" PASS (Proprietario: " + $ownerStr + " | Fone: " + $phoneStr + ")") -ForegroundColor Green
+    # 8. Call get_device_and_accounts
+    Write-Host "[7/25] Testando call get_device_and_accounts..." -NoNewline
+    $accCall = Send-RpcRequest "tools/call" @{ name = "get_device_and_accounts"; arguments = @{} }
+    $accText = $accCall.result.content[0].text
+    $accData = $accText | ConvertFrom-Json
+    $hasOwnerKey = $accText -match '"[a-z_]*owner[a-z_]*"\s*:'
+    if ($accData.evidences -and $accData.note -and -not $hasOwnerKey) {
+        Write-Host (" PASS (tipo: " + $accData.evidence_type + ", " + $accData.total_evidences + " evidencia(s), sem campos de dono)") -ForegroundColor Green
     } else {
-        Write-Host " PASS (Sem proprietario explicito)" -ForegroundColor Yellow
+        Write-Host (" FAIL: " + ($accCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
     # 9. Call search_documents
@@ -212,6 +249,18 @@ try {
         $searchData = $searchCall.result.content[0].text | ConvertFrom-Json
         $sampleDocId = $searchData.items[0].id
         Write-Host (" PASS (Query fallback retornou " + $searchData.total_found + " itens)") -ForegroundColor Green
+    }
+
+    # 9b. Call search_documents second page (pagination)
+    Write-Host "[8b/25] Testando paginacao de search_documents (offset)..." -NoNewline
+    $page1 = (Send-RpcRequest "tools/call" @{ name = "search_documents"; arguments = @{ query = "*:*"; limit = 5 } }).result.content[0].text | ConvertFrom-Json
+    $page2 = (Send-RpcRequest "tools/call" @{ name = "search_documents"; arguments = @{ query = "*:*"; limit = 5; offset = $page1.next_offset } }).result.content[0].text | ConvertFrom-Json
+    $ids1 = $page1.items | ForEach-Object { $_.id }
+    $repeated = $page2.items | Where-Object { $ids1 -contains $_.id }
+    if ($page1.has_more -and $page1.next_offset -eq 5 -and $page2.offset -eq 5 -and $page2.items.Count -eq 5 -and -not $repeated -and $page2.total_found -eq $page1.total_found) {
+        Write-Host (" PASS (paginas 1 e 2 sem repeticao, total " + $page1.total_found + ")") -ForegroundColor Green
+    } else {
+        Write-Host (" FAIL: " + ($page2 | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
     # 10. Call get_document_metadata
@@ -245,22 +294,30 @@ try {
     $catsCall = Send-RpcRequest "tools/call" @{ name = "list_categories"; arguments = @{} }
     $catsCount = $catsCall.result.content.Count
     $bmsCall = Send-RpcRequest "tools/call" @{ name = "list_bookmarks"; arguments = @{} }
-    $bmsCount = $bmsCall.result.content.Count
+    $bmsCount = ($bmsCall.result.content[0].text | ConvertFrom-Json).total
     if ($catsCount -gt 0 -and -not $sourcesJson.Contains([char]0xFFFD)) {
         Write-Host (" PASS (" + $catsCount + " categorias, " + $bmsCount + " marcadores, UTF-8 integro)") -ForegroundColor Green
     } else {
         Write-Host " FAIL (Categorias vazias ou corrupcao UTF-8 U+FFFD em list_sources)" -ForegroundColor Red; exit 1
     }
 
-    # 13. Call add_to_bookmark (com acentuacao UTF-8)
-    $expectedBm = "Per$([char]0x00ED)cia IA"
-    Write-Host ("[12/15] Testando call add_to_bookmark (UTF-8 '" + $expectedBm + "')...") -NoNewline
-    $addBmCall = Send-RpcRequest "tools/call" @{ name = "add_to_bookmark"; arguments = @{ bookmark_name = $expectedBm; doc_ids = @($sampleDocId) } }
+    # 13. Marcador de teste (acentuacao UTF-8): incluir, listar itens e excluir, deixando o caso como estava
+    $expectedBm = "Confer$([char]0x00EA)ncia de Teste"
+    Write-Host ("[12/15] Testando add_to_bookmark, list_bookmark_items e delete_bookmark (UTF-8 '" + $expectedBm + "')...") -NoNewline
+    $addBmCall = Send-RpcRequest "tools/call" @{ name = "add_to_bookmark"; arguments = @{ bookmark_name = $expectedBm; doc_ids = @([int]$sampleDocId) } }
     $addBmText = $addBmCall.result.content[0].text
-    if ($addBmText -match "Sucesso" -and $addBmText.Contains($expectedBm) -and -not $addBmText.Contains([char]0xFFFD)) {
-        Write-Host (" PASS (" + $addBmText + ")") -ForegroundColor Green
+    $addBmData = $addBmText | ConvertFrom-Json
+    $bmItemsCall = Send-RpcRequest "tools/call" @{ name = "list_bookmark_items"; arguments = @{ bookmark_name = $expectedBm } }
+    $bmItemsData = $bmItemsCall.result.content[0].text | ConvertFrom-Json
+    $delBmCall = Send-RpcRequest "tools/call" @{ name = "delete_bookmark"; arguments = @{ bookmark_name = $expectedBm } }
+    $delBmData = $delBmCall.result.content[0].text | ConvertFrom-Json
+    $bmsAfterCall = Send-RpcRequest "tools/call" @{ name = "list_bookmarks"; arguments = @{} }
+    $bmsAfter = ($bmsAfterCall.result.content[0].text | ConvertFrom-Json).bookmarks | ForEach-Object { $_.name }
+    $bmLeft = @($bmsAfter) -contains $expectedBm
+    if ($addBmData.success -and $addBmData.bookmark.name -eq $expectedBm -and -not $addBmText.Contains([char]0xFFFD) -and $bmItemsData.total_found -ge 1 -and $delBmData.success -and -not $bmLeft) {
+        Write-Host (" PASS (" + $addBmData.message + " | itens: " + $bmItemsData.total_found + " | excluido ao final)") -ForegroundColor Green
     } else {
-        Write-Host (" FAIL (" + $addBmText + ")") -ForegroundColor Red; exit 1
+        Write-Host (" FAIL (add: " + $addBmText + " | itens: " + $bmItemsCall.result.content[0].text + " | delete: " + $delBmCall.result.content[0].text + ")") -ForegroundColor Red; exit 1
     }
 
     # 14. Call get_item_relations
@@ -434,24 +491,24 @@ try {
         Write-Host (" FAIL: " + ($simDocCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
-    # 25. Call list_ai_filters
-    Write-Host "[24/25] Testando call list_ai_filters..." -NoNewline
-    $filtersCall = Send-RpcRequest "tools/call" @{ name = "list_ai_filters"; arguments = @{} }
-    $filtersData = $filtersCall.result.content[0].text | ConvertFrom-Json
-    if ($filtersData.filters -and $filtersData.total_filters -ge 7) {
-        Write-Host (" PASS (" + $filtersData.total_filters + " categorias de filtros AI listadas)") -ForegroundColor Green
+    # 25. Call list_properties (group AI)
+    Write-Host "[24/25] Testando call list_properties (grupo AI)..." -NoNewline
+    $aiCall = Send-RpcRequest "tools/call" @{ name = "list_properties"; arguments = @{ group = "AI" } }
+    $aiData = $aiCall.result.content[0].text | ConvertFrom-Json
+    if (-not $aiData.error -and $aiData.group -eq "AI" -and $aiData.total -ne $null) {
+        Write-Host (" PASS (" + $aiData.total + " propriedades de IA no caso)") -ForegroundColor Green
     } else {
-        Write-Host (" FAIL: " + ($filtersCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
+        Write-Host (" FAIL: " + ($aiCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
-    # 26. Call query_ai_detections
-    Write-Host "[25/25] Testando call query_ai_detections..." -NoNewline
-    $queryAiCall = Send-RpcRequest "tools/call" @{ name = "query_ai_detections"; arguments = @{ filter_type = "faces"; limit = 5 } }
-    $queryAiData = $queryAiCall.result.content[0].text | ConvertFrom-Json
-    if ($queryAiData.filter_type -eq "faces" -and $queryAiData.total_found -ne $null) {
-        Write-Host (" PASS (Filtro: faces | Total encontrados: " + $queryAiData.total_found + ")") -ForegroundColor Green
+    # 26. Call describe_property on a property that IPED does not produce
+    Write-Host "[25/25] Testando call describe_property (propriedade ausente)..." -NoNewline
+    $descCall = Send-RpcRequest "tools/call" @{ name = "describe_property"; arguments = @{ name = "hasWeapon" } }
+    $descData = $descCall.result.content[0].text | ConvertFrom-Json
+    if ($descData.present -eq $false -and $descData.message) {
+        Write-Host (" PASS (hasWeapon reportada como ausente do caso)") -ForegroundColor Green
     } else {
-        Write-Host (" FAIL: " + ($queryAiCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
+        Write-Host (" FAIL: " + ($descCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
     Write-Host "`n==========================================================" -ForegroundColor Green
@@ -462,4 +519,6 @@ try {
     if ($proc -and !$proc.HasExited) {
         $proc.Kill()
     }
+    if ($proc) { $null = $proc.WaitForExit(10000) }
+    Remove-Item -Recurse -Force $TestHome -ErrorAction SilentlyContinue
 }

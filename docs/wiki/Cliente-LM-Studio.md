@@ -15,14 +15,14 @@ O [Configurador Gráfico](Configurador-Grafico) gera os campos exatos para preen
 3. Preencha os campos exatamente como indicado:
    * **Nome (Name):** `iped`
    * **Conexão (Connection):** `Neste computador` (*Local*)
-   * **Comando (Command):** `C:\Program Files\IPED Tools MCP\IPED-Tools-MCP.exe`
+   * **Comando (Command):** `C:\Program Files\IPED-Tools-MCP\IPED-Tools-MCP.exe`
    * **Argumentos (Arguments):** Clique em **+ Adicionar argumento** e insira somente:
      ```text
      --stdio
      ```
 4. Salve e ative a chave de conexão correspondente.
 
-> ✨ **Vantagem:** Com apenas o argumento `--stdio`, você nunca mais precisará reconfigurar o LM Studio! O servidor se sincronizará automaticamente com qualquer caso selecionado no Configurador Gráfico ou aberto pela IA no chat.
+> ✨ **Vantagem:** Com apenas o argumento `--stdio`, você não precisa reconfigurar o LM Studio para trocar de caso. Cada conversa começa sem caso aberto: peça ao modelo para abrir a pasta do caso (por exemplo, *"abra o caso D:\casos\operacao_01"*), e ele chama a ferramenta `open_case`. O argumento `--case` de versões anteriores não é mais usado e pode ser removido.
 
 ---
 
@@ -39,7 +39,7 @@ Se você preferir configurar inserindo o bloco JSON diretamente no arquivo do LM
       "enabled": true,
       "connection": {
         "type": "stdio",
-        "command": "C:\\Program Files\\IPED Tools MCP\\IPED-Tools-MCP.exe",
+        "command": "C:\\Program Files\\IPED-Tools-MCP\\IPED-Tools-MCP.exe",
         "args": [
           "--stdio"
         ],
@@ -57,4 +57,10 @@ Se você preferir configurar inserindo o bloco JSON diretamente no arquivo do LM
 Ao operar em redes desconectadas:
 * **Sem vazamento de dados:** O IPED Tools MCP não abre portas de rede nem realiza telemetria; os dados trafegam unicamente pelos descritores locais `stdin`/`stdout`.
 * **Sem dependência de nuvem:** O modelo de IA roda nativamente no LM Studio e interroga os índices Lucene e SQLite locais na memória do computador.
-* **Prompt Forense:** Ao iniciar a conversa com o modelo carregado no LM Studio, envie o prompt `/start_case` para ativar as instruções periciais e as diretrizes de estrita não-destrutividade probatória.
+* **Prompt Forense:** O `start_case` é um prompt MCP e precisa ser acionado pela lista de prompts do cliente, não digitado como texto. Nas versões testadas, o LM Studio não lista prompts MCP nem repassa ao modelo o resumo das regras de conduta (as *instructions* do protocolo MCP). Digitar `/start_case` não tem efeito. Por isso, no LM Studio, use o **📋 Copiar prompt** do [Configurador Gráfico](Configurador-Grafico) (seção **Prompt inicial da investigação**) e cole o texto como primeira mensagem da conversa: ele traz a metodologia e as regras de conduta completas. Se a sua versão listar os prompts do servidor `iped`, selecione `start_case` ao iniciar a conversa.
+
+---
+
+## ➡️ Próximo passo
+
+Com o servidor `iped` configurado, siga para **[Como Investigar com o MCP](Como-Investigar-com-o-MCP)**: o passo a passo para iniciar o `start_case`, abrir o caso, responder ao alerta de conteúdo sensível e conduzir a investigação.

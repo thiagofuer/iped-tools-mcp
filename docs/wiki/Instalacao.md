@@ -8,12 +8,12 @@ O IPED Tools MCP oferece duas modalidades de distribuição para Windows: o **In
 
 Ideal para estações de trabalho e gabinetes de perícia.
 
-1. Baixe o arquivo `IPED-Tools-MCP-1.0.1.msi` do portal oficial [www.mcp.ipedtools.com.br](https://www.mcp.ipedtools.com.br).
+1. Baixe o arquivo `IPED-Tools-MCP-<versão>.msi` do portal oficial [www.mcp.ipedtools.com.br](https://www.mcp.ipedtools.com.br). `<versão>` é o número da versão publicada (ex.: `X.Y.Z`); use o nome exato do arquivo que aparece no portal.
 2. Execute o instalador com privilégios de administrador.
 3. Siga o assistente de instalação padrão do Windows.
 4. Por padrão, o executável é instalado em:
    ```text
-   C:\Program Files\IPED Tools MCP\IPED-Tools-MCP.exe
+   C:\Program Files\IPED-Tools-MCP\IPED-Tools-MCP.exe
    ```
 5. O instalador cria automaticamente atalhos na Área de Trabalho e no Menu Iniciar, além de registrar o aplicativo no Painel de Controle ("Adicionar ou Remover Programas").
 
@@ -23,7 +23,7 @@ Ideal para estações de trabalho e gabinetes de perícia.
 
 Indicado para execução direta sem necessidade de privilégios de administrador, pendrives ou unidades externas de perícia.
 
-1. Baixe o arquivo `IPED-Tools-MCP-1.0.1-windows-x64-portable.zip` do portal oficial.
+1. Baixe o arquivo `IPED-Tools-MCP-<versão>-windows-x64-portable.zip` do portal oficial.
 2. Descompacte o arquivo `.zip` na pasta de sua preferência (exemplo: `C:\Ferramentas\IPED-Tools-MCP\`).
 3. A estrutura da pasta extraída conterá:
    * `IPED-Tools-MCP.exe` — Executável principal unificado (GUI e MCP STDIO).
@@ -34,21 +34,16 @@ Indicado para execução direta sem necessidade de privilégios de administrador
 
 ## ✅ Teste de Validação pós-Instalação
 
-Para confirmar se a instalação foi bem-sucedida, abra o Prompt de Comando (`cmd.exe`) ou o PowerShell e execute:
+A validação é feita pelo [Configurador Gráfico](Configurador-Grafico):
 
-```cmd
-"C:\Program Files\IPED Tools MCP\IPED-Tools-MCP.exe" --version
-```
+1. Abra o **IPED Tools MCP** pelo atalho da Área de Trabalho ou do Menu Iniciar (ou dê um duplo-clique em `IPED-Tools-MCP.exe` na pasta portátil).
+2. Confira a versão no título da janela: `IPED Tools MCP vX.Y.Z` (no lugar de `X.Y.Z`, a versão que você instalou). O botão **ℹ Sobre** mostra também a data do build e a versão do IPED Core.
+3. Na seção **Testar o MCP**, clique em **▶ Executar teste**. Todas as etapas devem terminar com ✔: o teste executa o servidor do mesmo jeito que o cliente de IA vai executá-lo e confere que ele informa a mesma versão da janela. Se quiser, escolha antes a pasta de um caso processado pelo IPED para testar também a abertura do caso.
 
-*(Ou utilize o caminho da sua pasta portátil, por exemplo: `"C:\Ferramentas\IPED-Tools-MCP\IPED-Tools-MCP.exe" --version`)*
+> 💡 O executável não imprime informações no terminal: argumentos como `--version` ou `--help` apenas abrem o configurador, que mostra a versão no título.
 
-A saída esperada deve exibir a versão instalada, data do build e runtime Java:
+---
 
-```text
-IPED Tools MCP v1.0.1 (build 2026-10-10, Java 21, IPED Core 4.4.0)
-Website: https://www.mcp.ipedtools.com.br
-Codigo-fonte: https://github.com/thiagofuer/iped-tools-mcp
-Licenca: GPLv3 / Open Source
-```
+## ➡️ Próximo passo
 
-Com a instalação validada, avance para o [Configurador Gráfico](Configurador-Grafico) para carregar seu primeiro caso IPED.
+Configure o seu aplicativo de IA pelo **[Configurador Gráfico](Configurador-Grafico)** e o guia do cliente no menu ao lado. Em seguida, veja **[Como Investigar com o MCP](Como-Investigar-com-o-MCP)**.

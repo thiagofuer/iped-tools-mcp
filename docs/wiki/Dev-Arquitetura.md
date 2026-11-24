@@ -10,9 +10,9 @@ O **IPED Tools MCP** é construído sobre o ecossistema **Java 21 (LTS)** e **Qu
 graph TD
     subgraph LLM_Client ["Clientes de IA / MCP"]
         Claude["Claude Desktop / Claude Code"]
-        CursorApp["Cursor / IDEs"]
         LMStudio["LM Studio (Local / Air-Gapped)"]
         Antigravity["Antigravity / Agentes"]
+        Codex["Codex (app da OpenAI)"]
     end
 
     subgraph Product ["IPED Tools MCP (Executável Nativo Windows)"]
@@ -20,20 +20,14 @@ graph TD
 
         subgraph GUI_Layer ["Modo GUI (Swing Desktop)"]
             MainWindow["MainWindow (JFrame)"]
-            CaseSelector["JFileChooser (Seletor de Caso)"]
-            StatsPanel["Painel de Estatísticas & Métricas"]
+            SelfTest["StdioSelfTest (teste local em processo filho --stdio)"]
             ConfigGen["Gerador de Configuração 1-Click"]
-            GuiTimer["Timer de Sincronização (1.5s)"]
-        end
-
-        subgraph State_Sync ["Estado Compartilhado"]
-            ActiveCaseFile["~/.iped-tools-mcp/active_case.txt"]
         end
 
         subgraph MCP_Layer ["Modo Headless STDIO (Quarkus MCP Engine)"]
             StdioHandler["STDIO Transport (stdin / stdout)"]
             McpDispatcher["Quarkus MCP Dispatcher"]
-            Tools["28 Ferramentas Forenses (@Tool)"]
+            Tools["Ferramentas Forenses (@Tool)"]
         end
 
         subgraph Core_Service ["Camada de Serviço Forense"]
@@ -57,17 +51,13 @@ graph TD
     Launcher -->|"--stdio detectado"| StdioHandler
     Launcher -->|"Sem parâmetros ou duplo-clique"| MainWindow
 
-    MainWindow --> CaseSelector
-    MainWindow --> StatsPanel
+    MainWindow --> SelfTest
     MainWindow --> ConfigGen
-    MainWindow -->|"Grava caso ativo"| ActiveCaseFile
-    GuiTimer -->|"Sondagem periódica (1.5s)"| ActiveCaseFile
-    GuiTimer -.->|"Atualiza UI se caso alterado via chat"| MainWindow
+    SelfTest -->|"Executa o comando gerado com --stdio (MCP via pipes)"| Launcher
 
     StdioHandler <--> McpDispatcher
     McpDispatcher --> Tools
     Tools --> IpedService
-    IpedService -->|"Lê caso ativo compartilhado"| ActiveCaseFile
 
     IpedService --> IPEDSource
     IpedService --> IPEDSearcher
@@ -91,28 +81,23 @@ sequenceDiagram
     participant Swing as MainWindow (Swing GUI)
     participant Quarkus as Quarkus MCP Bootstrap
     participant Service as IpedCoreService
-    participant State as active_case.txt
 
     Trigger->>Main: Executa IPED-Tools-MCP.exe
     alt args contém "--stdio"
         Note over Main: Modo Servidor MCP Headless
         Main->>Main: Redireciona System.out para stderr (stream isolation)
-        alt Informado "--case [caminho]"
-            Main->>Service: IpedCoreService.openCase(caminho)
-        else Sem "--case" (Configuração Recomendada)
-            Main->>State: Lê caso ativo salvo em disco
-            opt Caso ativo existente
-                Main->>Service: IpedCoreService.openCase(caminhoSalvo)
-            end
+        opt Informado "--case [caminho]" (configuração antiga)
+            Main->>Main: Ignora o argumento e registra um aviso no log
         end
         Main->>Quarkus: Inicia Quarkus MCP Server (stdin/stdout)
-        Note over Quarkus: Responde a requisições JSON-RPC e sincroniza caso ativo
+        Note over Quarkus: initialize e tools/list respondem sem caso aberto
+        Quarkus->>Service: open_case(case_path) pedido pelo modelo
+        Service->>Service: Abre o índice do caso só neste processo
+        Note over Service: O caso fica aberto até outro open_case ou o fim do processo, sem estado compartilhado com outros processos
     else Sem argumentos ou com duplo-clique
         Note over Main: Modo Configurador Gráfico
-        Main->>State: Lê último caso ativo
         Main->>Swing: EventQueue.invokeLater(() -> new MainWindow())
-        Swing->>Service: Carrega caso e exibe métricas/estatísticas
-        Note over Swing: Inicia Timer (1.5s) para refletir comandos do chat na tela
+        Note over Swing: Não abre caso no próprio processo. O teste local executa o servidor --stdio num processo filho
     end
 ```
 
@@ -125,6 +110,25 @@ O executável nativo suporta os seguintes parâmetros formais:
 | Parâmetro | Descrição | Comportamento Operacional |
 |---|---|---|
 | `--stdio` | Inicia o servidor em modo STDIO MCP. | Desativa a interface gráfica, isola o fluxo `stdout` para JSON-RPC e aguarda requisições na entrada padrão. |
-| `--case <caminho>` | Especifica um caso IPED fixo na inicialização. | Opcional. Quando omitido, o servidor utiliza o caso salvo em `~/.iped-tools-mcp/active_case.txt`. |
-| `--version`, `-v` | Exibe os dados de versão e licença. | Imprime versão, data do build, runtime Java e versão do IPED Core na saída padrão e finaliza imediatamente com código 0. |
-| `--help`, `-h` | Exibe a ajuda da linha de comando. | Lista todos os parâmetros suportados com exemplos de uso. |
+| `--case <caminho>` | Não suportado. | Ignorado com um aviso no log, para não quebrar configurações antigas. O servidor sempre inicia sem caso; o caso é aberto na conversa com `open_case`, só naquele processo. |
+| Qualquer outro (inclusive `--version` e `--help`) ou nenhum | Abre o configurador gráfico. | O executável não imprime informações no terminal: o lançador nativo do jpackage não tem console e executa a JVM como processo filho, então a saída se perderia. A versão aparece no título da janela e no "Sobre", e no protocolo MCP (`serverInfo.version` e `get_server_status`). |
+
+A análise dos argumentos fica em `McpApplication.parseArguments`, que devolve o modo (STDIO ou configurador) e se houve `--case` legado.
+
+---
+
+## 🩺 Logs e Diagnóstico
+
+O pacote `br.com.ipedtools.mcp.diagnostics` cuida do registro para suporte:
+
+| Classe | Papel |
+|---|---|
+| `LogFiles` | Grava o log em `%USERPROFILE%\.iped-tools-mcp\logs\`, um arquivo por modo (`iped-tools-mcp-stdio.log` e `iped-tools-mcp-gui.log`). Faz rotação a cada 5 MB, guardando 5 arquivos. Usa UTF-8, gravação imediata e o PID em cada linha. O handler é instalado no logger raiz no início do `main` e continua ativo depois que o Quarkus configura o log. O log em arquivo do próprio Quarkus não é usado, porque ele repassa os eventos anteriores à sua configuração e duplicaria as linhas de início. O handler grava a partir do nível INFO. Se a pasta não puder ser gravada, o log segue só no `stderr`. |
+| `StartupDiagnostics` | Cabeçalho de cada início: versões, modo, argumentos, codificações, `iped.root`, `java.library.path` e as pastas do PATH ligadas a Python, JEP ou IPED, com as DLLs encontradas. |
+| `ShutdownLog` | Registra o encerramento do servidor STDIO pelo `ShutdownEvent` do Quarkus, que roda antes de o log ser encerrado. |
+| `CrashDiagnostics` | Registra exceções não capturadas e, no configurador, o encerramento. Copia para a pasta de logs os `hs_err_pid*.log` que a JVM deixou na pasta temporária, até 5 por início e sem repetir os já coletados. |
+
+Outros pontos:
+* **Etapas da abertura do caso** (`IpedCoreService.caseStep`): cada etapa registra início e fim, com duração. Uma falha fica registrada como `last_error`, devolvido por `get_server_status`.
+* **Log do IPED:** as classes do IPED que usam a API log4j2 passam pela ponte `log4j2-jboss-logmanager` e chegam aos mesmos destinos. O `log4j-core` não faz parte do pacote.
+* **Conteúdo do caso fica fora do log:** o MCP não registra texto de consultas nem valores devolvidos. A categoria `iped.engine.search.SimilarDocumentSearch`, que registraria os termos do documento de referência, fica em nível WARN no `application.properties`.

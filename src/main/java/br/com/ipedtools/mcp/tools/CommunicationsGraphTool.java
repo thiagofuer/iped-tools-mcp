@@ -50,7 +50,7 @@ public class CommunicationsGraphTool {
     ) {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
-            return Map.of("error", "Nenhum caso está aberto no momento.");
+            return Map.of("error", IpedCoreService.NO_CASE_OPEN_MESSAGE);
         }
         try {
             return service.getTopContacts(limit, channel, startDate, endDate);
@@ -105,7 +105,7 @@ public class CommunicationsGraphTool {
     ) {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
-            return Map.of("error", "Nenhum caso está aberto no momento.");
+            return Map.of("error", IpedCoreService.NO_CASE_OPEN_MESSAGE);
         }
         try {
             return service.getCommunicationsGraph(focalContact, minInteractions, limitEdges, channel, startDate, endDate, includeMermaid);
@@ -157,7 +157,7 @@ public class CommunicationsGraphTool {
     ) {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
-            return Map.of("error", "Nenhum caso está aberto no momento.");
+            return Map.of("error", IpedCoreService.NO_CASE_OPEN_MESSAGE);
         }
         try {
             return service.getContactRelationship(contactA, contactB, channel, startDate, endDate, evidenceLimit);

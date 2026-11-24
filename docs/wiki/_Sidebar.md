@@ -1,22 +1,24 @@
-### 📖 Visão Geral
-* [Página Inicial](Home)
-* [Requisitos](Requisitos)
-* [Download e Verificação](Download-e-Verificacao)
-* [Instalação](Instalacao)
+### 📦 Instalação e Configuração
+* **Instalação**
+  * [Requisitos](Requisitos)
+  * [Download e Verificação](Download-e-Verificacao)
+  * [Instalação (.msi ou .zip)](Instalacao)
+* **Configuração do cliente de IA**
+  * [Configurador Gráfico](Configurador-Grafico)
+  * [Claude Code](Cliente-Claude-Code)
+  * [Claude Desktop](Cliente-Claude-Desktop)
+  * [Antigravity](Cliente-Antigravity)
+  * [LM Studio (offline)](Cliente-LM-Studio)
+  * [Codex (app da OpenAI)](Cliente-Codex)
+* ➡️ [Próximo passo: Como Investigar com o MCP](Como-Investigar-com-o-MCP)
 
-### ⚙️ Configuração
-* [Configurador Gráfico (GUI)](Configurador-Grafico)
-* [Claude Desktop](Cliente-Claude-Desktop)
-* [Cursor](Cliente-Cursor)
-* [Antigravity](Cliente-Antigravity)
-* [LM Studio (Air-Gapped)](Cliente-LM-Studio)
-* [Claude Code](Cliente-Claude-Code)
-
-### 🔍 Operação e Investigação
-* [Fluxo de Investigação](Fluxo-de-Investigacao)
-* [Catálogo de Ferramentas (28 Tools)](Catalogo-de-Ferramentas)
+### 🔍 Investigação
+* [Como Investigar com o MCP](Como-Investigar-com-o-MCP)
+* [Catálogo de Ferramentas](Catalogo-de-Ferramentas)
 * [Consultas Lucene e Propriedades](Consultas-Lucene-e-Propriedades)
 * [Boas Práticas Forenses](Boas-Praticas-Forenses)
+
+### 🆘 Ajuda
 * [Solução de Problemas](Solucao-de-Problemas)
 
 ### 🛠️ Desenvolvimento

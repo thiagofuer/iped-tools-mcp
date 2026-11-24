@@ -6,17 +6,28 @@ Bem-vindo à documentação oficial do **IPED Tools MCP**, o servidor nativo bas
 
 ## 🧭 Navegação Rápida
 
-| Seção | O que você encontrará |
+### 📦 Instalação e Configuração
+Siga nesta ordem: instale, configure o seu aplicativo de IA e passe à investigação.
+
+| Etapa | O que você encontrará |
 |---|---|
-| **[Requisitos](Requisitos)** | Compatibilidade de sistema, versões do IPED suportadas e clientes homologados. |
-| **[Download e Verificação](Download-e-Verificacao)** | Obtenção dos pacotes oficiais e conferência de integridade criptográfica SHA-256. |
-| **[Instalação](Instalacao)** | Passo a passo para instalação via instalador Windows (`.msi`) ou pacote portátil (`.zip`). |
-| **[Configurador Gráfico](Configurador-Grafico)** | Como utilizar a interface visual para alternar o caso ativo e gerar configurações 1-click. |
-| **[Clientes de IA](Cliente-Claude-Desktop)** | Guias específicos para [Claude Desktop](Cliente-Claude-Desktop), [Cursor](Cliente-Cursor), [Antigravity](Cliente-Antigravity), [LM Studio (Air-Gapped)](Cliente-LM-Studio) e [Claude Code](Cliente-Claude-Code). |
-| **[Fluxo de Investigação](Fluxo-de-Investigacao)** | Metodologia forense assistida por IA, uso do prompt `start_case` e ciclo de auditoria. |
-| **[Catálogo de Ferramentas](Catalogo-de-Ferramentas)** | Documentação completa das 28 ferramentas periciais disponíveis com exemplos de comandos. |
+| **Instalação** | [Requisitos](Requisitos) (sistema, versões do IPED e clientes homologados), [Download e Verificação](Download-e-Verificacao) (pacotes oficiais e conferência SHA-256) e [Instalação](Instalacao) (instalador `.msi` ou pacote portátil `.zip`). |
+| **Configuração do cliente de IA** | [Configurador Gráfico](Configurador-Grafico) (testar o MCP e gerar a configuração 1-click) e os guias de [Claude Code](Cliente-Claude-Code), [Claude Desktop](Cliente-Claude-Desktop), [Antigravity](Cliente-Antigravity), [LM Studio (offline)](Cliente-LM-Studio) e [Codex (app da OpenAI)](Cliente-Codex). |
+| **➡️ Próximo passo** | [Como Investigar com o MCP](Como-Investigar-com-o-MCP). |
+
+### 🔍 Investigação
+
+| Página | O que você encontrará |
+|---|---|
+| **[Como Investigar com o MCP](Como-Investigar-com-o-MCP)** | Passo a passo da investigação com o seu aplicativo de IA, a metodologia que a IA segue e como personalizá-la. |
+| **[Catálogo de Ferramentas](Catalogo-de-Ferramentas)** | As ferramentas periciais disponíveis, com exemplos de perguntas. |
 | **[Consultas Lucene e Propriedades](Consultas-Lucene-e-Propriedades)** | Sintaxe de pesquisa, escape de caracteres especiais e catálogo de metadados. |
 | **[Boas Práticas Forenses](Boas-Praticas-Forenses)** | Princípios de preservação probatória, modo somente-leitura e operação desconectada. |
+
+### 🆘 Ajuda e 🛠️ Desenvolvimento
+
+| Página | O que você encontrará |
+|---|---|
 | **[Solução de Problemas](Solucao-de-Problemas)** | Diagnóstico de falhas comuns, logs de execução e resolução de incidentes. |
 | **[Desenvolvimento e Engenharia](Dev-Arquitetura)** | [Arquitetura interna](Dev-Arquitetura), [compilação e testes](Dev-Compilacao-e-Testes) e [empacotamento nativo](Dev-Empacotamento). |
 

@@ -10,8 +10,10 @@ import java.nio.charset.StandardCharsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import br.com.ipedtools.mcp.diagnostics.CrashDiagnostics;
+import br.com.ipedtools.mcp.diagnostics.LogFiles;
+import br.com.ipedtools.mcp.diagnostics.StartupDiagnostics;
 import br.com.ipedtools.mcp.gui.MainWindow;
-import br.com.ipedtools.mcp.service.IpedCoreService;
 import io.quarkus.runtime.Quarkus;
 import io.quarkus.runtime.annotations.QuarkusMain;
 
@@ -19,7 +21,8 @@ import io.quarkus.runtime.annotations.QuarkusMain;
  * Main application entrypoint for IPED Tools MCP.
  * Implements dual-mode execution:
  * - GUI Mode: Launches the Swing visual configurator when executed without '--stdio'.
- * - STDIO Mode: Launches the headless Quarkus MCP Server when called with '--stdio --case <path>'.
+ * - STDIO Mode: Launches the headless Quarkus MCP Server when called with '--stdio'. The case is opened by the
+ *   open_case tool, in each server process; it is never taken from the command line.
  */
 @QuarkusMain
 public class McpApplication {
@@ -41,59 +44,29 @@ public class McpApplication {
             System.setProperty("user.dir", fallbackDir.getAbsolutePath());
         }
 
-        boolean stdioMode = false;
-        String casePath = null;
+        LaunchOptions options = parseArguments(args);
+        boolean stdioMode = options.stdio();
 
-        for (int i = 0; i < args.length; i++) {
-            String arg = args[i];
-            if ("--stdio".equalsIgnoreCase(arg)) {
-                stdioMode = true;
-            } else if (arg.startsWith("--case=")) {
-                casePath = arg.substring("--case=".length());
-            } else if ("--case".equalsIgnoreCase(arg) && i + 1 < args.length) {
-                casePath = args[++i];
-            } else if ("--version".equalsIgnoreCase(arg) || "-v".equalsIgnoreCase(arg)) {
-                attachConsoleOnWindows();
-                printVersion();
-                return;
-            } else if ("--help".equalsIgnoreCase(arg) || "-h".equalsIgnoreCase(arg)) {
-                attachConsoleOnWindows();
-                printHelp();
-                return;
-            }
+        // Persistent log file of this mode (~/.iped-tools-mcp/logs), installed before anything else is logged.
+        File logFile = LogFiles.install(stdioMode ? LogFiles.Mode.STDIO : LogFiles.Mode.GUI);
+        StartupDiagnostics.log(stdioMode ? "STDIO" : "GUI", args, logFile);
+        // STDIO logs its shutdown through the Quarkus ShutdownEvent (ShutdownLog); GUI through a JVM hook.
+        CrashDiagnostics.installHandlers(!stdioMode);
+        if (logFile != null) {
+            CrashDiagnostics.collectCrashReports(logFile.getParentFile());
         }
 
         if (stdioMode) {
             // Mode A: STDIO Headless Server for LLM clients
             LOGGER.info("Iniciando IPED Tools MCP em modo STDIO...");
-            if (casePath != null && !casePath.isBlank()) {
-                try {
-                    File caseDir = new File(casePath);
-                    LOGGER.info("Pré-carregando caso IPED: {}", caseDir.getAbsolutePath());
-                    IpedCoreService.getInstance().openCase(caseDir);
-                } catch (Exception e) {
-                    LOGGER.error("Falha ao abrir caso no startup STDIO: {}", e.getMessage(), e);
-                    System.err.println("ERRO: Não foi possível carregar o caso especificado: " + e.getMessage());
-                }
-            } else {
-                LOGGER.info("Nenhum caso especificado com '--case'. Sincronizando caso ativo em segundo plano...");
-                Thread preloader = new Thread(() -> {
-                    try {
-                        IpedCoreService.getInstance().syncActiveCaseIfNeeded();
-                        if (IpedCoreService.getInstance().isCaseOpen()) {
-                            LOGGER.info("Caso ativo carregado automaticamente da GUI: {}",
-                                    IpedCoreService.getInstance().getCaseDirectory().getAbsolutePath());
-                        } else {
-                            LOGGER.warn("Nenhum caso ativo encontrado. As ferramentas aguardarão seleção posterior ou comando 'open_case'.");
-                        }
-                    } catch (Exception e) {
-                        LOGGER.debug("Erro na pré-carga assíncrona do caso: {}", e.getMessage());
-                    }
-                }, "iped-case-preloader");
-                preloader.setDaemon(true);
-                preloader.start();
+            // The session starts without a case: the LLM opens one with open_case.
+            if (options.legacyCaseArgument()) {
+                LOGGER.warn(LEGACY_CASE_WARNING);
             }
 
+            // The file handler installed above stays on the root logger after Quarkus configures logging. The Quarkus
+            // file log is not enabled: it would also receive the records Quarkus buffers before its logging setup and
+            // replays afterwards, writing the startup lines twice.
             Quarkus.run(args);
 
         } else {
@@ -110,6 +83,45 @@ public class McpApplication {
             });
         }
     }
+
+    /**
+     * How the executable was started: {@code --stdio} runs the MCP server; anything else opens the configurator.
+     *
+     * @param legacyCaseArgument whether an older client configuration passed {@code --case}, which is ignored
+     */
+    record LaunchOptions(boolean stdio, boolean legacyCaseArgument) {
+    }
+
+    /**
+     * Reads the command line. {@code --stdio} is the only recognized argument; {@code --case} (with its value) is
+     * consumed and reported as legacy. There are no information flags: the native launcher runs the JVM as a child
+     * process without a console, so text printed to the terminal would be lost. {@code --version}, {@code --help}
+     * and any other argument open the configurator, which shows the version in its title.
+     */
+    static LaunchOptions parseArguments(String... args) {
+        boolean stdio = false;
+        boolean legacyCase = false;
+        for (int i = 0; i < args.length; i++) {
+            String arg = args[i];
+            if ("--stdio".equalsIgnoreCase(arg)) {
+                stdio = true;
+            } else if (arg.startsWith("--case=")) {
+                legacyCase = true;
+            } else if ("--case".equalsIgnoreCase(arg)) {
+                // Older client configurations still pass the case; it is consumed and ignored.
+                legacyCase = true;
+                if (i + 1 < args.length) {
+                    i++;
+                }
+            }
+        }
+        return new LaunchOptions(stdio, legacyCase);
+    }
+
+    /** Logged when an older client configuration passes {@code --case}, which is no longer supported. */
+    static final String LEGACY_CASE_WARNING = "O argumento '--case' não é mais suportado e foi ignorado: "
+            + "o servidor inicia sem caso aberto, e o caso é aberto na conversa com a ferramenta open_case. "
+            + "Remova '--case' da configuração do cliente de IA.";
 
     /**
      * Enforces UTF-8 character encoding on standard I/O streams (stdout, stderr, stdin)
@@ -162,25 +174,6 @@ public class McpApplication {
         }
     }
 
-    private static void attachConsoleOnWindows() {
-        if (System.getProperty("os.name", "").toLowerCase().contains("win")) {
-            try {
-                com.sun.jna.platform.win32.WinNT.HANDLE hStdOut =
-                        com.sun.jna.platform.win32.Kernel32.INSTANCE.GetStdHandle(-11); // STD_OUTPUT_HANDLE
-                int fileType = (hStdOut != null) ? com.sun.jna.platform.win32.Kernel32.INSTANCE.GetFileType(hStdOut) : 0;
-                // If stdout is not already redirected to a file (1) or pipe (3), attach to parent console
-                if (fileType != 1 && fileType != 3) {
-                    com.sun.jna.platform.win32.Kernel32.INSTANCE.AttachConsole(-1); // ATTACH_PARENT_PROCESS
-                    java.io.FileOutputStream conout = new java.io.FileOutputStream("CONOUT$");
-                    java.io.PrintStream out = new java.io.PrintStream(conout, true, java.nio.charset.StandardCharsets.UTF_8);
-                    System.setOut(out);
-                    System.setErr(out);
-                }
-            } catch (Throwable ignored) {
-            }
-        }
-    }
-
     private static void detachConsoleIfPresent() {
         if (System.getProperty("os.name", "").toLowerCase().contains("win")) {
             try {
@@ -188,29 +181,5 @@ public class McpApplication {
             } catch (Throwable ignored) {
             }
         }
-    }
-
-    private static void printVersion() {
-        System.out.println(VersionInfo.getFullVersionString());
-        System.out.println("Website: " + VersionInfo.OFFICIAL_WEBSITE);
-        System.out.println("Codigo-fonte: " + VersionInfo.GITHUB_REPO);
-        System.out.println("Licenca: " + VersionInfo.LICENSE);
-    }
-
-    private static void printHelp() {
-        System.out.println(VersionInfo.APP_NAME + " - " + VersionInfo.APP_DESCRIPTION);
-        System.out.println("Versao: " + VersionInfo.getVersion());
-        System.out.println("Website: " + VersionInfo.OFFICIAL_WEBSITE);
-        System.out.println();
-        System.out.println("Uso:");
-        System.out.println("  IPED-Tools-MCP.exe                                (Abre a interface grafica)");
-        System.out.println("  IPED-Tools-MCP.exe --stdio --case <dir>           (Inicia como servidor MCP STDIO)");
-        System.out.println();
-        System.out.println("Opcoes:");
-        System.out.println("  --stdio              Executa como servidor MCP via STDIO (chamado pela LLM)");
-        System.out.println("  --case <diretorio>   Caminho para a pasta do caso processado pelo IPED");
-        System.out.println("  --gui                Forca a abertura da interface grafica");
-        System.out.println("  --version, -v        Exibe a versao e informacoes de build");
-        System.out.println("  --help, -h           Exibe esta mensagem de ajuda");
     }
 }

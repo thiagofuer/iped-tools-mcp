@@ -61,6 +61,14 @@ O projeto adota a convenção de **Versionamento Semântico** no formato `MAJOR.
 - O arquivo [`pom.xml`](pom.xml) é a **única fonte da verdade** para a versão do produto.
 - Em desenvolvimento contínuo na branch `develop`, a versão deve conter o sufixo `-SNAPSHOT` (ex: `1.1.0-SNAPSHOT`).
 - Nas branches `release/*` ou `hotfix/*`, o sufixo `-SNAPSHOT` é removido (ex: `1.0.0`) antes da compilação e do merge final em `main`.
+- O número da versão não é repetido em nenhum outro arquivo: o código lê a versão do `version.properties` gerado pelo Maven, os scripts de empacotamento e de teste leem o `pom.xml`, a wiki usa `<versão>` nos exemplos e o badge do README mostra a última tag `vX.Y.Z`.
+- Para trocar a versão, altere somente o `pom.xml`:
+
+  ```bash
+  mvn versions:set "-DnewVersion=X.Y.Z" "-DgenerateBackupPoms=false"
+  ```
+
+  As aspas são necessárias no PowerShell, que separa no primeiro ponto um argumento como `-DnewVersion=1.1.0`. Depois recompile (`mvn clean package`). Uma build feita fora do Maven, sem a filtragem dos recursos, informa a versão `dev`.
 
 ---
 
@@ -68,7 +76,7 @@ O projeto adota a convenção de **Versionamento Semântico** no formato `MAJOR.
 
 Por se tratar de uma ferramenta voltada para perícia digital e investigação forense:
 
-1. **Jamais versione evidências periciais:** Nunca adicione arquivos de casos reais, bancos SQLite locais (`*.mv.db`), arquivos de estado (`active_case.txt`, `*.iped`, `bookmarks.iped`) ao controle de versão.
+1. **Jamais versione evidências periciais:** Nunca adicione arquivos de casos reais, bancos SQLite locais (`*.mv.db`), arquivos de estado (`*.iped`, `bookmarks.iped` e o `active_case.txt` de versões anteriores) ao controle de versão.
 2. **Jamais versione binários compilados:** Diretórios como `target/`, `dist/` e ferramentas externas como `tools/wix311` (104 MB) estão devidamente ignorados no `.gitignore` e não devem ser incluídos em commits.
 3. **WiX Toolset:** O script `scripts/package_msi.ps1` é auto-suficiente e realiza o download sob demanda caso o ambiente não possua o binário localmente.
 
@@ -82,20 +90,19 @@ Antes de submeter um Pull Request, certifique-se de que todos os passos a seguir
    ```powershell
    mvn clean test
    ```
-   Todos os testes devem passar (atualmente 52/52 testes com 0 falhas).
+   Todos os testes devem passar, sem falhas.
 
-2. **Verificação da Flag `--version`:**
+2. **Empacotamento do JAR:**
    ```powershell
-   mvn package -DskipTests
-   java -jar target/iped-tools-mcp-*-runner.jar --version
+   mvn package
    ```
-   Deve exibir a versão correta e sair com código de retorno 0.
+   A saída deve terminar com `BUILD SUCCESS`. Os testes que executam o servidor de verdade (`StdioSelfTestTest`) se pulam quando o JAR em `target/` é mais antigo que o código compilado; rode `mvn test` de novo depois do `package` para executá-los.
 
 3. **Testes de Integração MCP STDIO:**
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts\test_stdio_mcp.ps1 -CasePath "caminho_para_caso_teste"
    ```
-   Todos os testes automatizados do protocolo MCP devem ser validados.
+   Todos os testes automatizados do protocolo MCP devem ser validados. O roteiro também confere a versão: a informada no `initialize` e no `get_server_status` deve ser a do `pom.xml`. O executável não tem argumentos de versão ou de ajuda (`--version`, `--help`): o lançador nativo não tem console, e esses argumentos apenas abrem o configurador.
 
 ---
 

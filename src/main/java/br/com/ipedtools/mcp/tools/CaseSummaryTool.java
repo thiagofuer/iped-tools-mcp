@@ -28,7 +28,7 @@ public class CaseSummaryTool {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
             return Map.of(
-                    "error", "Nenhum caso está aberto no momento. Abra um caso no IPED Tools MCP antes de solicitar o resumo."
+                    "error", IpedCoreService.NO_CASE_OPEN_MESSAGE
             );
         }
         return service.getCaseSummary();

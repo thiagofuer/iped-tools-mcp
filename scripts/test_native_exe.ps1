@@ -23,6 +23,11 @@ if (-not $CasePath -or -not (Test-Path $CasePath)) {
 }
 $CasePath = (Resolve-Path $CasePath).Path
 
+# A versao esperada vem somente do pom.xml
+$projectRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot "version.ps1")
+$ExpectedVersion = Get-PomVersion -ProjectRoot $projectRoot
+
 # Resolução dinâmica do caso secundário para teste de troca (open_case)
 if (-not $SecondaryCasePath) {
     if ($env:IPED_TEST_SECONDARY_CASE_PATH -and (Test-Path $env:IPED_TEST_SECONDARY_CASE_PATH)) {
@@ -48,19 +53,12 @@ Write-Host "==========================================================" -Foregro
 
 $resolvedExe = (Resolve-Path $ExePath).Path
 
-# Teste prévio: flag --version
-Write-Host "[0/10] Testando flag '--version' no executavel..." -NoNewline
-$verOutput = (& $resolvedExe --version | Out-String)
-if ($verOutput -match "IPED Tools MCP v1\.\d+\.\d+" -and $verOutput -match "ipedtools\.com\.br") {
-    $firstLine = ($verOutput -split "`r?`n")[0]
-    Write-Host (" PASS (" + $firstLine + ")") -ForegroundColor Green
-} else {
-    Write-Host " FAIL: $verOutput" -ForegroundColor Red; exit 1
-}
+# A versao e conferida pelo protocolo (initialize e get_server_status): o executavel nao imprime
+# nada no terminal, porque o lancador do jpackage nao tem console.
 
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName = $resolvedExe
-$psi.Arguments = "--stdio --case `"$CasePath`""
+$psi.Arguments = "--stdio"
 $psi.RedirectStandardInput = $true
 $psi.RedirectStandardOutput = $true
 $psi.RedirectStandardError = $false
@@ -68,6 +66,9 @@ $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
 $psi.UseShellExecute = $false
 $psi.CreateNoWindow = $true
 
+# O .NET Framework cria o StandardInput com a codificacao do console; se ela for
+# UTF-8 com BOM, o BOM vai antes da primeira mensagem e o JSON chega invalido.
+[Console]::InputEncoding = New-Object System.Text.UTF8Encoding($false)
 $proc = [System.Diagnostics.Process]::Start($psi)
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $writer = New-Object System.IO.StreamWriter($proc.StandardInput.BaseStream, $utf8NoBom)
@@ -110,7 +111,7 @@ try {
         capabilities = @{}
         clientInfo = @{ name = "exe-test"; version = "1.0" }
     }
-    if ($init.result.serverInfo.name -eq "iped-tools-mcp" -and $init.result.serverInfo.version -like "1.0.1*") {
+    if ($init.result.serverInfo.name -eq "iped-tools-mcp" -and -not (Get-VersionMismatch -Reported $init.result.serverInfo.version -Expected $ExpectedVersion)) {
         Write-Host (" PASS (versao: " + $init.result.serverInfo.version + ")") -ForegroundColor Green
     } else {
         Write-Host " FAIL" -ForegroundColor Red; exit 1
@@ -127,15 +128,29 @@ try {
         Write-Host (" FAIL (esperava >= 25, obteve $toolCount)") -ForegroundColor Red; exit 1
     }
 
+    # A sessao comeca sem caso: o caso e aberto com open_case
+    Write-Host "[2b/10] Testando open_case..." -NoNewline
+    $openCall = Send-RpcRequest "tools/call" @{ name = "open_case"; arguments = @{ case_path = $CasePath } }
+    $openData = $openCall.result.content[0].text | ConvertFrom-Json
+    if ($openData.status -eq "success") {
+        Write-Host (" PASS (" + $openData.total_items + " itens)") -ForegroundColor Green
+    } else {
+        Write-Host (" FAIL: " + ($openCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
+    }
+
     Write-Host "[3/10] Testando get_server_status e list_sources (UTF-8)..." -NoNewline
     $statusCall = Send-RpcRequest "tools/call" @{ name = "get_server_status"; arguments = @{} }
     $statusData = $statusCall.result.content[0].text | ConvertFrom-Json
     $sourcesCall = Send-RpcRequest "tools/call" @{ name = "list_sources"; arguments = @{} }
     $sourcesJson = ($sourcesCall | ConvertTo-Json -Depth 6 -Compress)
-    $expectedBm = "Per$([char]0x00ED)cia IA"
+    # Marcador de teste com acentuacao UTF-8: incluido e excluido em seguida, deixando o caso como estava
+    $expectedBm = "Confer$([char]0x00EA)ncia de Teste"
     $bmUtf8Call = Send-RpcRequest "tools/call" @{ name = "add_to_bookmark"; arguments = @{ bookmark_name = $expectedBm; doc_ids = @(1) } }
     $bmUtf8Text = $bmUtf8Call.result.content[0].text
-    if ($statusData.connected -and $statusData.case_open -and $statusData.server_version -like "1.0.1*" -and -not $sourcesJson.Contains([char]0xFFFD) -and $bmUtf8Text.Contains($expectedBm) -and -not $bmUtf8Text.Contains([char]0xFFFD)) {
+    $bmUtf8Data = $bmUtf8Text | ConvertFrom-Json
+    $bmDelCall = Send-RpcRequest "tools/call" @{ name = "delete_bookmark"; arguments = @{ bookmark_name = $expectedBm } }
+    $bmDelData = $bmDelCall.result.content[0].text | ConvertFrom-Json
+    if ($statusData.connected -and $statusData.case_open -and -not (Get-VersionMismatch -Reported $statusData.server_version -Expected $ExpectedVersion) -and -not $sourcesJson.Contains([char]0xFFFD) -and $bmUtf8Data.bookmark.name -eq $expectedBm -and -not $bmUtf8Text.Contains([char]0xFFFD) -and $bmDelData.success) {
         Write-Host (" PASS (Versao: " + $statusData.server_version + " | Fonte: " + $statusData.case_source_id + " | UTF-8 integro)") -ForegroundColor Green
     } else {
         Write-Host " FAIL (Status invalido ou corrupcao UTF-8 U+FFFD)" -ForegroundColor Red; exit 1
@@ -193,14 +208,14 @@ try {
         Write-Host (" FAIL: " + ($triageCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
-    # 9. Test list_ai_filters
-    Write-Host "[9/10] Testando list_ai_filters..." -NoNewline
-    $filtersCall = Send-RpcRequest "tools/call" @{ name = "list_ai_filters"; arguments = @{} }
-    $filtersData = $filtersCall.result.content[0].text | ConvertFrom-Json
-    if ($filtersData.filters -and $filtersData.total_filters -ge 7) {
-        Write-Host (" PASS (" + $filtersData.total_filters + " filtros de IA disponiveis)") -ForegroundColor Green
+    # 9. Test list_properties
+    Write-Host "[9/10] Testando list_properties..." -NoNewline
+    $groupsCall = Send-RpcRequest "tools/call" @{ name = "list_properties"; arguments = @{} }
+    $groupsData = $groupsCall.result.content[0].text | ConvertFrom-Json
+    if ($groupsData.groups -and $groupsData.total_properties -gt 0) {
+        Write-Host (" PASS (" + $groupsData.groups.Count + " grupos de propriedades no caso)") -ForegroundColor Green
     } else {
-        Write-Host (" FAIL: " + ($filtersCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
+        Write-Host (" FAIL: " + ($groupsCall | ConvertTo-Json -Depth 5 -Compress)) -ForegroundColor Red; exit 1
     }
 
     # 10. Test get_item_thumbnail

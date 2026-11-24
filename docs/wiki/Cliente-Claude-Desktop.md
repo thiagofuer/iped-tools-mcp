@@ -29,7 +29,7 @@ Se o arquivo ainda não existir, você pode criá-lo ou utilizar o botão **Edit
 
 ---
 
-## 📝 Bloco de Configuração (Recomendado — Caso Dinâmico)
+## 📝 Bloco de Configuração (Recomendado)
 
 Abra o arquivo `claude_desktop_config.json` e insira o bloco abaixo dentro da chave `"mcpServers"` (gerado com 1-click no [Configurador Gráfico](Configurador-Grafico)):
 
@@ -37,7 +37,7 @@ Abra o arquivo `claude_desktop_config.json` e insira o bloco abaixo dentro da ch
 {
   "mcpServers": {
     "iped": {
-      "command": "C:\\Program Files\\IPED Tools MCP\\IPED-Tools-MCP.exe",
+      "command": "C:\\Program Files\\IPED-Tools-MCP\\IPED-Tools-MCP.exe",
       "args": [
         "--stdio"
       ]
@@ -48,28 +48,9 @@ Abra o arquivo `claude_desktop_config.json` e insira o bloco abaixo dentro da ch
 
 *(Se estiver utilizando a versão portátil, substitua pelo caminho correspondente, por exemplo: `"C:\\Ferramentas\\IPED-Tools-MCP\\IPED-Tools-MCP.exe"`)*
 
-> 💡 **Nota Importante:** Note que **não é necessário fixar o parâmetro `--case`**! Com apenas `--stdio`, o servidor MCP sincroniza automaticamente com o caso selecionado na interface gráfica do IPED Tools MCP ou com o caso que você solicitar para a IA abrir no chat através da ferramenta `open_case`.
-
----
-
-## 📌 Configuração com Caso Fixo (Opcional)
-
-Se você preferir travar a inicialização sempre em um caso pericial específico:
-
-```json
-{
-  "mcpServers": {
-    "iped": {
-      "command": "C:\\Program Files\\IPED Tools MCP\\IPED-Tools-MCP.exe",
-      "args": [
-        "--stdio",
-        "--case",
-        "C:\\casos_forenses\\caso_operacao_01"
-      ]
-    }
-  }
-}
-```
+> 💡 **Nota Importante:** a configuração tem só `--stdio`, sem caso. Cada conversa começa sem caso aberto: peça ao Claude para abrir a pasta do caso (por exemplo, *"abra o caso C:\casos_forenses\caso_operacao_01"*), e ele chama a ferramenta `open_case`. O caso de uma conversa não muda o de outra.
+>
+> O argumento `--case` de versões anteriores não é mais usado. Se ele estiver na sua configuração, o servidor o ignora e inicia sem caso; você pode removê-lo.
 
 ---
 
@@ -77,5 +58,13 @@ Se você preferir travar a inicialização sempre em um caso pericial específic
 
 1. Salve o arquivo `claude_desktop_config.json`.
 2. Reinicie o Claude Desktop completamente (fechando e reabrindo o aplicativo).
-3. No canto inferior da barra de digitação do Claude, você verá o ícone de ferramentas MCP indicando que o servidor `iped` está ativo com as 28 ferramentas periciais disponíveis.
-4. Digite a saudação pericial ou chame o prompt `/start_case` para iniciar a análise probatória com rigor metodológico.
+3. No canto inferior da barra de digitação do Claude, você verá o ícone de ferramentas MCP indicando que o servidor `iped` está ativo com as ferramentas periciais disponíveis.
+4. Para iniciar a análise com a metodologia pericial, abra o menu **+** da caixa de mensagem, escolha o servidor `iped` e selecione o prompt `start_case`. Preencha os parâmetros opcionais (`case_path`, `investigation_target`) e envie. O texto do prompt aparece anexado à mensagem antes do envio.
+
+> ⚠️ Digitar `start_case` como texto comum não aciona o prompt: a mensagem chega à IA como um pedido qualquer, sem a metodologia e sem as regras de conduta. Veja [Como Investigar com o MCP](Como-Investigar-com-o-MCP).
+
+---
+
+## ➡️ Próximo passo
+
+Com o servidor `iped` configurado, siga para **[Como Investigar com o MCP](Como-Investigar-com-o-MCP)**: o passo a passo para iniciar o `start_case`, abrir o caso, responder ao alerta de conteúdo sensível e conduzir a investigação.

@@ -18,6 +18,14 @@ public class DocumentTextTool {
             - Call this tool when you need to read the actual textual contents of an item (e.g. reading a PDF,
               reading an email body, or examining transcription text of an audio note).
             - If the text is long, the response includes a truncation notice indicating how to fetch the next chunk.
+
+            OCR AND TRANSCRIPTION:
+            - The response starts with what IPED processing stored for the item, as the IPED "Text" tab shows it:
+              "=== Texto de OCR (IPED) ===" (OCR of images, scanned PDFs and embedded images) and
+              "=== Transcrição de áudio (IPED) ===" (audio transcription). Then comes
+              "=== Texto extraído do arquivo ===" with the text parsed from the file itself.
+            - An item with ocrCharCount > 0 or audio:transcription in get_document_metadata has that text here.
+            - OCR and transcription are never run now: an item IPED did not process has no such section.
             """
     )
     public String getDocumentText(
@@ -32,7 +40,7 @@ public class DocumentTextTool {
     ) {
         IpedCoreService service = IpedCoreService.getInstance();
         if (!service.isCaseOpen()) {
-            return "[Erro: Nenhum caso está aberto no momento.]";
+            return "[Erro: " + IpedCoreService.NO_CASE_OPEN_MESSAGE + "]";
         }
         return service.getDocumentText(docId, offset, maxChars);
     }

@@ -6,7 +6,7 @@
 
     <groupId>br.com.ipedtools</groupId>
     <artifactId>iped-tools-mcp</artifactId>
-    <version>1.0.1</version>
+    <version>2.0.0</version>
     <packaging>jar</packaging>
 
     <name>IPED Tools MCP</name>
@@ -85,14 +85,24 @@
                     <groupId>org.apache.logging.log4j</groupId>
                     <artifactId>log4j-slf4j-impl</artifactId>
                 </exclusion>
+                <!-- log4j-core and its servlet integration are replaced by log4j2-jboss-logmanager (below) -->
+                <exclusion>
+                    <groupId>org.apache.logging.log4j</groupId>
+                    <artifactId>log4j-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.logging.log4j</groupId>
+                    <artifactId>log4j-web</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 
-        <!-- Align log4j-core with Quarkus log4j-api version -->
+        <!-- Routes the log4j2 API used by IPED classes to the JBoss LogManager of Quarkus, so IPED log events
+             reach the same handlers (stderr and the log file). Replaces log4j-core, whose plugin cache was
+             overwritten in the runner jar and produced "Unrecognized format specifier" errors. -->
         <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-core</artifactId>
-            <version>2.24.3</version>
+            <groupId>org.jboss.logmanager</groupId>
+            <artifactId>log4j2-jboss-logmanager</artifactId>
         </dependency>
 
         <!-- Test Dependencies -->
@@ -151,7 +161,13 @@
                         --add-opens=java.base/java.text=ALL-UNNAMED
                         --add-opens=java.base/java.nio=ALL-UNNAMED
                         --add-opens=java.base/java.io=ALL-UNNAMED
+                        --add-exports=java.desktop/sun.awt.image=ALL-UNNAMED
+                        --add-exports=java.desktop/com.sun.imageio.plugins.common=ALL-UNNAMED
                     </argLine>
+                    <systemPropertyVariables>
+                        <!-- Same logging manager as the packaged application, so JUL and JBoss loggers share one tree -->
+                        <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
         </plugins>
