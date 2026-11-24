@@ -9,6 +9,10 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Unreleased]
 
+---
+
+## [2.0.0] - 2026-11-23
+
 ### Adicionado
 - **Guia do Codex (app da OpenAI):** sexto cliente homologado. O servidor funciona nas conversas do modo Codex, configurado em Plugins → MCPs ou no `config.toml`; o chat comum do ChatGPT, no mesmo app, não usa servidores MCP locais. Como o Codex não lista prompts MCP, a investigação começa pelo **Copiar prompt** do configurador. O guia explica que as instâncias que iniciam e param em menos de 1 segundo no log são checagens de status do app. O Codex entrou no menu da wiki, na página inicial, em Requisitos, no README e na tabela de "Como Investigar com o MCP". O configurador ganhou a opção **Codex (app da OpenAI)**, que gera os campos de Plugins → MCPs e o trecho do `config.toml`, com o aviso sobre o chat comum do ChatGPT e a dica do Copiar prompt.
 - **Prompt `start_case` personalizável:** o texto sai do código e passa a ter três partes: a metodologia, as seções geradas (foco e pasta do caso) e, por último, as regras de conduta.
